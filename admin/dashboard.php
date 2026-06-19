@@ -50,6 +50,14 @@ $properties = [
 
 <!-- ===================== NAV BAR – DEEP CLEANED ===================== -->
 <nav class="navbar" id="navbar">
+    <?php if (bb_has_permission('reservations')): ?>
+        <a class="navbar__item" href="reservations.php">Calendar</a>
+    <?php endif; ?>
+
+    <?php if (bb_has_permission('guests')): ?>
+        <a class="navbar__item" href="guests.php">Guests</a>
+    <?php endif; ?>
+
     <?php if (bb_has_permission('reports')): ?>
         <a class="navbar__item" href="reports.php">Reports</a>
     <?php endif; ?>
