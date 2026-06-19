@@ -115,24 +115,37 @@ $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../assets/css/style.css">
-<link rel="stylesheet" href="../assets/css/property.css">
-<link rel="stylesheet" href="../assets/css/account.css">
+<link rel="stylesheet" href="../assets/css/dashboard.css">
 <link rel="stylesheet" href="../assets/css/calendar.css">
 </head>
-<body class="property-body">
+<body class="dashboard-body">
 
-<header class="ptopbar">
-    <a href="<?= bb_role_home() ?>" class="ptopbar__back">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
-        Dashboard
-    </a>
-    <div class="ptopbar__breadcrumb">
-        <span aria-current="page">Calendar</span>
+<!-- ── TOP BAR (ADMIN) ─────────────────────────────────────────── -->
+<header class="topbar">
+    <div class="topbar__brand">
+        <span class="topbar__brand-mark">B</span>
+        <span class="topbar__brand-name">Bluebookers<span class="topbar__brand-suffix">.admin</span></span>
     </div>
-    <a href="../logout.php" class="ptopbar__logout">Log out</a>
+    <div class="topbar__right">
+        <div class="topbar__user">
+            <span class="topbar__user-name"><?= htmlspecialchars($displayName) ?></span>
+            <span class="topbar__user-role"><?= bb_is_admin() ? 'Admin' : 'Staff' ?></span>
+        </div>
+        <a href="../logout.php" class="topbar__logout">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 16l4-4-4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 12H9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            <span>Log out</span>
+        </a>
+        <button class="topbar__menu-toggle" id="navToggle" aria-label="Toggle navigation" aria-expanded="false">
+            <span></span><span></span><span></span>
+        </button>
+    </div>
 </header>
 
-<main class="property-main cal-main">
+<!-- ── NAV BAR ─────────────────────────────────────────────────── -->
+<?php include __DIR__ . '/includes/navbar.php'; ?>
+
+<!-- ─── CALENDAR CONTENT (UNCHANGED) ────────────────────────────── -->
+<main class="cal-page-main">
 
     <div class="cal-toolbar">
         <div class="cal-branch-tabs">
@@ -185,28 +198,35 @@ $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
                 </div>
 
                 <?php foreach ($rooms as $room): ?>
-                <div class="cal-row">
-                    <div class="cal-label-col" data-room-id="<?= $room['id'] ?>" data-room-number="<?= htmlspecialchars($room['room_number']) ?>">
-                        <strong>RM<?= htmlspecialchars($room['room_number']) ?></strong>
-                        <span><?= htmlspecialchars($room['room_type']) ?></span>
-                    </div>
-                    <div class="cal-days-track cal-row__track">
-                        <?php foreach ($days as $day): ?>
-                            <div class="cal-day-slot <?= $day['is_today'] ? 'is-today' : '' ?>"
-                                 data-room-id="<?= $room['id'] ?>"
-                                 data-date="<?= $day['date'] ?>"></div>
-                        <?php endforeach; ?>
+                    <?php
+                    $isMaintenance = ($room['room_status'] === 'maintenance');
+                    $rowClass = $isMaintenance ? 'cal-row maintenance' : 'cal-row';
+                    ?>
+                    <div class="<?= $rowClass ?>" data-room-id="<?= $room['id'] ?>">
+                        <div class="cal-label-col" data-room-id="<?= $room['id'] ?>" data-room-number="<?= htmlspecialchars($room['room_number']) ?>">
+                            <strong>RM<?= htmlspecialchars($room['room_number']) ?></strong>
+                            <span><?= htmlspecialchars($room['room_type']) ?></span>
+                            <?php if ($isMaintenance): ?>
+                                <span class="maintenance-badge">Out of Order</span>
+                            <?php endif; ?>
+                        </div>
+                        <div class="cal-days-track cal-row__track">
+                            <?php foreach ($days as $day): ?>
+                                <div class="cal-day-slot <?= $day['is_today'] ? 'is-today' : '' ?>"
+                                     data-room-id="<?= $room['id'] ?>"
+                                     data-date="<?= $day['date'] ?>"></div>
+                            <?php endforeach; ?>
 
-                        <?php foreach (($reservationsByRoom[$room['id']] ?? []) as $r): ?>
-                            <div class="cal-bar cal-bar--<?= $r['status'] ?>"
-                                 style="left:<?= $r['_left_pct'] ?>%; width:<?= $r['_width_pct'] ?>%;"
-                                 title="<?= htmlspecialchars($r['guest_full_name'] . ' • ' . $r['check_in'] . ' to ' . $r['check_out'] . ' • ' . $statusLabels[$r['status']]) ?>"
-                                 data-reservation="<?= htmlspecialchars(json_encode($r), ENT_QUOTES) ?>">
-                                <span><?= htmlspecialchars($r['guest_full_name']) ?></span>
-                            </div>
-                        <?php endforeach; ?>
+                            <?php foreach (($reservationsByRoom[$room['id']] ?? []) as $r): ?>
+                                <div class="cal-bar cal-bar--<?= $r['status'] ?>"
+                                     style="left:<?= $r['_left_pct'] ?>%; width:<?= $r['_width_pct'] ?>%;"
+                                     title="<?= htmlspecialchars($r['guest_full_name'] . ' • ' . $r['check_in'] . ' to ' . $r['check_out'] . ' • ' . $statusLabels[$r['status']]) ?>"
+                                     data-reservation="<?= htmlspecialchars(json_encode($r), ENT_QUOTES) ?>">
+                                    <span><?= htmlspecialchars($r['guest_full_name']) ?></span>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
                     </div>
-                </div>
                 <?php endforeach; ?>
 
             </div>
@@ -240,6 +260,7 @@ $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
     csrfToken: <?= json_encode($_SESSION['csrf_token'] ?? '') ?>
   };
 </script>
+<script src="../assets/js/dashboard.js" defer></script>
 <script src="../assets/js/calendar.js" defer></script>
 </body>
 </html>

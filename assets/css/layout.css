@@ -54,9 +54,8 @@
   letter-spacing: 0.4em;
   color: var(--ink-500);
   text-transform: uppercase;
-  /* Native vertical layout prevents bounding box overlaps */
   writing-mode: vertical-rl;
-  transform: rotate(180deg); /* Flips it to read bottom-to-top */
+  transform: rotate(180deg);
 }
 
 .ef-arrow {
@@ -81,15 +80,16 @@
   border: 1px solid var(--sky-100);
   border-radius: var(--radius-xl);
   width: 280px;
-  height: 260px;
+  /* ═══ FIX: auto height, min-height, overflow visible ═══ */
+  min-height: 260px;
+  height: auto;
   display: flex;
   flex-direction: column;
   cursor: pointer;
   box-shadow: 0 10px 30px -10px rgba(28, 70, 130, 0.12);
   transition: transform 300ms cubic-bezier(.16, 1, .3, 1), box-shadow 300ms cubic-bezier(.16, 1, .3, 1), border-color 300ms cubic-bezier(.16, 1, .3, 1);
-  overflow: hidden;
+  overflow: visible;
   
-  /* Entrance Animation Initial State */
   opacity: 0;
   transform: translateY(20px);
   animation: popIn 500ms cubic-bezier(.16, 1, .3, 1) forwards;
@@ -138,7 +138,6 @@
 .room-card.status-maintenance .rc-badge { background: #f1f3f4; color: #5f6368; }
 .room-card.status-reserved .rc-badge { background: #fef7e0; color: #f9ab00; }
 
-/* Subtle pulse animation for real-time JS changes */
 @keyframes statusUpdatePulse {
   0% { box-shadow: 0 0 0 0 rgba(28, 70, 130, 0.4); }
   70% { box-shadow: 0 0 0 15px rgba(28, 70, 130, 0); }
@@ -148,7 +147,7 @@
   animation: statusUpdatePulse 800ms ease-out forwards;
 }
 
-/* Card Internal Layout */
+/* ═══ FIX: rc-content flexes, footer stays at bottom ═══ */
 .rc-content {
   flex: 1;
   display: flex;
@@ -156,7 +155,7 @@
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: 40px 20px 20px; /* Increased top padding to clear badge */
+  padding: 40px 20px 16px;
 }
 
 .rc-title {
@@ -177,14 +176,14 @@
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--blue-500);
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 }
 
 .rc-dates {
   font-family: 'Inter', sans-serif;
   font-size: 0.8rem;
   color: var(--ink-500);
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .rc-price {
@@ -194,16 +193,26 @@
   color: var(--ink-900);
 }
 
+.rc-guest {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--blue-700);
+  margin-top: 4px;
+}
+
+/* ═══ FIX: footer stays at bottom, always visible ═══ */
 .rc-footer {
   background: var(--sky-50);
   border-top: 1px solid var(--sky-100);
-  padding: 16px;
+  padding: 14px 16px;
   text-align: center;
   font-family: 'Playfair Display', serif;
   font-weight: 600;
   font-size: 1.1rem;
   color: var(--blue-700);
   transition: background 300ms, color 300ms;
+  flex-shrink: 0;
+  border-radius: 0 0 var(--radius-xl) var(--radius-xl);
 }
 
 .room-card:hover .rc-footer {
@@ -211,7 +220,7 @@
   color: var(--white);
 }
 
-/* Hide the floating admin controls inside this view */
+/* Hide floating admin controls */
 .room-card__admin-controls { display: none !important; }
 
 /* ==========================================================================
@@ -229,11 +238,7 @@
   opacity: 1;
   transition: opacity 300ms ease;
 }
-
-.modal-overlay[hidden] {
-  opacity: 0;
-  pointer-events: none;
-}
+.modal-overlay[hidden] { opacity: 0; pointer-events: none; }
 
 .modal {
   background: var(--white);
@@ -246,10 +251,7 @@
   transform: scale(1) translateY(0);
   transition: transform 400ms cubic-bezier(.16, 1, .3, 1);
 }
-
-.modal-overlay[hidden] .modal {
-  transform: scale(0.95) translateY(20px);
-}
+.modal-overlay[hidden] .modal { transform: scale(0.95) translateY(20px); }
 
 .modal__close {
   position: absolute;
@@ -262,11 +264,7 @@
   cursor: pointer;
   transition: color 200ms, transform 200ms;
 }
-
-.modal__close:hover {
-  color: var(--blue-500);
-  transform: rotate(90deg);
-}
+.modal__close:hover { color: var(--blue-500); transform: rotate(90deg); }
 
 .modal__content h2 {
   font-family: 'Playfair Display', serif;
@@ -292,14 +290,12 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
-
 .modal__content .value {
   font-size: 1rem;
   font-weight: 600;
   color: var(--ink-900);
   text-align: right;
 }
-
 .modal__content .value.status-badge {
   display: inline-block;
   padding: 4px 12px;
@@ -316,7 +312,6 @@
   gap: 12px;
   flex-wrap: wrap;
 }
-
 .modal__content .actions button {
   flex: 1;
   padding: 12px 24px;
@@ -328,30 +323,25 @@
   cursor: pointer;
   transition: transform 200ms, filter 200ms;
 }
-
 .modal__content .actions button:hover:not([disabled]) {
   transform: translateY(-2px);
   filter: brightness(1.1);
 }
-
 .modal__content .actions .btn--primary {
   background: var(--blue-500);
   color: var(--white);
   box-shadow: 0 8px 16px -4px rgba(59, 125, 216, 0.4);
 }
-
 .modal__content .actions .btn--secondary {
   background: var(--sky-100);
   color: var(--ink-500);
 }
-
 .modal__content .actions .btn--outline {
   background: transparent;
   border: 2px solid var(--blue-500);
   color: var(--blue-500);
 }
 
-/* --- Responsive --- */
 @media (max-width: 1100px) {
   .elegant-floor-container { flex-wrap: wrap; }
   .ef-zone--parking, .ef-zone--rightside { display: none; }
@@ -363,9 +353,7 @@
   .modal { padding: 30px 20px; }
 }
 
-/* ==========================================================================
-   Admin Modal Dropdown Styling
-   ========================================================================== */
+/* Status dropdown */
 .status-dropdown {
   padding: 6px 12px;
   border-radius: var(--radius-md);
@@ -379,24 +367,18 @@
   outline: none;
   transition: border-color 200ms, box-shadow 200ms;
 }
-
 .status-dropdown:focus {
   border-color: var(--blue-500);
   box-shadow: 0 0 0 3px rgba(59, 125, 216, 0.15);
 }
 
-/* ==========================================================================
-   Admin PMS Dashboard Modal Overrides
-   ========================================================================== */
-
-/* Expand the modal width for the dashboard view */
+/* PMS Modal */
 .modal-overlay.is-pms-dashboard .modal {
   max-width: 800px;
   padding: 0;
   overflow: hidden;
 }
 
-/* Header Area */
 .pms-header {
   background: var(--sky-50);
   padding: 30px 40px;
@@ -405,7 +387,6 @@
   justify-content: space-between;
   align-items: flex-end;
 }
-
 .pms-eyebrow {
   font-family: 'Inter', sans-serif;
   font-size: 0.75rem;
@@ -415,7 +396,6 @@
   color: var(--blue-500);
   margin: 0 0 8px;
 }
-
 .pms-header h2 {
   font-family: 'Playfair Display', serif;
   font-size: 2.4rem;
@@ -425,24 +405,11 @@
   align-items: center;
   gap: 16px;
 }
-
-.pms-badge {
-  font-family: 'Inter', sans-serif;
-  font-size: 0.85rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 6px 14px;
-  border-radius: 999px;
-  vertical-align: middle;
-}
 .pms-badge.status-available { background: #e8f0fe; color: #1a73e8; }
 .pms-badge.status-occupied { background: #e6f4ea; color: #1e8e3e; }
 .pms-badge.status-maintenance { background: #eceeef; color: #202124; }
 .pms-badge.status-reserved { background: #fef7e0; color: #f9ab00; }
 
-/* Status dropdown in the console header — was unstyled, fell back to a
-   plain native <select>. Color-coded chip to match the room-card palette. */
 .pms-status-dropdown {
   -webkit-appearance: none;
   -moz-appearance: none;
@@ -480,17 +447,12 @@
   .pms-status-dropdown { font-size: 0.85rem; padding: 7px 32px 7px 14px; }
 }
 
-/* Body Content Grids */
 .pms-body {
   padding: 10px 40px 30px;
   max-height: 60vh;
   overflow-y: auto;
 }
-
-.pms-section {
-  margin-top: 30px;
-}
-
+.pms-section { margin-top: 30px; }
 .pms-section h3 {
   font-family: 'Inter', sans-serif;
   font-size: 1.1rem;
@@ -500,19 +462,16 @@
   padding-bottom: 8px;
   border-bottom: 1px solid var(--sky-100);
 }
-
 .pms-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 20px 40px;
 }
-
 .pms-data {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
-
 .pms-data label {
   font-size: 0.75rem;
   font-weight: 600;
@@ -520,19 +479,16 @@
   letter-spacing: 0.05em;
   color: var(--ink-500);
 }
-
 .pms-data span {
   font-size: 1.05rem;
   font-weight: 500;
   color: var(--ink-900);
 }
-
 .pms-data span.highlight-text {
   color: var(--blue-700);
   font-weight: 600;
 }
 
-/* Action Footer */
 .pms-footer {
   background: var(--white);
   padding: 24px 40px;
@@ -542,22 +498,16 @@
   flex-wrap: wrap;
   align-items: center;
 }
-
-.pms-footer .btn {
-  flex: 0 1 auto;
-  padding: 12px 24px;
-}
-
+.pms-footer .btn { flex: 0 1 auto; padding: 12px 24px; }
 .btn--text {
   background: transparent;
   border: none;
   color: var(--blue-500);
   font-weight: 600;
-  margin-left: auto; /* Pushes history button to the far right */
+  margin-left: auto;
 }
 .btn--text:hover { text-decoration: underline; }
 
-/* Responsive adjustments for modal */
 @media (max-width: 650px) {
   .pms-grid { grid-template-columns: 1fr; gap: 16px; }
   .pms-header { padding: 24px; }
@@ -566,9 +516,6 @@
   .btn--text { margin-left: 0; text-align: center; }
 }
 
-/* ==========================================================================
-   Admin Editable Input Fields
-   ========================================================================== */
 .pms-input, .pms-select {
   width: 100%;
   padding: 6px 10px;
@@ -581,22 +528,13 @@
   color: var(--ink-900);
   transition: border-color 200ms, box-shadow 200ms;
 }
-
 .pms-input:focus, .pms-select:focus {
   outline: none;
   border-color: var(--blue-500);
   box-shadow: 0 0 0 3px rgba(59, 125, 216, 0.15);
 }
+.pms-input::placeholder { color: var(--sky-200); }
 
-.pms-input::placeholder {
-  color: var(--sky-200);
-}
-
-.pms-data {
-  position: relative;
-}
-
-/* Smooth transition when a card changes status dynamically */
 .room-card {
   transition: transform 300ms cubic-bezier(.16, 1, .3, 1), 
               box-shadow 300ms cubic-bezier(.16, 1, .3, 1), 
@@ -604,7 +542,6 @@
               background-color 300ms ease;
 }
 
-/* A pulse animation to confirm a successful status change */
 @keyframes statusUpdatePulse {
   0% { transform: translateY(0) scale(1); box-shadow: 0 0 0 0 rgba(59, 125, 216, 0.4); opacity: 1; }
   50% { transform: translateY(0) scale(1.03); box-shadow: 0 0 0 15px rgba(59, 125, 216, 0); opacity: 1; }
@@ -612,19 +549,17 @@
 }
 
 .room-card.is-updating {
-  opacity: 1 !important; /* Forces the card to stay visible! */
-  transform: translateY(0) !important; /* Locks it in place so it doesn't jump */
+  opacity: 1 !important;
+  transform: translateY(0) !important;
   animation: statusUpdatePulse 600ms ease-out forwards;
 }
 
-/* Status buttons group */
 .pms-status-buttons {
   display: inline-flex;
   gap: 6px;
   flex-wrap: wrap;
   margin-left: 12px;
 }
-
 .pms-status-btn {
   padding: 6px 14px;
   border: 2px solid var(--gray-300, #d1d5db);
@@ -636,12 +571,10 @@
   transition: all 0.25s ease;
   color: var(--gray-600, #4b5563);
 }
-
 .pms-status-btn:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 8px rgba(0,0,0,0.1);
 }
-
 .pms-status-btn.active {
   border-color: currentColor;
   background: currentColor;
@@ -649,8 +582,6 @@
   pointer-events: none;
   transform: scale(0.95);
 }
-
-/* Colour variants – matches the room-card palette */
 .pms-status-btn.status-available {
   border-color: #1a73e8;
   color: #1a73e8;
@@ -659,7 +590,6 @@
   background: #1a73e8;
   color: white;
 }
-
 .pms-status-btn.status-occupied {
   border-color: #1e8e3e;
   color: #1e8e3e;
@@ -668,7 +598,6 @@
   background: #1e8e3e;
   color: white;
 }
-
 .pms-status-btn.status-reserved {
   border-color: #f9ab00;
   color: #f9ab00;
@@ -677,7 +606,6 @@
   background: #f9ab00;
   color: white;
 }
-
 .pms-status-btn.status-maintenance {
   border-color: #202124;
   color: #202124;
@@ -687,22 +615,13 @@
   color: white;
 }
 
-/* Pulse animation on card (already exists) */
-.room-card.is-updating {
-  animation: pulse 0.6s ease;
-}
-
 @keyframes pulse {
   0% { transform: scale(1); }
   50% { transform: scale(1.03); box-shadow: 0 0 0 6px rgba(0,0,0,0.08); }
   100% { transform: scale(1); }
 }
 
-/* ─── Room status colour coding ───
-   green = occupied, red = needs cleaning, black = out of order,
-   yellow = pending reservation, blue = available & clean.
-   "Needs cleaning" only applies to vacant rooms — see the
-   .room-card--dirty override below, layered on top of "available". */
+/* ─── Room status colour coding ─── */
 .room-card.status-available {
   border-left: 8px solid #1a73e8;
   background: #e8f0fe;
@@ -725,7 +644,7 @@
 }
 .room-card.status-out-of-service,
 .room-card.status-unavailable {
-  border-left: 8px solid #212121;   /* black */
+  border-left: 8px solid #212121;
   background: #f5f5f5;
   opacity: 0.8;
 }

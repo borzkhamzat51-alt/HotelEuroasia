@@ -2,13 +2,7 @@
 /**
  * process_reservation.php
  * AJAX endpoint for Calendar CRUD.
- * Located at project root – requires config.php and db.php from the same folder.
- *
- * Layout/Calendar sync: a reservation created or edited here also drives
- * the room's floor-plan badge (rooms.room_status) whenever it's the
- * reservation actually covering today — see syncRoomStatusFromReservation().
- * The reverse direction (a room flagged Out of Order on the floor plan)
- * blocks new bookings here too, in the validation step below.
+ * Already includes conflict checking via db_room_has_conflict().
  */
 
 require_once __DIR__ . '/config.php';
@@ -20,41 +14,6 @@ function respond($data) {
     exit;
 }
 
-// Maps a reservation's lifecycle status to the room's floor-plan badge,
-// the same mapping process_room_action.php uses going the other direction.
-$roomStatusFor = ['checked_in' => 'occupied', 'reserved' => 'reserved'];
-
-/**
- * Recomputes a room's floor-plan badge from whatever reservation (if
- * any) actually covers today. Never overrides an independent
- * Out-of-Order flag, since that isn't reservation-driven. When a stay
- * that covered today just ended (checked_in -> checked_out), also
- * marks the room dirty, matching what checking out via the floor plan
- * already does.
- */
-function syncRoomStatusFromReservation($roomId, $previousStatus = null, $newStatus = null)
-{
-    global $roomStatusFor;
-    $active = db_find_active_reservation_for_room($roomId);
-
-    if ($active && isset($roomStatusFor[$active['status']])) {
-        db_set_room_status($roomId, $roomStatusFor[$active['status']]);
-        return;
-    }
-
-    $room = db_find_room($roomId);
-    if (!$room || $room['room_status'] === 'maintenance') {
-        return; // an independent Out-of-Order flag isn't reservation-driven
-    }
-    db_set_room_status($roomId, 'available');
-
-    $justCheckedOut = $previousStatus === 'checked_in' && $newStatus === 'checked_out';
-    if ($justCheckedOut) {
-        db_update_room_meta($roomId, 'Pending', null, date('Y-m-d'), null);
-    }
-}
-
-// Permission check
 if (!bb_has_permission('reservations')) {
     http_response_code(403);
     respond(['success' => false, 'message' => 'Reservations permission required.']);
@@ -80,8 +39,8 @@ try {
             respond(['success' => false, 'message' => 'Reservation not found.']);
         }
         db_log_reservation_activity($id, $_SESSION['user_id'], 'deleted', 'Deleted for ' . $existing['guest_full_name']);
+        db_audit_log('reservation.delete', 'reservation', $id, $existing['guest_full_name'], 'room_id:' . $existing['room_id']);
         db_delete_reservation($id);
-        syncRoomStatusFromReservation($existing['room_id']);
         respond(['success' => true]);
     }
 
@@ -121,8 +80,7 @@ try {
     if ($data['guest_full_name'] === '') {
         $errors['guest_full_name'] = 'Guest name is required.';
     }
-    $targetRoom = db_find_room($data['room_id']);
-    if (!$targetRoom) {
+    if (!db_find_room($data['room_id'])) {
         $errors['room_id'] = 'Select a valid room.';
     }
     $checkInDate  = DateTime::createFromFormat('Y-m-d', $data['check_in']);
@@ -138,50 +96,34 @@ try {
     if ($data['payment_method'] !== null && !in_array($data['payment_method'], ['cash', 'gcash', 'bank_transfer', 'card'])) {
         $errors['payment_method'] = 'Invalid payment method.';
     }
-    // A room flagged Out of Order on the floor plan can't be newly booked
-    // here — only blocks *new* claims on it, not editing/cancelling/
-    // checking out a reservation that was already active before the
-    // room went into maintenance.
-    $wasAlreadyActive = $existingReservation && in_array($existingReservation['status'], ['reserved', 'checked_in'], true);
-    $isNewActivation = in_array($data['status'], ['reserved', 'checked_in'], true) && !$wasAlreadyActive;
-    if ($targetRoom && $targetRoom['room_status'] === 'maintenance' && $isNewActivation) {
-        $errors['room_id'] = 'This room is currently marked Out of Order — clear that on the floor plan before booking it.';
-    }
-    if (!empty($errors)) {
-        respond(['success' => false, 'message' => 'Please fix the highlighted fields.', 'errors' => $errors]);
-    }
 
-    // Double‑booking check
+    // ─── CONFLICT CHECK ──────────────────────────────────────────────────────
     if ($data['status'] !== 'cancelled' && db_room_has_conflict($data['room_id'], $data['check_in'], $data['check_out'], $reservationId)) {
         respond(['success' => false, 'message' => 'That room is already booked for an overlapping date range.']);
+    }
+
+    if (!empty($errors)) {
+        respond(['success' => false, 'message' => 'Please fix the highlighted fields.', 'errors' => $errors]);
     }
 
     if ($action === 'create') {
         $newId = db_create_reservation($data);
         db_log_reservation_activity($newId, $_SESSION['user_id'], 'created', 'Created for ' . $data['guest_full_name']);
-        syncRoomStatusFromReservation($data['room_id']);
+        db_audit_log('reservation.create', 'reservation', $newId, $data['guest_full_name'], 'check_in:' . $data['check_in'] . ' check_out:' . $data['check_out'] . ' status:' . $data['status']);
         respond(['success' => true, 'id' => $newId]);
     }
 
     // Update
-    if (!$existingReservation) {
+    $existing = db_find_reservation($reservationId);
+    if (!$existing) {
         respond(['success' => false, 'message' => 'Reservation not found.']);
     }
     db_update_reservation($reservationId, $data);
     db_log_reservation_activity($reservationId, $_SESSION['user_id'], 'edited', 'Updated for ' . $data['guest_full_name']);
-    syncRoomStatusFromReservation($data['room_id'], $existingReservation['status'], $data['status']);
-    // The room may have changed between the old and new reservation data —
-    // keep the previous room in sync too if so.
-    if ($existingReservation['room_id'] != $data['room_id']) {
-        syncRoomStatusFromReservation($existingReservation['room_id'], $existingReservation['status'], 'checked_out');
-    }
+    db_audit_log('reservation.update', 'reservation', $reservationId, $data['guest_full_name'], 'status:' . $data['status'] . ' check_in:' . $data['check_in'] . ' check_out:' . $data['check_out']);
     respond(['success' => true, 'id' => $reservationId]);
 
 } catch (Exception $e) {
     error_log("Reservation error: " . $e->getMessage());
-    error_log("Stack trace: " . $e->getTraceAsString());
-    respond([
-        'success' => false,
-        'message' => 'Database error: ' . $e->getMessage()  // Shows real error temporarily
-    ]);
+    respond(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
 }

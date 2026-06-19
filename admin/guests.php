@@ -80,59 +80,86 @@ $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../assets/css/style.css">
-<link rel="stylesheet" href="../assets/css/property.css">
-<link rel="stylesheet" href="../assets/css/account.css">
+<link rel="stylesheet" href="../assets/css/dashboard.css">
 <style>
-/* ── Guests page ─────────────────────────────────────────────────── */
-.guests-main { padding: 28px clamp(16px,4vw,48px) 60px; }
+/* ── Guests page layout ──────────────────────────────────────────── */
+.guests-main {
+    flex: 1;
+    padding: clamp(20px, 4vw, 48px) clamp(16px, 5vw, 56px);
+    max-width: 1400px;
+    margin: 0 auto;
+    width: 100%;
+    box-sizing: border-box;
+}
+.guests-header { margin-bottom: 24px; }
+.guests-header__title {
+    font-family: var(--font-serif);
+    font-size: clamp(1.4rem, 3vw, 2rem);
+    font-weight: 700;
+    color: var(--blue-900);
+    margin: 0;
+}
+.guests-header__sub {
+    font-size: 0.82rem;
+    color: var(--blue-500);
+    margin: 4px 0 0;
+}
 
 /* Stats bar */
 .stats-bar {
-  display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 28px;
+  display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 20px;
 }
 .stat-chip {
-  background: var(--white); border: 1px solid var(--sky-200);
+  background: var(--white); border: 1px solid var(--blue-100);
   border-radius: 999px; padding: 8px 18px;
-  font-size: 0.82rem; font-weight: 600; color: var(--ink-700);
+  font-size: 0.82rem; font-weight: 600; color: var(--blue-900);
   display: flex; align-items: center; gap: 7px;
+  box-shadow: var(--shadow-card);
 }
 .stat-chip__dot { width:8px; height:8px; border-radius:50%; }
 
 /* Filter bar */
 .filter-bar {
-  display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 24px; align-items: center;
+  background: var(--white);
+  border: 1px solid var(--blue-100);
+  border-radius: var(--radius-lg);
+  padding: 16px 20px;
+  margin-bottom: 20px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  box-shadow: var(--shadow-card);
 }
 .filter-bar input, .filter-bar select {
   padding: 9px 14px; border-radius: var(--radius-md);
-  border: 1px solid var(--sky-200); font-size: 0.88rem;
-  font-family: inherit; background: var(--white); color: var(--ink-900);
+  border: 1px solid var(--blue-100); font-size: 0.88rem;
+  font-family: inherit; background: var(--white); color: var(--blue-900);
   outline: none;
 }
 .filter-bar input { flex: 1; min-width: 200px; }
 .filter-bar input:focus, .filter-bar select:focus {
   border-color: var(--blue-500); box-shadow: 0 0 0 3px rgba(59,125,216,.12);
 }
-.filter-results { font-size: 0.82rem; color: var(--ink-500); margin-left:auto; white-space:nowrap; }
+.filter-results { font-size: 0.82rem; color: var(--blue-500); margin-left:auto; white-space:nowrap; }
 
 /* Table */
-.guests-table-wrap { overflow-x: auto; border-radius: var(--radius-xl); background: var(--white); border: 1px solid var(--sky-200); }
-.guests-table {
-  width: 100%; border-collapse: collapse; font-size: 0.86rem;
-}
+.guests-table-wrap { overflow-x: auto; border-radius: var(--radius-lg); background: var(--white); border: 1px solid var(--blue-100); box-shadow: var(--shadow-card); }
+.guests-table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
 .guests-table th {
-  background: var(--sky-50); padding: 12px 16px; text-align: left;
+  background: var(--blue-50); padding: 12px 16px; text-align: left;
   font-size: 0.75rem; font-weight: 700; letter-spacing: .05em;
-  text-transform: uppercase; color: var(--ink-500);
-  border-bottom: 1px solid var(--sky-200); white-space: nowrap;
+  text-transform: uppercase; color: var(--blue-500);
+  border-bottom: 1px solid var(--blue-100); white-space: nowrap;
 }
 .guests-table td {
-  padding: 14px 16px; border-bottom: 1px solid var(--sky-100);
-  vertical-align: middle; color: var(--ink-900);
+  padding: 14px 16px; border-bottom: 1px solid var(--blue-50);
+  vertical-align: middle; color: var(--blue-900);
 }
 .guests-table tr:last-child td { border-bottom: none; }
-.guests-table tr:hover td { background: var(--sky-50); cursor: pointer; }
-.guest-name { font-weight: 600; color: var(--ink-900); }
-.guest-meta { font-size: 0.78rem; color: var(--ink-500); margin-top: 2px; }
+.guests-table tr:hover td { background: var(--blue-50); cursor: pointer; }
+.guest-name { font-weight: 600; color: var(--blue-900); }
+.guest-meta { font-size: 0.78rem; color: var(--blue-500); margin-top: 2px; }
 
 .status-badge {
   display: inline-block; padding: 3px 10px; border-radius: 999px;
@@ -143,11 +170,9 @@ $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
 .status-badge--checked_out { background:#eef0f2; color:#5b7693; }
 .status-badge--cancelled   { background:#fde8e8; color:#b91c1c; }
 
-.empty-state {
-  text-align:center; padding: 60px 20px; color: var(--ink-500);
-}
+.empty-state { text-align:center; padding: 60px 20px; color: var(--blue-500); }
 .empty-state__icon { font-size: 2.4rem; margin-bottom: 12px; }
-.empty-state h3 { color: var(--ink-900); margin: 0 0 6px; }
+.empty-state h3 { color: var(--blue-900); margin: 0 0 6px; }
 
 /* ── Folio modal ─────────────────────────────────────────────────── */
 .modal-overlay {
@@ -157,73 +182,41 @@ $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
 }
 .modal-overlay[hidden]{ display:none; }
 .folio-modal {
-  background: var(--white); border-radius: var(--radius-xl);
+  background: var(--white); border-radius: var(--radius-lg);
   width: 100%; max-width: 860px; max-height: 90vh;
   display: flex; flex-direction: column;
   box-shadow: 0 32px 80px -20px rgba(22,50,79,.35);
   overflow: hidden;
 }
 .folio-header {
-  background: var(--ink-900); color: var(--white);
+  background: var(--blue-900); color: var(--white);
   padding: 18px 24px; display: flex; justify-content: space-between; align-items: flex-start;
 }
 .folio-header h2 { margin:0; font-family:'Playfair Display',serif; font-size:1.1rem; }
 .folio-header__sub { font-size:0.8rem; opacity:.65; margin-top:3px; }
-.folio-close {
-  background: none; border: none; color: var(--white); cursor: pointer;
-  font-size: 1.4rem; line-height:1; padding:0; opacity:.7;
-}
+.folio-close { background: none; border: none; color: var(--white); cursor: pointer; font-size: 1.4rem; line-height:1; padding:0; opacity:.7; }
 .folio-close:hover { opacity:1; }
-
 .folio-body { overflow-y: auto; padding: 24px; flex:1; }
-
-/* Summary cards */
-.folio-summary {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(160px,1fr));
-  gap: 14px; margin-bottom: 24px;
-}
-.folio-card {
-  background: var(--sky-50); border: 1px solid var(--sky-200);
-  border-radius: var(--radius-md); padding: 14px 16px;
-}
-.folio-card__label { font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-500); }
-.folio-card__value { font-size:1.05rem; font-weight:700; color:var(--ink-900); margin-top:4px; }
+.folio-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px,1fr)); gap: 14px; margin-bottom: 24px; }
+.folio-card { background: var(--blue-50); border: 1px solid var(--blue-100); border-radius: var(--radius-md); padding: 14px 16px; }
+.folio-card__label { font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--blue-500); }
+.folio-card__value { font-size:1.05rem; font-weight:700; color:var(--blue-900); margin-top:4px; }
 .folio-card--highlight { border-color: var(--blue-500); background: #ebf3fc; }
 .folio-card--highlight .folio-card__value { color: var(--blue-700); }
 .folio-card--danger .folio-card__value { color: #b91c1c; }
-
-/* Guest info grid */
-.folio-info-grid {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 10px 24px;
-  margin-bottom: 24px; font-size: 0.86rem;
-}
+.folio-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 24px; margin-bottom: 24px; font-size: 0.86rem; }
 .folio-info-row { display:flex; flex-direction:column; gap:2px; }
-.folio-info-row span:first-child { font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-500); }
-.folio-info-row span:last-child { color:var(--ink-900); font-weight:600; }
-
-/* Charges table */
-.folio-charges-title {
-  font-size:0.78rem; font-weight:700; text-transform:uppercase;
-  letter-spacing:.05em; color:var(--ink-500); margin-bottom:10px;
-}
+.folio-info-row span:first-child { font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--blue-500); }
+.folio-info-row span:last-child { color:var(--blue-900); font-weight:600; }
+.folio-charges-title { font-size:0.78rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--blue-500); margin-bottom:10px; }
 .folio-charges-table { width:100%; border-collapse:collapse; font-size:0.84rem; }
-.folio-charges-table th {
-  background:var(--sky-50); padding:9px 12px; text-align:left;
-  font-size:0.72rem; font-weight:700; letter-spacing:.04em;
-  text-transform:uppercase; color:var(--ink-500);
-  border-bottom: 1px solid var(--sky-200);
-}
-.folio-charges-table td {
-  padding: 10px 12px; border-bottom: 1px solid var(--sky-100);
-  color: var(--ink-900);
-}
+.folio-charges-table th { background:var(--blue-50); padding:9px 12px; text-align:left; font-size:0.72rem; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--blue-500); border-bottom: 1px solid var(--blue-100); }
+.folio-charges-table td { padding: 10px 12px; border-bottom: 1px solid var(--blue-50); color: var(--blue-900); }
 .folio-charges-table tr:last-child td { border-bottom: none; }
 .folio-charges-table .amount { text-align:right; font-weight:600; }
 .folio-charges-table .amount-paid { text-align:right; color: #1a7a46; }
-.folio-charges-table .tfoot-row td {
-  font-weight:700; background:var(--sky-50); border-top:2px solid var(--sky-200);
-}
-.no-charges { text-align:center; padding:20px; color:var(--ink-500); font-size:0.85rem; }
+.folio-charges-table .tfoot-row td { font-weight:700; background:var(--blue-50); border-top:2px solid var(--blue-100); }
+.no-charges { text-align:center; padding:20px; color:var(--blue-500); font-size:0.85rem; }
 
 @media(max-width:600px){
   .folio-info-grid{ grid-template-columns:1fr; }
@@ -231,48 +224,47 @@ $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
 }
 </style>
 </head>
-<body class="property-body">
+<body class="dashboard-body">
 
-<header class="ptopbar">
-    <a href="<?= bb_role_home() ?>" class="ptopbar__back">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
-        Dashboard
-    </a>
-    <div class="ptopbar__breadcrumb">
-        <span aria-current="page">Guests</span>
+<!-- ── TOP BAR ─────────────────────────────────────────────────── -->
+<header class="topbar">
+    <div class="topbar__brand">
+        <span class="topbar__brand-mark">B</span>
+        <span class="topbar__brand-name">Bluebookers<?php if (bb_is_admin()): ?><span class="topbar__brand-suffix">.admin</span><?php endif; ?></span>
     </div>
-    <a href="../logout.php" class="ptopbar__logout">Log out</a>
+    <div class="topbar__right">
+        <div class="topbar__user">
+            <span class="topbar__user-name"><?= htmlspecialchars($displayName) ?></span>
+            <span class="topbar__user-role"><?= bb_is_admin() ? 'Admin' : 'Staff' ?></span>
+        </div>
+        <a href="../logout.php" class="topbar__logout">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 16l4-4-4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 12H9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            <span>Log out</span>
+        </a>
+        <button class="topbar__menu-toggle" id="navToggle" aria-label="Toggle navigation" aria-expanded="false">
+            <span></span><span></span><span></span>
+        </button>
+    </div>
 </header>
 
+<!-- ── NAV BAR ─────────────────────────────────────────────────── -->
+<?php include __DIR__ . '/includes/navbar.php'; ?>
+
+<!-- ── MAIN ────────────────────────────────────────────────────── -->
 <main class="guests-main">
 
-    <div style="margin-bottom:20px;">
-        <h1 style="font-family:'Playfair Display',serif; font-size:1.7rem; margin:0 0 4px; color:var(--ink-900);">Guests &amp; Folios</h1>
-        <p style="color:var(--ink-500); margin:0; font-size:0.88rem;">All guest reservations across every property.</p>
+    <div class="guests-header">
+        <h1 class="guests-header__title">Guests &amp; Folios</h1>
+        <p class="guests-header__sub">All guest reservations across every property.</p>
     </div>
 
     <!-- Stats bar -->
     <div class="stats-bar">
-        <div class="stat-chip">
-            <span class="stat-chip__dot" style="background:#8a9aa8"></span>
-            All: <?= $stats['total'] ?>
-        </div>
-        <div class="stat-chip">
-            <span class="stat-chip__dot" style="background:#3b7dd8"></span>
-            Reserved: <?= $stats['reserved'] ?>
-        </div>
-        <div class="stat-chip">
-            <span class="stat-chip__dot" style="background:#2ecc71"></span>
-            Checked In: <?= $stats['checked_in'] ?>
-        </div>
-        <div class="stat-chip">
-            <span class="stat-chip__dot" style="background:#8a9aa8"></span>
-            Checked Out: <?= $stats['checked_out'] ?>
-        </div>
-        <div class="stat-chip">
-            <span class="stat-chip__dot" style="background:#e74c3c"></span>
-            Cancelled: <?= $stats['cancelled'] ?>
-        </div>
+        <div class="stat-chip"><span class="stat-chip__dot" style="background:#8a9aa8"></span>All: <?= $stats['total'] ?></div>
+        <div class="stat-chip"><span class="stat-chip__dot" style="background:#3b7dd8"></span>Reserved: <?= $stats['reserved'] ?></div>
+        <div class="stat-chip"><span class="stat-chip__dot" style="background:#2ecc71"></span>Checked In: <?= $stats['checked_in'] ?></div>
+        <div class="stat-chip"><span class="stat-chip__dot" style="background:#8a9aa8"></span>Checked Out: <?= $stats['checked_out'] ?></div>
+        <div class="stat-chip"><span class="stat-chip__dot" style="background:#e74c3c"></span>Cancelled: <?= $stats['cancelled'] ?></div>
     </div>
 
     <!-- Filter bar -->
@@ -299,7 +291,7 @@ $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
         </select>
         <button type="submit" class="btn btn--primary" style="width:auto;padding:9px 20px;">Filter</button>
         <?php if ($search || $status || $branch): ?>
-            <a href="guests.php" class="btn btn--ghost" style="width:auto;padding:9px 20px;">Clear</a>
+            <a href="guests.php" class="btn btn--ghost" style="width:auto;padding:9px 20px;">Reset</a>
         <?php endif; ?>
         <span class="filter-results"><?= count($guests) ?> record<?= count($guests) !== 1 ? 's' : '' ?></span>
     </form>
@@ -336,7 +328,7 @@ $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
                 $balance = (float)$g['total_amount'] - (float)$g['amount_paid'];
             ?>
                 <tr class="guest-row" data-id="<?= $g['id'] ?>" data-reservation='<?= htmlspecialchars(json_encode($g), ENT_QUOTES) ?>'>
-                    <td style="color:var(--ink-500); font-size:0.78rem;">#<?= $g['id'] ?></td>
+                    <td style="color:var(--blue-500); font-size:0.78rem;">#<?= $g['id'] ?></td>
                     <td>
                         <div class="guest-name"><?= htmlspecialchars($g['guest_full_name']) ?></div>
                         <div class="guest-meta">
@@ -372,9 +364,7 @@ $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
         </div>
         <button class="folio-close" id="folioClose">&times;</button>
     </div>
-    <div class="folio-body" id="folioBody">
-        <!-- Populated by JS -->
-    </div>
+    <div class="folio-body" id="folioBody"></div>
   </div>
 </div>
 
@@ -387,10 +377,7 @@ function fmt(n){ return '₱' + parseFloat(n||0).toLocaleString('en-PH',{minimum
 function esc(s){ const d=document.createElement('div'); d.textContent=s??'—'; return d.innerHTML; }
 
 document.querySelectorAll('.guest-row').forEach(row => {
-    row.addEventListener('click', () => {
-        const r = JSON.parse(row.dataset.reservation);
-        openFolio(r);
-    });
+    row.addEventListener('click', () => openFolio(JSON.parse(row.dataset.reservation)));
 });
 
 function openFolio(r) {
@@ -405,48 +392,17 @@ function openFolio(r) {
 
     document.getElementById('folioBody').innerHTML = `
       <div class="folio-summary">
-        <div class="folio-card">
-          <div class="folio-card__label">Folio No.</div>
-          <div class="folio-card__value">#${String(r.id).padStart(10,'0')}</div>
-        </div>
-        <div class="folio-card">
-          <div class="folio-card__label">Booking Type</div>
-          <div class="folio-card__value">${esc(stLabel)}</div>
-        </div>
-        <div class="folio-card">
-          <div class="folio-card__label">Room</div>
-          <div class="folio-card__value">RM ${esc(r.room_number)} – ${esc(r.room_type)}</div>
-        </div>
-        <div class="folio-card">
-          <div class="folio-card__label">No. Nights</div>
-          <div class="folio-card__value">${nights} Night${nights!==1?'s':''}</div>
-        </div>
-        <div class="folio-card">
-          <div class="folio-card__label">Arrival</div>
-          <div class="folio-card__value">${esc(r.check_in)}</div>
-        </div>
-        <div class="folio-card">
-          <div class="folio-card__label">Departure</div>
-          <div class="folio-card__value">${esc(r.check_out)}</div>
-        </div>
-        <div class="folio-card folio-card--highlight">
-          <div class="folio-card__label">Amount Due</div>
-          <div class="folio-card__value">${fmt(r.total_amount)}</div>
-        </div>
-        <div class="folio-card">
-          <div class="folio-card__label">Amount Paid</div>
-          <div class="folio-card__value">${fmt(r.amount_paid)}</div>
-        </div>
-        <div class="folio-card ${balance>0?'folio-card--danger':''}">
-          <div class="folio-card__label">Total Balance</div>
-          <div class="folio-card__value">${fmt(balance)}</div>
-        </div>
-        <div class="folio-card">
-          <div class="folio-card__label">Payment Method</div>
-          <div class="folio-card__value">${esc(pmLabel)}</div>
-        </div>
+        <div class="folio-card"><div class="folio-card__label">Folio No.</div><div class="folio-card__value">#${String(r.id).padStart(10,'0')}</div></div>
+        <div class="folio-card"><div class="folio-card__label">Booking Type</div><div class="folio-card__value">${esc(stLabel)}</div></div>
+        <div class="folio-card"><div class="folio-card__label">Room</div><div class="folio-card__value">RM ${esc(r.room_number)} – ${esc(r.room_type)}</div></div>
+        <div class="folio-card"><div class="folio-card__label">No. Nights</div><div class="folio-card__value">${nights} Night${nights!==1?'s':''}</div></div>
+        <div class="folio-card"><div class="folio-card__label">Arrival</div><div class="folio-card__value">${esc(r.check_in)}</div></div>
+        <div class="folio-card"><div class="folio-card__label">Departure</div><div class="folio-card__value">${esc(r.check_out)}</div></div>
+        <div class="folio-card folio-card--highlight"><div class="folio-card__label">Amount Due</div><div class="folio-card__value">${fmt(r.total_amount)}</div></div>
+        <div class="folio-card"><div class="folio-card__label">Amount Paid</div><div class="folio-card__value">${fmt(r.amount_paid)}</div></div>
+        <div class="folio-card ${balance>0?'folio-card--danger':''}"><div class="folio-card__label">Total Balance</div><div class="folio-card__value">${fmt(balance)}</div></div>
+        <div class="folio-card"><div class="folio-card__label">Payment Method</div><div class="folio-card__value">${esc(pmLabel)}</div></div>
       </div>
-
       <div class="folio-info-grid">
         <div class="folio-info-row"><span>Guest</span><span>${esc(r.guest_full_name)}</span></div>
         <div class="folio-info-row"><span>Contact #</span><span>${esc(r.contact_number||'—')}</span></div>
@@ -461,91 +417,41 @@ function openFolio(r) {
         ${r.special_requests ? `<div class="folio-info-row" style="grid-column:1/-1"><span>Special Requests</span><span>${esc(r.special_requests)}</span></div>` : ''}
         ${r.notes ? `<div class="folio-info-row" style="grid-column:1/-1"><span>Notes</span><span>${esc(r.notes)}</span></div>` : ''}
       </div>
-
-      <!-- Room charges per night breakdown -->
       <div class="folio-charges-title">Room Charges Breakdown</div>
       <div style="overflow-x:auto;">
       <table class="folio-charges-table">
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>Room No.</th>
-            <th>Description</th>
-            <th>Qty</th>
-            <th style="text-align:right">Price</th>
-            <th style="text-align:right">Amount Due</th>
-            <th style="text-align:right">Amount Paid</th>
-          </tr>
-        </thead>
-        <tbody id="chargesBody">
-          <tr><td colspan="7" class="no-charges">Loading charges…</td></tr>
-        </tbody>
-        <tfoot>
-          <tr class="tfoot-row">
-            <td colspan="5">Total</td>
-            <td class="amount">${fmt(r.total_amount)}</td>
-            <td class="amount-paid">${fmt(r.amount_paid)}</td>
-          </tr>
-        </tfoot>
+        <thead><tr><th>Date</th><th>Room No.</th><th>Description</th><th>Qty</th><th style="text-align:right">Price</th><th style="text-align:right">Amount Due</th><th style="text-align:right">Amount Paid</th></tr></thead>
+        <tbody id="chargesBody"><tr><td colspan="7" class="no-charges">Loading…</td></tr></tbody>
+        <tfoot><tr class="tfoot-row"><td colspan="5">Total</td><td class="amount">${fmt(r.total_amount)}</td><td class="amount-paid">${fmt(r.amount_paid)}</td></tr></tfoot>
       </table>
       </div>
     `;
 
     document.getElementById('folioModal').removeAttribute('hidden');
-
-    // Build per-night room charge rows
     buildNightlyCharges(r, nights);
 }
 
 function buildNightlyCharges(r, nights) {
     const tbody = document.getElementById('chargesBody');
     if (!tbody) return;
-    if (nights <= 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="no-charges">No nightly charges to display.</td></tr>';
-        return;
-    }
+    if (nights <= 0) { tbody.innerHTML = '<tr><td colspan="7" class="no-charges">No nightly charges.</td></tr>'; return; }
     let rows = '';
     const checkIn = new Date(r.check_in);
     for (let i = 0; i < nights; i++) {
-        const d = new Date(checkIn);
-        d.setDate(d.getDate() + i);
+        const d = new Date(checkIn); d.setDate(d.getDate() + i);
         const dateStr = d.toISOString().split('T')[0];
-        rows += `<tr>
-            <td>${dateStr}</td>
-            <td>${esc(r.room_number)}</td>
-            <td>RM ${esc(r.room_number)} – ${esc(r.room_type)}</td>
-            <td>1</td>
-            <td class="amount">${fmt(r.room_rate)}</td>
-            <td class="amount">${fmt(r.room_rate)}</td>
-            <td class="amount-paid">0.00</td>
-        </tr>`;
+        rows += `<tr><td>${dateStr}</td><td>${esc(r.room_number)}</td><td>RM ${esc(r.room_number)} – ${esc(r.room_type)}</td><td>1</td><td class="amount">${fmt(r.room_rate)}</td><td class="amount">${fmt(r.room_rate)}</td><td class="amount-paid">0.00</td></tr>`;
     }
-    // Security deposit row
     if (parseFloat(r.security_deposit) > 0) {
-        rows += `<tr>
-            <td>${r.check_in}</td>
-            <td>${esc(r.room_number)}</td>
-            <td>Security Deposit</td>
-            <td>1</td>
-            <td class="amount">${fmt(r.security_deposit)}</td>
-            <td class="amount">${fmt(r.security_deposit)}</td>
-            <td class="amount-paid">0.00</td>
-        </tr>`;
+        rows += `<tr><td>${r.check_in}</td><td>${esc(r.room_number)}</td><td>Security Deposit</td><td>1</td><td class="amount">${fmt(r.security_deposit)}</td><td class="amount">${fmt(r.security_deposit)}</td><td class="amount-paid">0.00</td></tr>`;
     }
     tbody.innerHTML = rows;
 }
 
-document.getElementById('folioClose').addEventListener('click', () => {
-    document.getElementById('folioModal').setAttribute('hidden', '');
-});
-document.getElementById('folioModal').addEventListener('click', e => {
-    if (e.target === document.getElementById('folioModal')) {
-        document.getElementById('folioModal').setAttribute('hidden', '');
-    }
-});
-document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') document.getElementById('folioModal').setAttribute('hidden', '');
-});
+document.getElementById('folioClose').addEventListener('click', () => document.getElementById('folioModal').setAttribute('hidden', ''));
+document.getElementById('folioModal').addEventListener('click', e => { if (e.target === document.getElementById('folioModal')) document.getElementById('folioModal').setAttribute('hidden', ''); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') document.getElementById('folioModal').setAttribute('hidden', ''); });
 </script>
+<script src="../assets/js/dashboard.js" defer></script>
 </body>
 </html>

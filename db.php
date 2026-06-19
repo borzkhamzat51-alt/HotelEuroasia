@@ -295,25 +295,10 @@ function db_get_reservation_activity($reservationId)
     return $stmt->fetchAll();
 }
 
-/**
- * The reservation actually claiming this room *today* — not just any
- * non-cancelled booking, which previously meant a reservation months in
- * the future would get treated as "the" active one (wrongly driving
- * check-in/check-out actions and the room card's guest info). Prefers
- * an already-checked-in stay over a same-day arrival if somehow both
- * exist.
- */
-function db_find_active_reservation_for_room($roomId, $date = null)
+function db_find_active_reservation_for_room($roomId)
 {
-    $date = $date ?: date('Y-m-d');
-    $stmt = bb_db()->prepare(
-        "SELECT * FROM reservations
-         WHERE room_id = ? AND status IN ('reserved','checked_in')
-           AND check_in <= ? AND check_out > ?
-         ORDER BY (status = 'checked_in') DESC, check_in ASC
-         LIMIT 1"
-    );
-    $stmt->execute([$roomId, $date, $date]);
+    $stmt = bb_db()->prepare("SELECT * FROM reservations WHERE room_id = ? AND status NOT IN ('cancelled','checked_out') LIMIT 1");
+    $stmt->execute([$roomId]);
     return $stmt->fetch() ?: null;
 }
 
@@ -349,4 +334,128 @@ function db_update_room_meta($roomId, $cleaning, $maintenance, $lastOccupancy, $
     $params[] = $roomId;
     $stmt = bb_db()->prepare('UPDATE rooms SET ' . implode(', ', $fields) . ' WHERE id = ?');
     $stmt->execute($params);
+}
+
+/* ============================================================================
+ * Audit Log
+ * ========================================================================= */
+
+/**
+ * Write one audit entry. Safe to call anywhere — silently swallows DB
+ * errors so a logging failure never crashes the actual operation.
+ *
+ * @param string      $action       Dot-namespaced action key e.g. 'reservation.create'
+ * @param string|null $targetType   e.g. 'reservation', 'user', 'room'
+ * @param int|null    $targetId     PK of the affected row
+ * @param string|null $targetLabel  Human-readable label (guest name, room no., etc.)
+ * @param string|null $details      Extra context (plain text or JSON string)
+ */
+function db_audit_log($action, $targetType = null, $targetId = null, $targetLabel = null, $details = null)
+{
+    try {
+        $userId    = $_SESSION['user_id']   ?? null;
+        $username  = $_SESSION['username']  ?? null;
+        $fullName  = $_SESSION['full_name'] ?? null;
+        $role      = $_SESSION['role']      ?? null;
+        $ip        = $_SERVER['REMOTE_ADDR'] ?? null;
+
+        $stmt = bb_db()->prepare(
+            'INSERT INTO audit_log
+                (user_id, username, full_name, role, action, target_type, target_id, target_label, details, ip_address)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        );
+        $stmt->execute([$userId, $username, $fullName, $role, $action, $targetType, $targetId, $targetLabel, $details, $ip]);
+    } catch (Exception $e) {
+        // Never let audit logging crash the main operation
+        error_log('audit_log error: ' . $e->getMessage());
+    }
+}
+
+/**
+ * Fetch audit log entries with optional filters.
+ * Returns newest-first by default.
+ */
+function db_list_audit_log($filters = [])
+{
+    $where  = ['1=1'];
+    $params = [];
+
+    if (!empty($filters['user_id'])) {
+        $where[]  = 'user_id = ?';
+        $params[] = (int) $filters['user_id'];
+    }
+    if (!empty($filters['action'])) {
+        $where[]  = 'action LIKE ?';
+        $params[] = '%' . $filters['action'] . '%';
+    }
+    if (!empty($filters['target_type'])) {
+        $where[]  = 'target_type = ?';
+        $params[] = $filters['target_type'];
+    }
+    if (!empty($filters['date_from'])) {
+        $where[]  = 'created_at >= ?';
+        $params[] = $filters['date_from'] . ' 00:00:00';
+    }
+    if (!empty($filters['date_to'])) {
+        $where[]  = 'created_at <= ?';
+        $params[] = $filters['date_to'] . ' 23:59:59';
+    }
+    if (!empty($filters['search'])) {
+        $like     = '%' . $filters['search'] . '%';
+        $where[]  = '(username LIKE ? OR full_name LIKE ? OR target_label LIKE ? OR details LIKE ?)';
+        $params   = array_merge($params, [$like, $like, $like, $like]);
+    }
+
+    $limit  = isset($filters['limit']) ? (int) $filters['limit'] : 200;
+    $offset = isset($filters['offset']) ? (int) $filters['offset'] : 0;
+
+    $sql = 'SELECT * FROM audit_log WHERE ' . implode(' AND ', $where)
+         . ' ORDER BY created_at DESC LIMIT ' . $limit . ' OFFSET ' . $offset;
+
+    $stmt = bb_db()->prepare($sql);
+    $stmt->execute($params);
+    return $stmt->fetchAll();
+}
+
+function db_count_audit_log($filters = [])
+{
+    $where  = ['1=1'];
+    $params = [];
+
+    if (!empty($filters['user_id'])) {
+        $where[]  = 'user_id = ?';
+        $params[] = (int) $filters['user_id'];
+    }
+    if (!empty($filters['action'])) {
+        $where[]  = 'action LIKE ?';
+        $params[] = '%' . $filters['action'] . '%';
+    }
+    if (!empty($filters['target_type'])) {
+        $where[]  = 'target_type = ?';
+        $params[] = $filters['target_type'];
+    }
+    if (!empty($filters['date_from'])) {
+        $where[]  = 'created_at >= ?';
+        $params[] = $filters['date_from'] . ' 00:00:00';
+    }
+    if (!empty($filters['date_to'])) {
+        $where[]  = 'created_at <= ?';
+        $params[] = $filters['date_to'] . ' 23:59:59';
+    }
+    if (!empty($filters['search'])) {
+        $like     = '%' . $filters['search'] . '%';
+        $where[]  = '(username LIKE ? OR full_name LIKE ? OR target_label LIKE ? OR details LIKE ?)';
+        $params   = array_merge($params, [$like, $like, $like, $like]);
+    }
+
+    $sql  = 'SELECT COUNT(*) FROM audit_log WHERE ' . implode(' AND ', $where);
+    $stmt = bb_db()->prepare($sql);
+    $stmt->execute($params);
+    return (int) $stmt->fetchColumn();
+}
+
+function db_list_audit_users()
+{
+    $stmt = bb_db()->query('SELECT DISTINCT user_id, username, full_name FROM audit_log WHERE user_id IS NOT NULL ORDER BY username ASC');
+    return $stmt->fetchAll();
 }

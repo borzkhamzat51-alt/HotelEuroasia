@@ -249,3 +249,60 @@
 .resv-log { margin-top: 18px; border-top: 1px solid var(--sky-200); padding-top: 14px; }
 .resv-log summary { cursor: pointer; font-size: 0.85rem; font-weight: 600; color: var(--ink-700); }
 .resv-log ul { list-style: none; margin: 10px 0 0; padding: 0; font-size: 0.8rem; color: var(--ink-500); display: flex; flex-direction: column; gap: 6px; }
+
+/* ==========================================================================
+   Calendar – Out of Order (maintenance) row styling
+   ========================================================================== */
+
+/* Gray out the entire row */
+.cal-row.maintenance .cal-day-slot {
+    background-color: #f0f0f0 !important;
+    cursor: not-allowed;
+    opacity: 0.6;
+    pointer-events: none; /* prevents click on individual slots */
+}
+.cal-row.maintenance .cal-day-slot:hover {
+    background-color: #f0f0f0 !important;
+}
+.cal-row.maintenance .cal-day-slot.is-today {
+    background-color: #f0f0f0 !important;
+}
+
+/* Gray out the label column too, but keep it clickable for the badge info */
+.cal-row.maintenance .cal-label-col {
+    background-color: #f5f5f5;
+    border-right-color: #ddd;
+    cursor: default;
+}
+.cal-row.maintenance .cal-label-col strong {
+    color: #999;
+    text-decoration: line-through;
+}
+.cal-row.maintenance .cal-label-col span {
+    color: #bbb;
+}
+
+/* Maintenance badge – pill next to room number */
+.maintenance-badge {
+    display: inline-block;
+    margin-top: 4px;
+    padding: 2px 12px;
+    border-radius: 999px;
+    background: #6c757d;
+    color: #fff;
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+}
+
+/* Any existing reservation bars on maintenance rows – faded */
+.cal-row.maintenance .cal-bar {
+    opacity: 0.5;
+    cursor: default;
+}
+.cal-row.maintenance .cal-bar:hover {
+    filter: none;
+    transform: none;
+}

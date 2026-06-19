@@ -28,6 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form'] ?? '') === 'profile
 
     if (empty($errors)) {
         db_update_profile($userId, $fullName, $username, $email);
+        db_audit_log('profile.update', 'user', $userId, $username);
         $_SESSION['full_name'] = $fullName;
         $_SESSION['username']  = $username;
         $success = 'Profile updated.';
@@ -49,6 +50,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form'] ?? '') === 'passwor
 
     if (empty($errors)) {
         db_update_password($userId, password_hash($new, PASSWORD_DEFAULT));
+        db_audit_log('profile.password_change', 'user', $userId, $_SESSION['username'] ?? null);
         $success = 'Password changed.';
     }
 }

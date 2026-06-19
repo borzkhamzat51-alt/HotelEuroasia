@@ -33,7 +33,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (empty($errors)) {
-        db_create_admin($values['username'], $values['email'], password_hash($password, PASSWORD_DEFAULT), $values['full_name']);
+        $newId = db_create_admin($values['username'], $values['email'], password_hash($password, PASSWORD_DEFAULT), $values['full_name']);
+        db_audit_log('user.create_admin', 'user', $newId, $values['username']);
         $_SESSION['users_flash'] = 'Admin account "' . $values['username'] . '" created — full access, no permission checklist needed.';
         bb_redirect('admin/users.php');
     }

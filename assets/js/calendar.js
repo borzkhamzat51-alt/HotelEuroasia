@@ -233,10 +233,16 @@
   }
 
   // --- Entry points ------------------------------------------------
+  // --- Entry points ------------------------------------------------
   newBtn.addEventListener('click', function () { renderForm(null, {}); });
 
   document.querySelectorAll('.cal-day-slot').forEach(function (slot) {
     slot.addEventListener('click', function () {
+      const row = this.closest('.cal-row');
+      if (row && row.classList.contains('maintenance')) {
+        alert('This room is currently Out of Order. Please clear the maintenance flag on the Layout page before booking.');
+        return;
+      }
       const roomId = slot.dataset.roomId;
       const date = slot.dataset.date;
       const nextDay = new Date(date);
@@ -247,6 +253,11 @@
 
   document.querySelectorAll('.cal-label-col[data-room-id]').forEach(function (label) {
     label.addEventListener('click', function () {
+      const row = this.closest('.cal-row');
+      if (row && row.classList.contains('maintenance')) {
+        alert('This room is currently Out of Order. Please clear the maintenance flag on the Layout page before booking.');
+        return;
+      }
       renderForm(null, { room_id: label.dataset.roomId });
     });
   });
@@ -263,6 +274,7 @@
   document.querySelectorAll('.cal-bar').forEach(function (bar) {
     bar.addEventListener('click', function (e) {
       e.stopPropagation();
+      // Allow editing existing reservations even on maintenance rows
       const resv = JSON.parse(bar.dataset.reservation);
       renderForm(resv, null);
     });

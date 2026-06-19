@@ -11,66 +11,90 @@
   
   const isAdmin = document.body.dataset.admin === 'true'; 
 
-  // ─── Update Visual Card ───────────────────────────────────────────
-  function updateVisualCard(card, newStatus, newCheckIn = null, newCheckOut = null, newGuestName = null, newCleaning = null) {
-    const oldStatus = card.dataset.status;
-    
-    card.dataset.status = newStatus;
-    if (newCheckIn) card.dataset.checkIn = newCheckIn;
-    if (newCheckOut) card.dataset.checkOut = newCheckOut;
-    if (newGuestName !== null) card.dataset.guestName = newGuestName;
-    if (newCleaning !== null) card.dataset.cleaning = newCleaning;
+  // ─── Helper: format date display ────────────────────────────────
+  function formatDateDisplay(checkIn, checkOut, status) {
+    if (status === 'available' || status === 'maintenance') return '';
+    if (!checkIn || !checkOut) return '';
+    return new Date(checkIn).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) +
+           ' - ' +
+           new Date(checkOut).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+
+  // ─── Render card from its dataset ────────────────────────────────
+  function renderCard(card) {
+    const status = card.dataset.status || 'available';
+    const guestName = card.dataset.guestName || '';
+    const checkIn = card.dataset.checkIn || '';
+    const checkOut = card.dataset.checkOut || '';
+    const cleaning = card.dataset.cleaning || 'Clean';
+    const isDirty = status === 'available' && cleaning !== 'Clean';
 
     // Update status class
-    card.classList.remove(`status-${oldStatus}`);
-    card.classList.add(`status-${newStatus}`);
+    card.className = card.className.split(' ').filter(c => !c.startsWith('status-')).join(' ');
+    card.classList.add('status-' + status);
+    if (isDirty) card.classList.add('room-card--dirty');
+    else card.classList.remove('room-card--dirty');
 
-    // Update the "needs cleaning" overlay — only meaningful while available
-    const isDirty = newStatus === 'available' && card.dataset.cleaning && card.dataset.cleaning !== 'Clean';
-    card.classList.toggle('room-card--dirty', !!isDirty);
-
-    // Update badge (if exists)
-    const badge = card.querySelector('.rc-badge');
-    if (badge) {
-      badge.textContent = newStatus.charAt(0).toUpperCase() + newStatus.slice(1);
-    }
-
-    // Update dates display
+    // Update rc-dates
     const datesEl = card.querySelector('.rc-dates');
     if (datesEl) {
-      if (newStatus === 'available' || newStatus === 'maintenance' || newStatus === 'checked_out') {
-        datesEl.textContent = newStatus === 'maintenance' ? 'Out of Order' : (isDirty ? 'Needs Cleaning' : 'Vacant - Ready');
-      } else if (card.dataset.checkIn && card.dataset.checkOut) {
-        datesEl.textContent = `${card.dataset.checkIn} to ${card.dataset.checkOut}`;
+      if (status === 'available') {
+        datesEl.textContent = isDirty ? 'Needs Cleaning' : 'Vacant - Ready';
+      } else if (status === 'maintenance') {
+        datesEl.textContent = 'Out of Order';
+      } else if (checkIn && checkOut) {
+        datesEl.textContent = formatDateDisplay(checkIn, checkOut, status);
       } else {
-        datesEl.textContent = 'Dates Pending';
+        datesEl.textContent = '—';
       }
     }
 
-    // Update guest name display
-    const guestEl = card.querySelector('.rc-guest');
-    if (newStatus === 'available' || newStatus === 'maintenance' || newStatus === 'checked_out') {
-      // Remove guest name
-      if (guestEl) guestEl.remove();
+    // Update rc-guest
+    let guestEl = card.querySelector('.rc-guest');
+    if (guestName && (status === 'occupied' || status === 'reserved')) {
+      if (!guestEl) {
+        const content = card.querySelector('.rc-content');
+        const newGuest = document.createElement('div');
+        newGuest.className = 'rc-guest';
+        newGuest.style.cssText = 'font-weight:600; font-size:0.9rem; color:var(--blue-700); margin-top:4px;';
+        content.appendChild(newGuest);
+        guestEl = newGuest;
+      }
+      guestEl.textContent = guestName;
     } else {
-      if (newGuestName) {
-        if (guestEl) {
-          guestEl.textContent = newGuestName;
-        } else {
-          const content = card.querySelector('.rc-content');
-          const newGuest = document.createElement('div');
-          newGuest.className = 'rc-guest';
-          newGuest.style.cssText = 'font-weight:600; font-size:0.9rem; color:var(--blue-700); margin-top:4px;';
-          newGuest.textContent = newGuestName;
-          content.appendChild(newGuest);
-        }
-      }
+      if (guestEl) guestEl.remove();
+    }
+  }
+
+  // ─── Update card with fresh data from server ─────────────────────
+  function updateCardFromData(card, data) {
+    const room = data.room;
+    const res = data.reservation;
+
+    // Update all dataset attributes
+    card.dataset.status = room.room_status;
+    card.dataset.cleaning = room.cleaning_status;
+    card.dataset.maintenance = room.maintenance_status;
+    card.dataset.lastOccupancy = room.last_occupancy || '';
+    card.dataset.notes = room.staff_notes || '';
+
+    if (res) {
+      card.dataset.guestName = res.guest_full_name || '';
+      card.dataset.checkIn = res.check_in || '';
+      card.dataset.checkOut = res.check_out || '';
+      card.dataset.phone = res.contact_number || '';
+      card.dataset.email = res.email || '';
+      card.dataset.pax = res.num_adults || 1;
+    } else {
+      card.dataset.guestName = '';
+      card.dataset.checkIn = '';
+      card.dataset.checkOut = '';
+      card.dataset.phone = '';
+      card.dataset.email = '';
+      card.dataset.pax = '';
     }
 
-    // Animate
-    card.classList.remove('is-updating');
-    void card.offsetWidth; 
-    card.classList.add('is-updating');
+    renderCard(card);
   }
 
   // ─── Open Admin Console ──────────────────────────────────────────
@@ -97,10 +121,6 @@
     const maintenance = card.dataset.maintenance || 'Cleared';
     const notes = card.dataset.notes || '';
 
-    // The dropdown shows "Needs Cleaning" as its own option, but underneath
-    // it's still room_status='available' — cleaning_status is what actually
-    // distinguishes the two. displayStatus is only used for what the
-    // dropdown shows/selects; `status` keeps driving the rest of the form.
     const displayStatus = (status === 'available' && cleaning !== 'Clean') ? 'needs_cleaning' : status;
 
     let html = `
@@ -155,7 +175,6 @@
         </div>
       `;
     } else {
-      // Room Status & Operations – now saves to database
       html += `
         <div class="pms-section">
           <h3>Room Status & Operations</h3>
@@ -205,11 +224,13 @@
     const form = modalContent.querySelector('#adminRoomForm');
     const statusSelect = modalContent.querySelector('#directStatusOverride');
 
-    // Status dropdown override
+    // ─── CRITICAL: Dropdown change handler ──────────────────────────
     if (statusSelect) {
       statusSelect.addEventListener('change', function(e) {
         const newStatus = e.target.value;
-        const hadActiveGuest = status === 'occupied' || status === 'reserved';
+        const originalText = statusSelect.value;
+        statusSelect.disabled = true;
+
         const formData = new FormData();
         formData.append('action', 'update_status');
         formData.append('room_id', roomId);
@@ -218,32 +239,39 @@
         fetch('/process_room_action.php', { method: 'POST', body: formData })
           .then(res => res.json())
           .then(data => {
+            statusSelect.disabled = false;
             if (data.success) {
-              // 'needs_cleaning' is room_status=available with cleaning=Pending;
-              // explicitly picking 'available' means "it's clean" unless a
-              // guest was just removed by this same change.
-              const roomStatusForCard = newStatus === 'needs_cleaning' ? 'available' : newStatus;
-              let dirtyOverride = null;
-              if (newStatus === 'needs_cleaning') {
-                dirtyOverride = 'Pending';
-              } else if (newStatus === 'available') {
-                dirtyOverride = hadActiveGuest ? 'Pending' : 'Clean';
+              // Update card with fresh data from server
+              if (data.data) {
+                updateCardFromData(card, data.data);
+              } else {
+                // Fallback: just update status and re-render
+                const roomStatus = newStatus === 'needs_cleaning' ? 'available' : newStatus;
+                card.dataset.status = roomStatus;
+                if (newStatus === 'needs_cleaning') {
+                  card.dataset.cleaning = 'Pending';
+                } else if (newStatus === 'available') {
+                  card.dataset.cleaning = 'Clean';
+                }
+                renderCard(card);
               }
-              updateVisualCard(card, roomStatusForCard, null, null, null, dirtyOverride);
-              openAdminConsole(card, roomStatusForCard);
+              // Re-open console with updated data
+              openAdminConsole(card, newStatus === 'needs_cleaning' ? 'available' : newStatus);
             } else {
               alert('Error: ' + data.message);
-              e.target.value = displayStatus;
+              statusSelect.value = originalText;
             }
           })
           .catch(err => {
+            statusSelect.disabled = false;
             console.error('Status update error:', err);
             alert('Network error. Please try again.');
+            statusSelect.value = originalText;
           });
       });
     }
 
-    // Form submit (Save)
+    // ─── Form submit (Save) ─────────────────────────────────────────
     form.addEventListener('submit', function(e) {
       e.preventDefault();
       const submitBtn = form.querySelector('#saveRoomBtn');
@@ -252,26 +280,16 @@
       submitBtn.disabled = true;
 
       const formData = new FormData(form);
-      const newStatus = formData.get('status') || status;
-      const checkInDate = formData.get('check_in');
-      const checkOutDate = formData.get('check_out');
-      const guestName = formData.get('guest_name') || '';
-      const cleaningValue = formData.has('cleaning') ? formData.get('cleaning') : null;
-
-      if (!formData.has('action')) {
-        formData.append('action', 'save_room_data');
-      }
-      if (!formData.has('room_id')) {
-        formData.append('room_id', roomId);
-      }
 
       fetch('/process_room_action.php', { method: 'POST', body: formData })
         .then(res => res.json())
         .then(data => {
           if (data.success) {
-            // Update card – pass guest name if status is occupied/reserved
-            updateVisualCard(card, newStatus, checkInDate, checkOutDate, guestName, cleaningValue);
-            // If status is available/maintenance, we removed guest name; if occupied/reserved, we added it.
+            if (data.data) {
+              updateCardFromData(card, data.data);
+            } else {
+              renderCard(card);
+            }
             closeModal();
           } else {
             alert('Error: ' + data.message);
@@ -303,12 +321,17 @@
           .then(res => res.json())
           .then(data => {
             if (data.success) {
-              // When checking out, clear guest info and mark the room dirty
-              // — matches process_room_action.php setting cleaning to 'Pending'.
-              if (actionType === 'check_out') {
-                updateVisualCard(card, targetStatus, '', '', null, 'Pending');
+              if (data.data) {
+                updateCardFromData(card, data.data);
               } else {
-                updateVisualCard(card, targetStatus);
+                card.dataset.status = targetStatus;
+                if (actionType === 'check_out') {
+                  card.dataset.cleaning = 'Pending';
+                  card.dataset.guestName = '';
+                  card.dataset.checkIn = '';
+                  card.dataset.checkOut = '';
+                }
+                renderCard(card);
               }
               openAdminConsole(card, targetStatus);
             } else {
@@ -331,7 +354,6 @@
     attachQuickAction('.action-maintenance', 'set_maintenance', 'Mark this room out of order?', 'maintenance');
     attachQuickAction('.action-clear-maint', 'clear_maintenance', 'Mark room available?', 'available');
 
-    // Walk-in
     const walkinBtn = modalContent.querySelector('.action-walkin');
     if (walkinBtn) {
       walkinBtn.addEventListener('click', () => {
@@ -339,11 +361,9 @@
       });
     }
 
-    // ─── View Full History ──────────────────────────────────────────
     const historyBtn = modalContent.querySelector('.action-history');
     if (historyBtn) {
       historyBtn.addEventListener('click', function() {
-        // Open a new modal showing activity log
         fetch('/process_room_action.php?action=get_history&room_id=' + roomId)
           .then(res => res.json())
           .then(data => {
@@ -360,7 +380,6 @@
       });
     }
 
-    // ─── Auto‑checkout (30 days) ─────────────────────────────────────
     const checkInInput = form.querySelector('input[name="check_in"]');
     const checkOutInput = form.querySelector('input[name="check_out"]');
     if (checkInInput && checkOutInput && !form.querySelector('input[name="id"]')) {
@@ -435,4 +454,4 @@
   if(roomModal) { roomModal.addEventListener('click', function(e) { if (e.target === this) closeModal(); }); }
   document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeModal(); });
 
-})(); 
+})();

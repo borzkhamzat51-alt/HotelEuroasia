@@ -9,8 +9,8 @@ $properties = [
     ['key' => 'mtv',           'name' => 'MTV3',              'tag' => 'City-view rooms'],
     ['key' => 'dormitel',      'name' => 'ELTI Dormitel',     'tag' => 'Budget-friendly stays'],
     ['key' => 'aps',           'name' => 'APS',              'tag' => 'Attendance and payroll system'],
-    ['key' => 'stalls',      'name' => 'Euoroasia Stalls',     'tag' => 'n/a'],
-    ['key' => 'stalls',      'name' => 'Annex Stalls',     'tag' => 'n/a'],
+    ['key' => 'euroasia_stall', 'name' => 'Euroasia Stalls',  'tag' => 'n/a'],
+    ['key' => 'annex_stall',    'name' => 'Annex Stalls',     'tag' => 'n/a'],
 ];
 ?>
 <!DOCTYPE html>
@@ -48,40 +48,8 @@ $properties = [
     </div>
 </header>
 
-<!-- ===================== NAV BAR – DEEP CLEANED ===================== -->
-<nav class="navbar" id="navbar">
-    <?php if (bb_has_permission('reservations')): ?>
-        <a class="navbar__item" href="reservations.php">Calendar</a>
-    <?php endif; ?>
-
-    <?php if (bb_has_permission('guests')): ?>
-        <a class="navbar__item" href="guests.php">Guests</a>
-    <?php endif; ?>
-
-    <?php if (bb_has_permission('reports')): ?>
-        <a class="navbar__item" href="reports.php">Reports</a>
-    <?php endif; ?>
-
-    <?php if (bb_is_admin()): ?>
-        <a class="navbar__item" href="users.php">Users &amp; Staff</a>
-    <?php endif; ?>
-
-    <?php if (bb_is_admin() || bb_has_permission('settings')): ?>
-    <div class="navbar__dropdown" id="settingsDropdown">
-        <button type="button" class="navbar__item navbar__item--dropdown" id="settingsToggle" aria-haspopup="true" aria-expanded="false">
-            Settings
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
-        <div class="navbar__dropdown-menu" id="settingsMenu">
-            <?php if (bb_is_admin()): ?>
-                <a href="register-user.php">Register User</a>
-                <a href="register-admin.php">Register Admin</a>
-            <?php endif; ?>
-            <a href="../profile.php">Account Settings</a>
-        </div>
-    </div>
-    <?php endif; ?>
-</nav>
+<!-- ===================== NAV BAR ===================== -->
+<?php include __DIR__ . '/includes/navbar.php'; ?>
 
 <!-- ===================== MAIN ===================== -->
 <main class="dashboard-main">

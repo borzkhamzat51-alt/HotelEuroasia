@@ -1,5 +1,5 @@
-/* ==========================================================================
-   Bluebookers — Dashboard (Light Blue)
+/* ========================================================================== 
+   Bluebookers — Dashboard (Light Blue) 
    ========================================================================== */
 
 .dashboard-body {
@@ -120,13 +120,23 @@
 }
 
 /* --------------------------------------------------------------------
-   Nav bar – light blue row
+   Nav bar – Professional, no underlines, animated
+   -------------------------------------------------------------------- */
+/* --------------------------------------------------------------------
+   Nav bar – Professional, no underlines, no reflow
    -------------------------------------------------------------------- */
 .navbar {
   background: var(--white);
   border-bottom: 1px solid var(--blue-100);
   display: flex;
   justify-content: center;
+  gap: 4px;
+  padding: 0 16px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  backdrop-filter: blur(8px);
+  background: rgba(255,255,255,0.92);
 }
 
 .navbar__item {
@@ -135,75 +145,189 @@
   color: var(--gray-700);
   font-family: var(--font-sans);
   font-size: 0.86rem;
-  font-weight: 500;
+  font-weight: 500;  /* Fixed weight – never changes */
   letter-spacing: 0.01em;
-  padding: 13px 22px;
+  padding: 12px 20px;
   display: flex;
   align-items: center;
   gap: 6px;
   cursor: pointer;
-  transition: background 180ms var(--ease-out), color 180ms var(--ease-out);
-  border-bottom: 2px solid transparent;
+  text-decoration: none;
+  border-radius: 8px;
+  transition: background 220ms cubic-bezier(.16, 1, .3, 1), 
+              transform 220ms cubic-bezier(.16, 1, .3, 1);
+  position: relative;
+  flex-shrink: 0;  /* Prevents shrinking, keeps position stable */
 }
-.navbar__item svg { width: 14px; height: 14px; opacity: 0.6; }
+.navbar__item svg {
+  width: 14px;
+  height: 14px;
+  opacity: 0.6;
+  transition: opacity 220ms var(--ease-out);
+}
 .navbar__item:hover {
   background: var(--blue-50);
   color: var(--blue-700);
-  border-bottom-color: var(--blue-500);
+  transform: translateY(-1px);
+}
+.navbar__item:hover svg {
+  opacity: 1;
+}
+.navbar__item:active {
+  transform: scale(0.96);
+}
+
+/* Active state – no font‑weight change, just a subtle bottom dot */
+.navbar__item--active {
+  background: var(--blue-50);
+  color: var(--blue-700);
+}
+.navbar__item--active::after {
+  content: '';
+  position: absolute;
+  bottom: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--blue-500);
+  transition: width 220ms var(--ease-out);
+}
+.navbar__item--active svg {
+  opacity: 1;
 }
 
 /* --------------------------------------------------------------------
-   Nav bar – Settings dropdown
+   Nav bar – Settings dropdown (animated, no reflow)
    -------------------------------------------------------------------- */
 .navbar__dropdown {
   position: relative;
+  flex-shrink: 0;
 }
 .navbar__item--dropdown {
   font-family: inherit;
 }
+.navbar__item--dropdown svg {
+  transition: transform 220ms var(--ease-out);
+}
+.navbar__item--dropdown[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+
 .navbar__dropdown-menu {
   position: absolute;
-  top: 100%;
+  top: calc(100% + 8px);
   left: 50%;
-  transform: translate(-50%, -6px);
-  min-width: 200px;
+  transform: translateX(-50%) translateY(-4px) scale(0.96);
+  min-width: 210px;
   background: var(--white);
   border: 1px solid var(--blue-100);
-  border-radius: 10px;
-  box-shadow: 0 16px 32px -12px rgba(20, 42, 82, 0.25);
-  padding: 6px;
+  border-radius: 12px;
+  box-shadow: 0 16px 48px -12px rgba(20, 42, 82, 0.25);
+  padding: 8px;
   display: flex;
   flex-direction: column;
   gap: 2px;
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
-  transition: opacity 160ms var(--ease-out), transform 160ms var(--ease-out);
-  z-index: 20;
+  transition: all 220ms cubic-bezier(.16, 1, .3, 1);
+  z-index: 200;
+  backdrop-filter: blur(12px);
+  background: rgba(255,255,255,0.96);
 }
 .navbar__dropdown.is-open .navbar__dropdown-menu {
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
-  transform: translate(-50%, 0);
+  transform: translateX(-50%) translateY(0) scale(1);
 }
+
 .navbar__dropdown-menu a {
   display: block;
-  padding: 10px 14px;
-  border-radius: 7px;
+  padding: 10px 16px;
+  border-radius: 8px;
   color: var(--gray-700);
   text-decoration: none;
   font-size: 0.85rem;
   font-weight: 500;
-  white-space: nowrap;
-  transition: background 140ms, color 140ms;
+  transition: all 150ms var(--ease-out);
 }
 .navbar__dropdown-menu a:hover {
   background: var(--blue-50);
   color: var(--blue-700);
+  transform: translateX(4px);
 }
-.navbar__item--dropdown[aria-expanded="true"] svg { transform: rotate(180deg); }
-.navbar__item--dropdown svg { transition: transform 160ms var(--ease-out); }
+.navbar__dropdown-menu a:active {
+  transform: scale(0.97);
+}
+
+/* Dropdown divider */
+.navbar__dropdown-menu .divider {
+  height: 1px;
+  background: var(--blue-100);
+  margin: 4px 8px;
+}
+
+/* Responsive – mobile nav */
+@media (max-width: 720px) {
+  .topbar__user { display: none; }
+  .topbar__logout span { display: none; }
+  .topbar__logout { padding: 8px; }
+
+  .topbar__menu-toggle { display: flex; }
+
+  .navbar {
+    flex-direction: column;
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 280ms var(--ease-out);
+    padding: 0;
+    background: var(--white);
+    backdrop-filter: none;
+  }
+  .navbar.is-open { max-height: 420px; }
+  .navbar__item {
+    width: 100%;
+    justify-content: flex-start;
+    padding: 14px 24px;
+    border-radius: 0;
+    border-bottom: 1px solid var(--blue-50);
+    flex-shrink: 1;
+  }
+  .navbar__item:hover { transform: none; }
+  .navbar__item--active::after {
+    bottom: 10px;
+  }
+
+  .navbar__dropdown-menu {
+    position: static;
+    transform: none;
+    box-shadow: none;
+    border: none;
+    border-radius: 0;
+    background: var(--blue-50);
+    padding: 4px 0 4px 24px;
+    backdrop-filter: none;
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transition: none;
+    min-width: auto;
+    width: 100%;
+  }
+  .navbar__dropdown.is-open .navbar__dropdown-menu {
+    transform: none;
+  }
+  .navbar__dropdown-menu a {
+    padding: 10px 16px;
+    border-radius: 6px;
+  }
+  .navbar__dropdown-menu a:hover {
+    transform: none;
+  }
+}
 
 /* --------------------------------------------------------------------
    Main content
@@ -287,29 +411,33 @@
   color: inherit;
 }
 
-.property-card__image {
-  position: relative;
-  height: 180px;
-  background-size: cover;
-  background-position: center;
-  overflow: hidden;
+.property-card__image-frame {
+  padding: 8px;
+  background: var(--white);
 }
 
-/* Placeholder gradients – replace with actual images */
-.property-card__image--annex {
-  background-image: linear-gradient(160deg, rgba(59,125,216,0.2), rgba(22,50,79,0.4)), linear-gradient(135deg, #6a9bd8, #2c5a8a);
+.property-card__image {
+  display: block;
+  width: 100%;
+  height: 164px;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid var(--blue-100);
+  background: var(--blue-50);
+  transition: transform 320ms var(--ease-out);
 }
-.property-card__image--mtv {
-  background-image: linear-gradient(160deg, rgba(59,125,216,0.2), rgba(22,50,79,0.4)), linear-gradient(135deg, #7baae0, #3a6fa8);
-}
-.property-card__image--dormitel {
-  background-image: linear-gradient(160deg, rgba(59,125,216,0.2), rgba(22,50,79,0.4)), linear-gradient(135deg, #8bb8e8, #4a7fb8);
+
+.property-card:hover .property-card__image {
+  transform: scale(1.03);
 }
 
 .property-card__shade {
   position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, transparent 50%, rgba(8,14,28,0.20) 100%);
+  left: 8px; right: 8px; top: 8px;
+  height: 164px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, transparent 55%, rgba(8,14,28,0.22) 100%);
+  pointer-events: none;
 }
 
 .property-card__body {
@@ -333,7 +461,6 @@
   margin: 0;
 }
 
-/* Admin manage pill */
 .property-card__manage {
   position: absolute;
   top: 12px;
@@ -422,13 +549,48 @@
     max-height: 0;
     overflow: hidden;
     transition: max-height 280ms var(--ease-out);
+    padding: 0;
+    background: var(--white);
+    backdrop-filter: none;
   }
-  .navbar.is-open { max-height: 320px; }
+  .navbar.is-open { max-height: 420px; }
   .navbar__item {
     width: 100%;
-    justify-content: space-between;
+    justify-content: flex-start;
     padding: 14px 24px;
-    border-bottom: 1px solid var(--blue-100);
+    border-radius: 0;
+    border-bottom: 1px solid var(--blue-50);
+  }
+  .navbar__item:hover { transform: none; }
+  .navbar__item--active {
+    background: var(--blue-50);
+  }
+
+  .navbar__dropdown-menu {
+    position: static;
+    transform: none;
+    box-shadow: none;
+    border: none;
+    border-radius: 0;
+    background: var(--blue-50);
+    padding: 4px 0 4px 24px;
+    backdrop-filter: none;
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transition: none;
+    min-width: auto;
+    width: 100%;
+  }
+  .navbar__dropdown.is-open .navbar__dropdown-menu {
+    transform: none;
+  }
+  .navbar__dropdown-menu a {
+    padding: 10px 16px;
+    border-radius: 6px;
+  }
+  .navbar__dropdown-menu a:hover {
+    transform: none;
   }
 }
 
@@ -446,38 +608,16 @@
     transform: none;
   }
   .navbar { transition: none; }
-}
-/* --------------------------------------------------------------------
-   Property photo frame — bordered "mat" treatment around the image,
-   with a graceful placeholder fallback until real photos are added.
-   Swap in assets/images/properties/{key}.jpg and the <img>'s onerror
-   fallback to the .svg placeholder simply never fires.
-   -------------------------------------------------------------------- */
-.property-card__image-frame {
-  padding: 8px;
-  background: var(--white);
-}
-
-.property-card__image {
-  display: block;
-  width: 100%;
-  height: 164px;
-  object-fit: cover;
-  border-radius: 12px;
-  border: 1px solid var(--blue-100);
-  background: var(--blue-50); /* shows while the image loads */
-  transition: transform 320ms var(--ease-out);
-}
-
-.property-card:hover .property-card__image {
-  transform: scale(1.03);
-}
-
-.property-card__shade {
-  position: absolute;
-  left: 8px; right: 8px; top: 8px;
-  height: 164px;
-  border-radius: 12px;
-  background: linear-gradient(180deg, transparent 55%, rgba(8,14,28,0.22) 100%);
-  pointer-events: none;
+  .navbar__item,
+  .navbar__dropdown-menu,
+  .navbar__item--dropdown svg,
+  .navbar__dropdown-menu a {
+    transition: none !important;
+  }
+  .navbar__dropdown-menu {
+    opacity: 1 !important;
+    visibility: visible !important;
+    transform: none !important;
+    pointer-events: auto !important;
+  }
 }

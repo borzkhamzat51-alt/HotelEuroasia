@@ -50,6 +50,8 @@ $_SESSION['full_name']    = $user['full_name'];
 $_SESSION['role']         = $user['role']; // 'admin' or 'staff' — from the DB, never the client
 $_SESSION['permissions']  = $user['permissions']; // comma-separated, ignored entirely for admins
 
+db_audit_log('auth.login', 'user', $user['id'], $user['username']);
+
 respond([
     'success'  => true,
     'redirect' => ltrim(bb_role_home(), '/'),

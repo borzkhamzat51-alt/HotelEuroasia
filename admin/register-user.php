@@ -47,13 +47,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (empty($errors)) {
-        db_create_staff(
+        $newId = db_create_staff(
             $values['username'],
             $values['email'],
             password_hash($password, PASSWORD_DEFAULT),
             $values['full_name'],
             implode(',', $values['permissions'])
         );
+        db_audit_log('user.create_staff', 'user', $newId, $values['username'], 'permissions: ' . implode(',', $values['permissions']));
         $_SESSION['users_flash'] = 'Staff account "' . $values['username'] . '" created.';
         bb_redirect('admin/users.php');
     }

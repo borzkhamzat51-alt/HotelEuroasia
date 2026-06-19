@@ -59,6 +59,13 @@ foreach ($rooms as $room) {
         'guest_name' => $activeRes ? $activeRes['guest_full_name'] : '',
         'check_in' => $activeRes ? $activeRes['check_in'] : '',
         'check_out' => $activeRes ? $activeRes['check_out'] : '',
+        'phone' => $activeRes ? $activeRes['contact_number'] : '',
+        'email' => $activeRes ? $activeRes['email'] : '',
+        'pax' => $activeRes ? $activeRes['num_adults'] : '',
+        'gov_id' => '', // not in schema yet
+        'history' => '', // not in schema yet
+        'ref' => '', // not in schema yet
+        'payment' => '', // not in schema yet
         'cleaning' => $room['cleaning_status'],
         'maintenance_status' => $room['maintenance_status'],
         'last_occupancy' => $room['last_occupancy'],
@@ -116,6 +123,13 @@ foreach ($rooms as $room) {
                          data-check-in="<?= htmlspecialchars($room['check_in']) ?>"
                          data-check-out="<?= htmlspecialchars($room['check_out']) ?>"
                          data-price="<?= htmlspecialchars($room['price']) ?>"
+                         data-phone="<?= htmlspecialchars($room['phone']) ?>"
+                         data-email="<?= htmlspecialchars($room['email']) ?>"
+                         data-pax="<?= htmlspecialchars($room['pax']) ?>"
+                         data-gov-id="<?= htmlspecialchars($room['gov_id']) ?>"
+                         data-history="<?= htmlspecialchars($room['history']) ?>"
+                         data-ref="<?= htmlspecialchars($room['ref']) ?>"
+                         data-payment="<?= htmlspecialchars($room['payment']) ?>"
                          data-cleaning="<?= htmlspecialchars($room['cleaning']) ?>"
                          data-maintenance="<?= htmlspecialchars($room['maintenance_status']) ?>"
                          data-last-occupancy="<?= htmlspecialchars($room['last_occupancy'] ?? '') ?>"
