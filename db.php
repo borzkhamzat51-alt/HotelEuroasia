@@ -295,10 +295,25 @@ function db_get_reservation_activity($reservationId)
     return $stmt->fetchAll();
 }
 
-function db_find_active_reservation_for_room($roomId)
+/**
+ * The reservation actually claiming this room *today* — not just any
+ * non-cancelled booking, which previously meant a reservation months in
+ * the future would get treated as "the" active one (wrongly driving
+ * check-in/check-out actions and the room card's guest info). Prefers
+ * an already-checked-in stay over a same-day arrival if somehow both
+ * exist.
+ */
+function db_find_active_reservation_for_room($roomId, $date = null)
 {
-    $stmt = bb_db()->prepare("SELECT * FROM reservations WHERE room_id = ? AND status NOT IN ('cancelled','checked_out') LIMIT 1");
-    $stmt->execute([$roomId]);
+    $date = $date ?: date('Y-m-d');
+    $stmt = bb_db()->prepare(
+        "SELECT * FROM reservations
+         WHERE room_id = ? AND status IN ('reserved','checked_in')
+           AND check_in <= ? AND check_out > ?
+         ORDER BY (status = 'checked_in') DESC, check_in ASC
+         LIMIT 1"
+    );
+    $stmt->execute([$roomId, $date, $date]);
     return $stmt->fetch() ?: null;
 }
 
