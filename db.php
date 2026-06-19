@@ -295,10 +295,37 @@ function db_get_reservation_activity($reservationId)
     return $stmt->fetchAll();
 }
 
-function db_find_active_reservation_for_room($roomId)
+function db_find_active_reservation_for_room($roomId, $date = null)
 {
-    $stmt = bb_db()->prepare("SELECT * FROM reservations WHERE room_id = ? AND status NOT IN ('cancelled','checked_out') LIMIT 1");
-    $stmt->execute([$roomId]);
+    $date = $date ?: date('Y-m-d');
+    
+    // First, try to find a reservation that covers TODAY
+    $stmt = bb_db()->prepare(
+        "SELECT * FROM reservations 
+         WHERE room_id = ? 
+           AND status NOT IN ('cancelled','checked_out')
+           AND check_in <= ? 
+           AND check_out > ?
+         ORDER BY status = 'checked_in' DESC, check_in ASC
+         LIMIT 1"
+    );
+    $stmt->execute([$roomId, $date, $date]);
+    $active = $stmt->fetch();
+    
+    if ($active) {
+        return $active;
+    }
+    
+    // If no reservation covers today, find the next upcoming reservation
+    $stmt = bb_db()->prepare(
+        "SELECT * FROM reservations 
+         WHERE room_id = ? 
+           AND status NOT IN ('cancelled','checked_out')
+           AND check_in > ?
+         ORDER BY check_in ASC
+         LIMIT 1"
+    );
+    $stmt->execute([$roomId, $date]);
     return $stmt->fetch() ?: null;
 }
 
@@ -458,4 +485,18 @@ function db_list_audit_users()
 {
     $stmt = bb_db()->query('SELECT DISTINCT user_id, username, full_name FROM audit_log WHERE user_id IS NOT NULL ORDER BY username ASC');
     return $stmt->fetchAll();
+}
+
+function db_sync_room_status($roomId)
+{
+    $res = db_find_active_reservation_for_room($roomId);
+    if ($res) {
+        $statusMap = ['checked_in' => 'occupied', 'reserved' => 'reserved'];
+        if (isset($statusMap[$res['status']])) {
+            db_set_room_status($roomId, $statusMap[$res['status']]);
+            return;
+        }
+    }
+    // No active or future reservation
+    db_set_room_status($roomId, 'available');
 }

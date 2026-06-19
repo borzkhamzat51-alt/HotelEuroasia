@@ -63,10 +63,6 @@ foreach ($rooms as $room) {
         'phone' => $activeRes ? $activeRes['contact_number'] : '',
         'email' => $activeRes ? $activeRes['email'] : '',
         'pax' => $activeRes ? $activeRes['num_adults'] : '',
-        'gov_id' => '', // not in schema yet
-        'history' => '', // not in schema yet
-        'ref' => '', // not in schema yet
-        'payment' => '', // not in schema yet
         'cleaning' => $room['cleaning_status'],
         'maintenance_status' => $room['maintenance_status'],
         'last_occupancy' => $room['last_occupancy'],
@@ -81,6 +77,8 @@ foreach ($rooms as $room) {
         $columns['right'][] = $roomData;
     }
 }
+
+$displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -88,22 +86,96 @@ foreach ($rooms as $room) {
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>2nd Floor Plan · Bluebookers</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/style.css"><link rel="stylesheet" href="../assets/css/property.css"><link rel="stylesheet" href="../assets/css/layout.css">
+<link rel="stylesheet" href="../assets/css/style.css"><link rel="stylesheet" href="../assets/css/dashboard.css"><link rel="stylesheet" href="../assets/css/layout.css">
+<style>
+.layout-main {
+    flex: 1;
+    padding: clamp(20px, 4vw, 48px) clamp(16px, 5vw, 56px);
+    max-width: 1400px;
+    margin: 0 auto;
+    width: 100%;
+    box-sizing: border-box;
+}
+.floor-switch {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 24px;
+}
+.floor-switch .btn {
+    width: auto;
+    padding: 10px 28px;
+    border-radius: 8px;
+    font-weight: 600;
+    transition: all 220ms cubic-bezier(.16, 1, .3, 1);
+    text-decoration: none;
+    cursor: pointer;
+    border: 1.5px solid transparent;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.85rem;
+}
+.floor-switch .btn--floor {
+    background: var(--white);
+    border-color: var(--border-light);
+    color: var(--text-secondary);
+}
+.floor-switch .btn--floor:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+    border-color: #94a3b8;
+}
+.floor-switch .btn--floor:active {
+    transform: scale(0.96);
+}
+.floor-switch .btn--active {
+    background: #3b82f6;
+    border-color: #3b82f6;
+    color: var(--white);
+    box-shadow: 0 4px 16px -4px rgba(59, 130, 246, 0.25);
+}
+.floor-switch .btn--active:hover {
+    background: #2563eb;
+    border-color: #2563eb;
+    transform: translateY(-2px);
+}
+</style>
 </head>
-<body class="property-body" data-admin="true">
-<header class="ptopbar">
-    <a href="<?= bb_role_home() ?>" class="ptopbar__back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg> Dashboard</a>
-    <div class="ptopbar__breadcrumb"><a href="#">Properties</a><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg><span aria-current="page">2nd Floor</span></div>
-    <a href="../logout.php" class="ptopbar__logout"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg> Log out</a>
+<body class="dashboard-body" data-admin="true">
+
+<!-- ── TOP BAR ─────────────────────────────────────────────────── -->
+<header class="topbar">
+    <div class="topbar__brand">
+        <span class="topbar__brand-mark">B</span>
+        <span class="topbar__brand-name">Bluebookers<span class="topbar__brand-suffix">.admin</span></span>
+    </div>
+    <div class="topbar__right">
+        <div class="topbar__user">
+            <span class="topbar__user-name"><?= htmlspecialchars($displayName) ?></span>
+            <span class="topbar__user-role"><?= bb_is_admin() ? 'Admin' : 'Staff' ?></span>
+        </div>
+        <a href="../logout.php" class="topbar__logout">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 16l4-4-4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 12H9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            <span>Log out</span>
+        </a>
+        <button class="topbar__menu-toggle" id="navToggle" aria-label="Toggle navigation" aria-expanded="false">
+            <span></span><span></span><span></span>
+        </button>
+    </div>
 </header>
-<main class="property-main layout-main-override">
+
+<!-- ── NAV BAR ─────────────────────────────────────────────────── -->
+<?php include __DIR__ . '/includes/navbar.php'; ?>
+
+<!-- ─── MAIN CONTENT ───────────────────────────────────────────── -->
+<main class="layout-main">
     <div class="property-heading">
-        <p class="property-heading__eyebrow">Interactive Map</p>
-        <h1 class="property-heading__title">2nd Floor Layout</h1>
-        <div style="margin-top:24px; display:flex; justify-content:center; gap:12px; flex-wrap:wrap;">
-            <a href="layout_1st_floor.php?branch=mtv" class="btn" style="width:auto; padding:10px 24px; background:var(--white); border:2px solid var(--sky-200); color:var(--blue-700);">1st Floor</a>
-            <a href="layout_2nd_floor.php?branch=mtv" class="btn" style="width:auto; padding:10px 24px; background:var(--blue-500); border:2px solid var(--blue-500); color:var(--white);">2nd Floor</a>
-            <a href="layout.php?branch=mtv" class="btn" style="width:auto; padding:10px 24px; background:var(--white); border:2px solid var(--sky-200); color:var(--blue-700);">3rd Floor</a>
+        <p class="property-heading__eyebrow">Property Layout</p>
+        <h1 class="property-heading__title">2nd Floor</h1>
+        <div class="floor-switch">
+            <a href="layout_1st_floor.php?branch=mtv" class="btn btn--floor">1st Floor</a>
+            <a href="layout_2nd_floor.php?branch=mtv" class="btn btn--floor btn--active">2nd Floor</a>
+            <a href="layout.php?branch=mtv" class="btn btn--floor">3rd Floor</a>
         </div>
     </div>
     <?php if (empty($rooms)): ?>
@@ -129,24 +201,48 @@ foreach ($rooms as $room) {
                          data-phone="<?= htmlspecialchars($room['phone']) ?>"
                          data-email="<?= htmlspecialchars($room['email']) ?>"
                          data-pax="<?= htmlspecialchars($room['pax']) ?>"
-                         data-gov-id="<?= htmlspecialchars($room['gov_id']) ?>"
-                         data-history="<?= htmlspecialchars($room['history']) ?>"
-                         data-ref="<?= htmlspecialchars($room['ref']) ?>"
-                         data-payment="<?= htmlspecialchars($room['payment']) ?>"
                          data-cleaning="<?= htmlspecialchars($room['cleaning']) ?>"
                          data-maintenance="<?= htmlspecialchars($room['maintenance_status']) ?>"
                          data-last-occupancy="<?= htmlspecialchars($room['last_occupancy'] ?? '') ?>"
                          data-notes="<?= htmlspecialchars($room['notes']) ?>">
+                        
+                        <!-- Status Indicator Dot -->
+                        <span class="room-card__status-indicator"></span>
+                        
+                        <!-- Status Badge -->
+                        <span class="status-badge">
+                            <?php 
+                                $statusLabels = [
+                                    'available' => 'Available',
+                                    'occupied' => 'Occupied',
+                                    'reserved' => 'Reserved',
+                                    'maintenance' => 'Out of Order'
+                                ];
+                                $label = $statusLabels[$room['status']] ?? $room['status'];
+                                if ($room['status'] === 'available' && $room['is_dirty']) {
+                                    $label = 'Needs Cleaning';
+                                }
+                                echo $label;
+                            ?>
+                        </span>
+                        
+                        <!-- Room Number -->
+                        <span class="room-number-badge">RM <?= htmlspecialchars($room['number']) ?></span>
+                        
+                        <!-- Room Content -->
                         <div class="rc-content">
                             <h3 class="rc-title"><?= htmlspecialchars($room['type_main']) ?></h3>
                             <span class="rc-subtitle"><?= htmlspecialchars($room['type_sub']) ?></span>
                             <div class="rc-dates"><?= htmlspecialchars(formatDateDisplay($room['check_in'], $room['check_out'], $room['status'], $room['is_dirty'])) ?></div>
                             <div class="rc-price"><?= $room['price'] ? '₱' . number_format($room['price']) : '--' ?></div>
                             <?php if (!empty($room['guest_name'])): ?>
-                                <div class="rc-guest" style="font-weight:600; font-size:0.9rem; color:var(--blue-700); margin-top:4px;"><?= htmlspecialchars($room['guest_name']) ?></div>
+                                <div class="rc-guest"><?= htmlspecialchars($room['guest_name']) ?></div>
                             <?php endif; ?>
                         </div>
-                        <div class="rc-footer">RM <?= htmlspecialchars($room['number']) ?></div>
+                        
+                        <div class="rc-footer">
+                            <?= htmlspecialchars($room['type_main']) ?>
+                        </div>
                     </div>
                 <?php endforeach; ?>
             </div>
@@ -162,8 +258,10 @@ foreach ($rooms as $room) {
     </div>
     <?php endif; ?>
 </main>
-<footer class="property-footer">...</footer>
+
 <div id="roomModal" class="modal-overlay" hidden><div class="modal"><button class="modal__close" id="modalClose">&times;</button><div id="modalContent" class="modal__content"></div></div></div>
+
+<script src="../assets/js/dashboard.js" defer></script>
 <script src="../assets/js/layout.js" defer></script>
 </body>
 </html>

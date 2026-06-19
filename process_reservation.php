@@ -2,7 +2,7 @@
 /**
  * process_reservation.php
  * AJAX endpoint for Calendar CRUD.
- * Already includes conflict checking via db_room_has_conflict().
+ * Now properly syncs with the Layout floor plan.
  */
 
 require_once __DIR__ . '/config.php';
@@ -14,6 +14,38 @@ function respond($data) {
     exit;
 }
 
+// Maps reservation.status → room_status
+$roomStatusFor = ['checked_in' => 'occupied', 'reserved' => 'reserved'];
+
+/**
+ * Recomputes a room's floor-plan badge from whatever reservation
+ * actually covers today.
+ */
+function syncRoomStatusFromReservation($roomId, $previousStatus = null, $newStatus = null)
+{
+    global $roomStatusFor;
+    $active = db_find_active_reservation_for_room($roomId);
+
+    if ($active && isset($roomStatusFor[$active['status']])) {
+        db_set_room_status($roomId, $roomStatusFor[$active['status']]);
+        // Also update guest name on the card via room meta (optional)
+        return;
+    }
+
+    $room = db_find_room($roomId);
+    if (!$room || $room['room_status'] === 'maintenance') {
+        return;
+    }
+    db_set_room_status($roomId, 'available');
+
+    // If a guest just checked out, mark the room dirty
+    $justCheckedOut = $previousStatus === 'checked_in' && $newStatus === 'checked_out';
+    if ($justCheckedOut) {
+        db_update_room_meta($roomId, 'Pending', null, date('Y-m-d'), null);
+    }
+}
+
+// Permission check
 if (!bb_has_permission('reservations')) {
     http_response_code(403);
     respond(['success' => false, 'message' => 'Reservations permission required.']);
@@ -41,6 +73,10 @@ try {
         db_log_reservation_activity($id, $_SESSION['user_id'], 'deleted', 'Deleted for ' . $existing['guest_full_name']);
         db_audit_log('reservation.delete', 'reservation', $id, $existing['guest_full_name'], 'room_id:' . $existing['room_id']);
         db_delete_reservation($id);
+        
+        // ─── SYNC: Update room status after deletion ────────────────
+        syncRoomStatusFromReservation($existing['room_id']);
+        
         respond(['success' => true]);
     }
 
@@ -97,7 +133,7 @@ try {
         $errors['payment_method'] = 'Invalid payment method.';
     }
 
-    // ─── CONFLICT CHECK ──────────────────────────────────────────────────────
+    // ─── CONFLICT CHECK ──────────────────────────────────────────────
     if ($data['status'] !== 'cancelled' && db_room_has_conflict($data['room_id'], $data['check_in'], $data['check_out'], $reservationId)) {
         respond(['success' => false, 'message' => 'That room is already booked for an overlapping date range.']);
     }
@@ -106,21 +142,40 @@ try {
         respond(['success' => false, 'message' => 'Please fix the highlighted fields.', 'errors' => $errors]);
     }
 
+    // ─── CREATE ──────────────────────────────────────────────────────
     if ($action === 'create') {
         $newId = db_create_reservation($data);
         db_log_reservation_activity($newId, $_SESSION['user_id'], 'created', 'Created for ' . $data['guest_full_name']);
         db_audit_log('reservation.create', 'reservation', $newId, $data['guest_full_name'], 'check_in:' . $data['check_in'] . ' check_out:' . $data['check_out'] . ' status:' . $data['status']);
+        
+        // ─── SYNC: Update room status after creation ────────────────
+        syncRoomStatusFromReservation($data['room_id']);
+        
         respond(['success' => true, 'id' => $newId]);
     }
 
-    // Update
+    // ─── UPDATE ──────────────────────────────────────────────────────
     $existing = db_find_reservation($reservationId);
     if (!$existing) {
         respond(['success' => false, 'message' => 'Reservation not found.']);
     }
+    
+    $oldStatus = $existing['status'];
+    $oldRoomId = $existing['room_id'];
+    
     db_update_reservation($reservationId, $data);
     db_log_reservation_activity($reservationId, $_SESSION['user_id'], 'edited', 'Updated for ' . $data['guest_full_name']);
     db_audit_log('reservation.update', 'reservation', $reservationId, $data['guest_full_name'], 'status:' . $data['status'] . ' check_in:' . $data['check_in'] . ' check_out:' . $data['check_out']);
+    
+    // ─── SYNC: Update room status after update ──────────────────────
+    // Sync the new room
+    syncRoomStatusFromReservation($data['room_id'], $oldStatus, $data['status']);
+    
+    // If the room changed, also sync the old room
+    if ($oldRoomId != $data['room_id']) {
+        syncRoomStatusFromReservation($oldRoomId);
+    }
+    
     respond(['success' => true, 'id' => $reservationId]);
 
 } catch (Exception $e) {
