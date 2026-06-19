@@ -1,0 +1,99 @@
+/* ==========================================================================
+   Bluebookers — Account pages (book / my-bookings / profile / access-denied)
+   Built on the same tokens as property.css — loaded alongside it, not
+   instead of it.
+   ========================================================================== */
+
+.account-panel {
+  background: var(--sky-50);
+  border: 1px solid var(--sky-200);
+  border-radius: var(--radius-xl);
+  padding: 36px 32px;
+}
+
+.account-panel--centered {
+  text-align: center;
+}
+
+.account-panel p {
+  color: var(--ink-500);
+  margin: 0 0 20px;
+  line-height: 1.6;
+}
+
+.account-panel p:last-child { margin-bottom: 0; }
+
+.account-panel strong { color: var(--ink-900); }
+
+.account-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 18px;
+}
+.account-field:last-child { margin-bottom: 0; }
+
+.account-field label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-500);
+}
+
+.account-field .value {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--ink-900);
+  text-transform: capitalize;
+}
+
+.account-btn {
+  display: inline-block;
+  width: auto;
+  text-decoration: none;
+  padding: 12px 28px;
+  margin-top: 8px;
+}
+
+/* --------------------------------------------------------------------
+   Access denied
+   -------------------------------------------------------------------- */
+.access-denied-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 18px;
+  text-align: center;
+  padding: 32px;
+  background: linear-gradient(180deg, var(--sky-50) 0%, #f6fafd 60%, #ffffff 100%);
+}
+
+.access-denied-page__icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--white);
+  border: 1px solid var(--sky-200);
+  box-shadow: var(--shadow-card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--amber);
+}
+.access-denied-page__icon svg { width: 30px; height: 30px; }
+
+.access-denied-page h1 {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.9rem;
+  margin: 0;
+  color: var(--ink-900);
+}
+
+.access-denied-page p {
+  color: var(--ink-500);
+  max-width: 420px;
+  margin: 0;
+}

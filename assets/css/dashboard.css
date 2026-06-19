@@ -1,0 +1,483 @@
+/* ==========================================================================
+   Bluebookers — Dashboard (Light Blue)
+   ========================================================================== */
+
+.dashboard-body {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--blue-50);
+}
+
+/* --------------------------------------------------------------------
+   Top bar – light, with subtle shadow
+   -------------------------------------------------------------------- */
+.topbar {
+  background: var(--white);
+  border-bottom: 1px solid var(--blue-100);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px clamp(20px, 5vw, 56px);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+
+.topbar__brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.topbar__brand-mark {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--blue-500);
+  color: var(--white);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-serif);
+  font-weight: 700;
+  font-size: 1.05rem;
+  flex-shrink: 0;
+}
+
+.topbar__brand-name {
+  font-family: var(--font-serif);
+  font-weight: 600;
+  font-size: 1.2rem;
+  color: var(--blue-900);
+}
+.topbar__brand-suffix {
+  color: var(--blue-500);
+  font-weight: 500;
+}
+
+.topbar__right {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.topbar__user {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.25;
+}
+.topbar__user-name {
+  font-weight: 600;
+  font-size: 0.86rem;
+  color: var(--blue-900);
+}
+.topbar__user-role {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--blue-500);
+}
+
+.topbar__logout {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--blue-50);
+  border: 1px solid var(--blue-100);
+  border-radius: 999px;
+  padding: 8px 16px 8px 12px;
+  color: var(--blue-700);
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 180ms var(--ease-out), color 180ms var(--ease-out), transform 180ms var(--ease-out);
+}
+.topbar__logout svg { width: 15px; height: 15px; }
+.topbar__logout:hover {
+  background: var(--blue-500);
+  color: var(--white);
+  transform: translateY(-1px);
+}
+
+.topbar__menu-toggle {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  width: 36px;
+  height: 36px;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+.topbar__menu-toggle span {
+  display: block;
+  width: 100%;
+  height: 2px;
+  background: var(--blue-900);
+  border-radius: 2px;
+  transition: transform 220ms var(--ease-out), opacity 220ms var(--ease-out);
+}
+
+/* --------------------------------------------------------------------
+   Nav bar – light blue row
+   -------------------------------------------------------------------- */
+.navbar {
+  background: var(--white);
+  border-bottom: 1px solid var(--blue-100);
+  display: flex;
+  justify-content: center;
+}
+
+.navbar__item {
+  background: none;
+  border: none;
+  color: var(--gray-700);
+  font-family: var(--font-sans);
+  font-size: 0.86rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  padding: 13px 22px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: background 180ms var(--ease-out), color 180ms var(--ease-out);
+  border-bottom: 2px solid transparent;
+}
+.navbar__item svg { width: 14px; height: 14px; opacity: 0.6; }
+.navbar__item:hover {
+  background: var(--blue-50);
+  color: var(--blue-700);
+  border-bottom-color: var(--blue-500);
+}
+
+/* --------------------------------------------------------------------
+   Nav bar – Settings dropdown
+   -------------------------------------------------------------------- */
+.navbar__dropdown {
+  position: relative;
+}
+.navbar__item--dropdown {
+  font-family: inherit;
+}
+.navbar__dropdown-menu {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translate(-50%, -6px);
+  min-width: 200px;
+  background: var(--white);
+  border: 1px solid var(--blue-100);
+  border-radius: 10px;
+  box-shadow: 0 16px 32px -12px rgba(20, 42, 82, 0.25);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 160ms var(--ease-out), transform 160ms var(--ease-out);
+  z-index: 20;
+}
+.navbar__dropdown.is-open .navbar__dropdown-menu {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translate(-50%, 0);
+}
+.navbar__dropdown-menu a {
+  display: block;
+  padding: 10px 14px;
+  border-radius: 7px;
+  color: var(--gray-700);
+  text-decoration: none;
+  font-size: 0.85rem;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background 140ms, color 140ms;
+}
+.navbar__dropdown-menu a:hover {
+  background: var(--blue-50);
+  color: var(--blue-700);
+}
+.navbar__item--dropdown[aria-expanded="true"] svg { transform: rotate(180deg); }
+.navbar__item--dropdown svg { transition: transform 160ms var(--ease-out); }
+
+/* --------------------------------------------------------------------
+   Main content
+   -------------------------------------------------------------------- */
+.dashboard-main {
+  flex: 1;
+  padding: clamp(40px, 6vh, 72px) clamp(20px, 6vw, 64px);
+  max-width: 1180px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.dashboard-welcome {
+  text-align: center;
+  margin-bottom: clamp(36px, 5vh, 56px);
+  opacity: 0;
+  transform: translateY(16px);
+  animation: dashRise 560ms var(--ease-out) forwards;
+  animation-delay: calc(var(--d) * 90ms);
+}
+
+.dashboard-welcome .ornament {
+  justify-content: center;
+  color: var(--blue-500);
+  margin-bottom: 14px;
+}
+.dashboard-welcome .ornament__line { max-width: 60px; }
+
+.dashboard-welcome__title {
+  font-family: var(--font-serif);
+  font-weight: 600;
+  font-style: italic;
+  font-size: clamp(1.7rem, 3.4vw, 2.5rem);
+  color: var(--blue-900);
+  margin: 0 0 10px;
+  letter-spacing: 0.01em;
+}
+
+.dashboard-welcome__subtitle {
+  font-family: var(--font-sans);
+  font-size: 0.96rem;
+  color: var(--gray-500);
+  margin: 0;
+}
+
+@keyframes dashRise {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* --------------------------------------------------------------------
+   Property cards – light blue
+   -------------------------------------------------------------------- */
+.property-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: clamp(20px, 3vw, 32px);
+}
+
+.property-card {
+  position: relative;
+  background: var(--white);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-card);
+  border: 1px solid var(--blue-100);
+  transition: transform 260ms var(--ease-out), box-shadow 260ms var(--ease-out);
+
+  opacity: 0;
+  transform: translateY(20px);
+  animation: dashRise 560ms var(--ease-out) forwards;
+  animation-delay: calc(var(--d) * 110ms + 80ms);
+}
+.property-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 20px 48px -16px rgba(28, 70, 130, 0.25);
+}
+
+.property-card__link {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+}
+
+.property-card__image {
+  position: relative;
+  height: 180px;
+  background-size: cover;
+  background-position: center;
+  overflow: hidden;
+}
+
+/* Placeholder gradients – replace with actual images */
+.property-card__image--annex {
+  background-image: linear-gradient(160deg, rgba(59,125,216,0.2), rgba(22,50,79,0.4)), linear-gradient(135deg, #6a9bd8, #2c5a8a);
+}
+.property-card__image--mtv {
+  background-image: linear-gradient(160deg, rgba(59,125,216,0.2), rgba(22,50,79,0.4)), linear-gradient(135deg, #7baae0, #3a6fa8);
+}
+.property-card__image--dormitel {
+  background-image: linear-gradient(160deg, rgba(59,125,216,0.2), rgba(22,50,79,0.4)), linear-gradient(135deg, #8bb8e8, #4a7fb8);
+}
+
+.property-card__shade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 50%, rgba(8,14,28,0.20) 100%);
+}
+
+.property-card__body {
+  padding: 18px 20px 22px;
+  text-align: center;
+}
+
+.property-card__name {
+  font-family: var(--font-serif);
+  font-weight: 600;
+  font-size: 1.3rem;
+  color: var(--blue-900);
+  margin: 0 0 4px;
+  letter-spacing: 0.02em;
+}
+
+.property-card__tag {
+  font-family: var(--font-sans);
+  font-size: 0.82rem;
+  color: var(--gray-500);
+  margin: 0;
+}
+
+/* Admin manage pill */
+.property-card__manage {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(22, 50, 79, 0.7);
+  backdrop-filter: blur(6px);
+  color: var(--white);
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 999px;
+  padding: 7px 14px 7px 10px;
+  font-family: var(--font-sans);
+  font-size: 0.76rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 180ms var(--ease-out), transform 180ms var(--ease-out);
+}
+.property-card__manage svg { width: 13px; height: 13px; }
+.property-card__manage:hover {
+  background: var(--blue-500);
+  color: var(--white);
+  transform: translateY(-1px);
+}
+
+/* --------------------------------------------------------------------
+   Footer – light blue
+   -------------------------------------------------------------------- */
+.dashboard-footer {
+  background: var(--white);
+  border-top: 1px solid var(--blue-100);
+  color: var(--gray-500);
+  text-align: center;
+  padding: 26px 20px 24px;
+}
+
+.dashboard-footer__social {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+.dashboard-footer__social a {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--blue-50);
+  border: 1px solid var(--blue-100);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--blue-500);
+  transition: background 180ms var(--ease-out), transform 180ms var(--ease-out);
+}
+.dashboard-footer__social a svg { width: 16px; height: 16px; }
+.dashboard-footer__social a:hover {
+  background: var(--blue-500);
+  color: var(--white);
+  transform: translateY(-2px);
+}
+
+.dashboard-footer__copy {
+  font-family: var(--font-sans);
+  font-size: 0.76rem;
+  margin: 0;
+  letter-spacing: 0.02em;
+}
+
+/* --------------------------------------------------------------------
+   Responsive
+   -------------------------------------------------------------------- */
+@media (max-width: 880px) {
+  .property-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 720px) {
+  .topbar__user { display: none; }
+  .topbar__logout span { display: none; }
+  .topbar__logout { padding: 8px; }
+
+  .topbar__menu-toggle { display: flex; }
+
+  .navbar {
+    flex-direction: column;
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 280ms var(--ease-out);
+  }
+  .navbar.is-open { max-height: 320px; }
+  .navbar__item {
+    width: 100%;
+    justify-content: space-between;
+    padding: 14px 24px;
+    border-bottom: 1px solid var(--blue-100);
+  }
+}
+
+@media (max-width: 600px) {
+  .property-grid { grid-template-columns: 1fr; }
+  .property-card__image { height: 160px; }
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-welcome,
+  .property-card {
+    animation: none !important;
+    opacity: 1;
+    transform: none;
+  }
+  .navbar { transition: none; }
+}
+/* --------------------------------------------------------------------
+   Property photo frame — bordered "mat" treatment around the image,
+   with a graceful placeholder fallback until real photos are added.
+   Swap in assets/images/properties/{key}.jpg and the <img>'s onerror
+   fallback to the .svg placeholder simply never fires.
+   -------------------------------------------------------------------- */
+.property-card__image-frame {
+  padding: 8px;
+  background: var(--white);
+}
+
+.property-card__image {
+  display: block;
+  width: 100%;
+  height: 164px;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid var(--blue-100);
+  background: var(--blue-50); /* shows while the image loads */
+  transition: transform 320ms var(--ease-out);
+}
+
+.property-card:hover .property-card__image {
+  transform: scale(1.03);
+}
+
+.property-card__shade {
+  position: absolute;
+  left: 8px; right: 8px; top: 8px;
+  height: 164px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, transparent 55%, rgba(8,14,28,0.22) 100%);
+  pointer-events: none;
+}

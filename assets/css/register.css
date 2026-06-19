@@ -1,0 +1,96 @@
+/* ==========================================================================
+   Bluebookers — Register Page additions
+   Loaded after style.css; only contains what register.php needs on top
+   of the shared login-card system.
+   ========================================================================== */
+
+/* Slightly roomier card since this form has more fields */
+.register-card {
+  max-width: 400px;
+  padding: 36px 36px 30px;
+}
+
+.register-card .field { margin-bottom: 16px; }
+
+/* --------------------------------------------------------------------
+   Password strength meter
+   -------------------------------------------------------------------- */
+.strength-meter {
+  display: flex;
+  gap: 6px;
+  margin-top: 9px;
+}
+.strength-meter__bar {
+  flex: 1;
+  height: 4px;
+  border-radius: 4px;
+  background: rgba(28, 28, 28, 0.12);
+  transition: background 220ms var(--ease-out);
+}
+.strength-meter.is-weak [data-bar]:nth-child(1) { background: var(--error-500); }
+.strength-meter.is-fair [data-bar]:nth-child(1),
+.strength-meter.is-fair [data-bar]:nth-child(2) { background: #c98a3e; }
+.strength-meter.is-good [data-bar]:nth-child(1),
+.strength-meter.is-good [data-bar]:nth-child(2),
+.strength-meter.is-good [data-bar]:nth-child(3) { background: var(--amber); }
+.strength-meter.is-strong [data-bar] { background: #3f8f5b; }
+
+/* --------------------------------------------------------------------
+   Confirm-password match indicator
+   -------------------------------------------------------------------- */
+.field__control { position: relative; }
+
+.field__status {
+  width: 16px;
+  height: 16px;
+  margin-right: 14px;
+  flex-shrink: 0;
+  color: #3f8f5b;
+  opacity: 0;
+  transform: scale(0.6);
+  transition: opacity 200ms var(--ease-out), transform 200ms var(--ease-out);
+}
+.field.is-match .field__status { opacity: 1; transform: scale(1); }
+
+/* When both the toggle button and status icon are present, give the
+   status icon its own slot rather than crowding the toggle */
+.field__control:has(.field__toggle):has(.field__status) input {
+  padding-right: 4px;
+}
+
+/* --------------------------------------------------------------------
+   Switch line ("Already have an account?")
+   -------------------------------------------------------------------- */
+.switch-line {
+  text-align: center;
+  font-size: 0.86rem;
+  color: var(--ink-500);
+  margin: 4px 0 0;
+}
+.switch-link {
+  color: var(--blue-700);
+  font-weight: 600;
+  text-decoration: none;
+}
+.switch-link:hover { color: var(--blue-500); text-decoration: underline; }
+
+/* --------------------------------------------------------------------
+   Responsive
+   -------------------------------------------------------------------- */
+@media (max-width: 980px) {
+  .register-card { max-width: 420px; }
+}
+
+@media (max-width: 480px) {
+  .register-card { padding: 30px 22px 24px; }
+  .register-card .field { margin-bottom: 14px; }
+}
+
+/* Respect reduced motion (inherits base rule from style.css, this just
+   covers the new elements) */
+@media (prefers-reduced-motion: reduce) {
+  .strength-meter__bar,
+  .field__status {
+    transition: none !important;
+  }
+}

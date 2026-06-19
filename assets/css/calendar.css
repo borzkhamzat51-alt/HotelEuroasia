@@ -1,0 +1,251 @@
+/* ==========================================================================
+   Bluebookers — Calendar / Reservations grid
+   Rooms as rows, dates as columns. Built on property.css's tokens.
+   ========================================================================== */
+
+.cal-main { max-width: 100%; }
+
+.cal-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin: 8px 0 22px;
+}
+
+.cal-branch-tabs { display: flex; gap: 8px; }
+.cal-branch-tabs a {
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1.5px solid var(--sky-200);
+  text-decoration: none;
+  color: var(--ink-500);
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: background 150ms, color 150ms, border-color 150ms;
+}
+.cal-branch-tabs a:hover { background: var(--sky-50); }
+.cal-branch-tabs a.is-active { background: var(--blue-600); border-color: var(--blue-600); color: var(--white); }
+
+.cal-month-nav { display: flex; align-items: center; gap: 10px; }
+.cal-nav-btn, .cal-today-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--sky-200);
+  color: var(--ink-700);
+  font-weight: 600;
+  transition: background 150ms;
+}
+.cal-nav-btn { width: 34px; height: 34px; font-size: 1.2rem; }
+.cal-today-btn { padding: 8px 16px; font-size: 0.85rem; }
+.cal-nav-btn:hover, .cal-today-btn:hover { background: var(--sky-50); }
+.cal-month-label { font-family: 'Playfair Display', serif; font-size: 1.15rem; min-width: 160px; text-align: center; color: var(--ink-900); }
+
+/* --------------------------------------------------------------------
+   Grid
+   -------------------------------------------------------------------- */
+.cal-grid-wrap { overflow-x: auto; border: 1px solid var(--sky-200); border-radius: var(--radius-lg); background: var(--white); }
+.cal-grid { min-width: max-content; }
+
+.cal-header-row, .cal-row { display: flex; border-bottom: 1px solid var(--sky-100); }
+.cal-header-row { background: var(--sky-50); position: sticky; top: 0; z-index: 5; }
+
+.cal-label-col {
+  width: 190px;
+  flex-shrink: 0;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  position: sticky;
+  left: 0;
+  background: var(--white);
+  z-index: 4;
+  border-right: 1px solid var(--sky-200);
+  cursor: pointer;
+}
+.cal-label-col strong { font-size: 0.88rem; color: var(--ink-900); }
+.cal-label-col span { font-size: 0.74rem; color: var(--ink-500); }
+.cal-label-col--header {
+  background: var(--sky-50);
+  cursor: default;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--ink-700);
+  justify-content: center;
+}
+
+.cal-days-track { display: flex; flex: 1; position: relative; }
+
+.cal-day-header {
+  flex: 1;
+  min-width: 64px;
+  text-align: center;
+  padding: 8px 2px;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--sky-100);
+}
+.cal-day-header__num { font-weight: 700; font-size: 0.9rem; color: var(--ink-900); }
+.cal-day-header__wd { font-size: 0.68rem; color: var(--ink-500); text-transform: uppercase; letter-spacing: 0.03em; }
+.cal-day-header.is-today { background: rgba(59, 125, 216, 0.12); }
+.cal-day-header.is-today .cal-day-header__num { color: var(--blue-600); }
+
+.cal-row__track { height: 56px; }
+.cal-day-slot {
+  flex: 1;
+  min-width: 64px;
+  border-right: 1px solid var(--sky-100);
+  cursor: pointer;
+  transition: background 120ms;
+}
+.cal-day-slot:hover { background: var(--sky-50); }
+.cal-day-slot.is-today { background: rgba(59, 125, 216, 0.06); }
+
+.cal-bar {
+  position: absolute;
+  top: 7px;
+  height: 42px;
+  border-radius: 8px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  color: var(--white);
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  box-shadow: 0 4px 10px -4px rgba(0,0,0,0.3);
+  transition: filter 120ms, transform 120ms;
+  z-index: 2;
+}
+.cal-bar:hover { filter: brightness(1.08); transform: translateY(-1px); }
+
+/* Calendar bar colours – high contrast */
+.cal-bar--reserved {
+    background: #f9a825;   /* bright yellow – highly visible */
+}
+.cal-bar--checked_in {
+    background: #2e7d32;   /* dark green – clear occupancy */
+}
+.cal-bar--checked_out {
+    background: #6c757d;   /* medium grey – checked out */
+}
+.cal-bar--cancelled {
+    background: #dc3545;   /* red – cancelled */
+}
+
+.cal-legend i.cal-bar--reserved { background: #f9a825; }
+.cal-legend i.cal-bar--checked_in { background: #2e7d32; }
+.cal-legend i.cal-bar--checked_out { background: #6c757d; }
+
+/* --------------------------------------------------------------------
+   Modal base (this page doesn't link layout.css, so these are copied
+   from there to stay visually consistent with the rest of the admin).
+   -------------------------------------------------------------------- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(22, 50, 79, 0.4);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  opacity: 1;
+  transition: opacity 300ms ease;
+  padding: 24px;
+}
+.modal-overlay[hidden] { opacity: 0; pointer-events: none; }
+.modal {
+  background: var(--white);
+  border-radius: var(--radius-xl);
+  width: 100%;
+  max-width: 500px;
+  max-height: 88vh;
+  overflow-y: auto;
+  padding: 40px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  position: relative;
+  transform: scale(1) translateY(0);
+  transition: transform 300ms cubic-bezier(.16, 1, .3, 1);
+}
+.modal-overlay[hidden] .modal { transform: scale(0.95) translateY(20px); }
+.modal__close {
+  position: absolute;
+  top: 16px;
+  right: 20px;
+  background: none;
+  border: none;
+  font-size: 2rem;
+  color: var(--ink-500);
+  cursor: pointer;
+  transition: color 200ms, transform 200ms;
+  line-height: 1;
+}
+.modal__close:hover { color: var(--blue-500); transform: rotate(90deg); }
+
+/* --------------------------------------------------------------------
+   Reservation form fields — this page doesn't use the .field__control
+   wrapper convention from style.css, so basic tag styling is scoped
+   here to .resv-form only.
+   -------------------------------------------------------------------- */
+.resv-form label { display: block; font-size: 0.78rem; font-weight: 600; color: var(--ink-700); margin-bottom: 5px; }
+.resv-form input,
+.resv-form select,
+.resv-form textarea {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1.5px solid var(--sky-200);
+  border-radius: var(--radius-md);
+  font-family: 'Inter', sans-serif;
+  font-size: 0.88rem;
+  color: var(--ink-900);
+  background: var(--white);
+  transition: border-color 150ms;
+}
+.resv-form input:focus, .resv-form select:focus, .resv-form textarea:focus { outline: none; border-color: var(--blue-500); }
+.resv-form textarea { resize: vertical; }
+.resv-form .form-error { display: block; color: #b3433f; font-size: 0.74rem; margin-top: 4px; }
+
+
+.modal--wide .modal__content { max-width: 760px; }
+
+.resv-form h3 {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.05rem;
+  margin: 22px 0 14px;
+  color: var(--ink-900);
+  border-bottom: 1px solid var(--sky-200);
+  padding-bottom: 8px;
+}
+.resv-form h3:first-child { margin-top: 4px; }
+.resv-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 16px; }
+.resv-grid--full { grid-column: 1 / -1; }
+@media (max-width: 620px) { .resv-grid { grid-template-columns: 1fr; } }
+
+.resv-balance {
+  background: var(--sky-50);
+  border-radius: var(--radius-md);
+  padding: 12px 16px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--ink-900);
+  margin-top: 4px;
+}
+
+.resv-actions { display: flex; gap: 10px; margin-top: 22px; flex-wrap: wrap; }
+.resv-actions .btn { width: auto; padding: 12px 24px; }
+.resv-actions .btn--secondary { background: var(--sky-100); color: var(--ink-700); }
+.resv-actions .btn--secondary:hover { background: var(--sky-200); }
+.resv-actions .btn--danger { background: #b3433f; color: var(--white); }
+
+.resv-log { margin-top: 18px; border-top: 1px solid var(--sky-200); padding-top: 14px; }
+.resv-log summary { cursor: pointer; font-size: 0.85rem; font-weight: 600; color: var(--ink-700); }
+.resv-log ul { list-style: none; margin: 10px 0 0; padding: 0; font-size: 0.8rem; color: var(--ink-500); display: flex; flex-direction: column; gap: 6px; }

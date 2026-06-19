@@ -1,0 +1,27 @@
+<svg viewBox="0 0 400 280" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="annexSky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#eef5fc"/>
+      <stop offset="100%" stop-color="#dceaf8"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="280" fill="url(#annexSky)"/>
+  <rect x="0" y="220" width="400" height="60" fill="#c5deef"/>
+  <!-- Classic building with arched windows -->
+  <rect x="90" y="80" width="220" height="150" rx="4" fill="#2861b3"/>
+  <rect x="90" y="80" width="220" height="14" fill="#16324f"/>
+  <!-- Arched windows, 3x3 grid -->
+  <g fill="#eef5fc">
+    <path d="M115 110h28v34a14 14 0 0 1-28 0Z"/>
+    <path d="M160 110h28v34a14 14 0 0 1-28 0Z"/>
+    <path d="M205 110h28v34a14 14 0 0 1-28 0Z"/>
+    <path d="M250 110h28v34a14 14 0 0 1-28 0Z"/>
+    <path d="M115 168h28v34a14 14 0 0 1-28 0Z"/>
+    <path d="M160 168h28v34a14 14 0 0 1-28 0Z"/>
+    <path d="M205 168h28v34a14 14 0 0 1-28 0Z"/>
+    <path d="M250 168h28v34a14 14 0 0 1-28 0Z"/>
+  </g>
+  <!-- Entrance -->
+  <rect x="178" y="200" width="44" height="30" rx="2" fill="#16324f"/>
+  <rect x="186" y="206" width="28" height="24" fill="#f0a857"/>
+</svg>
