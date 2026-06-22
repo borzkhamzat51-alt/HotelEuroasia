@@ -1,0 +1,14 @@
+{
+  "name": "bluebookers-room-sync",
+  "version": "1.0.0",
+  "description": "WebSocket server pushing live room updates between Bluebookers' Layout and Calendar pages",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "mysql2": "^3.10.0",
+    "ws": "^8.17.0"
+  }
+}

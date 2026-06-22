@@ -1,7 +1,23 @@
 <?php
+ini_set('display_errors', 0);
+error_reporting(E_ALL);
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../db.php';
 bb_require_admin(); // Audit log is admin-only
+
+// ── Branch context (set when arriving from a property page) ──────────────────
+$branches = [
+    'annex'          => 'BB Apartelle',
+    'mtv'            => 'MTV3',
+    'dormitel'       => 'ELTI Dormitel',
+    'aps'            => 'APS',
+    'euroasia_stall' => 'Euroasia Stall',
+    'annex_stall'    => 'Annex Stall',
+];
+$branchKey  = $_GET['branch'] ?? '';
+$branchName = $branches[$branchKey] ?? '';
+// Invalid branch key — ignore it so the page still shows all entries
+if ($branchKey && !$branchName) $branchKey = '';
 
 // ── Filters ──────────────────────────────────────────────────────────────────
 $search      = trim($_GET['search']      ?? '');
@@ -15,6 +31,7 @@ $perPage     = 50;
 $offset      = ($page - 1) * $perPage;
 
 $filters = array_filter([
+    'branch'      => $branchKey   ?: null,
     'search'      => $search      ?: null,
     'user_id'     => $filterUser  ?: null,
     'target_type' => $filterType  ?: null,
@@ -79,6 +96,7 @@ $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
 // ── Query string helper (preserves all filters except changed key) ───────────
 function qs($overrides = []) {
     $params = array_merge([
+        'branch'      => $_GET['branch']      ?? '',
         'search'      => $_GET['search']      ?? '',
         'user_id'     => $_GET['user_id']     ?? '',
         'target_type' => $_GET['target_type'] ?? '',
@@ -95,7 +113,7 @@ function qs($overrides = []) {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Audit Log · Bluebookers Admin</title>
+<title><?= $branchName ? htmlspecialchars($branchName) . ' — ' : '' ?>Audit Log · Bluebookers Admin</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,700;1,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -360,20 +378,32 @@ function qs($overrides = []) {
 </header>
 
 <!-- ── NAV BAR ─────────────────────────────────────────────────── -->
-<?php include __DIR__ . '/includes/navbar.php'; ?>
+<?php if ($branchKey): include __DIR__ . '/includes/property_navbar.php'; else: include __DIR__ . '/includes/navbar.php'; endif; ?>
 
 <!-- ── MAIN ────────────────────────────────────────────────────── -->
 <main class="audit-main">
 
     <div class="audit-header">
         <div>
-            <h1 class="audit-header__title">Audit Log</h1>
-            <p class="audit-header__sub">Full trail of every action performed on the system</p>
+            <h1 class="audit-header__title">
+                <?= $branchName ? htmlspecialchars($branchName) . ' — Audit Log' : 'Audit Log' ?>
+            </h1>
+            <p class="audit-header__sub">
+                <?= $branchName
+                    ? 'Room and reservation activity for ' . htmlspecialchars($branchName)
+                    : 'Full trail of every action performed on the system' ?>
+            </p>
         </div>
+        <?php if ($branchName): ?>
+        <a href="audit.php" class="btn-filter btn-filter--reset" style="align-self:flex-start;">All properties</a>
+        <?php endif; ?>
     </div>
 
     <!-- Filter bar -->
     <form method="GET" action="audit.php" class="filter-bar">
+        <?php if ($branchKey): ?>
+        <input type="hidden" name="branch" value="<?= htmlspecialchars($branchKey) ?>">
+        <?php endif; ?>
         <div class="filter-group filter-group--search">
             <label for="search">Search</label>
             <input type="text" id="search" name="search" value="<?= htmlspecialchars($search) ?>" placeholder="Name, username, guest, details…">
@@ -429,7 +459,7 @@ function qs($overrides = []) {
 
         <div class="filter-actions">
             <button type="submit" class="btn-filter btn-filter--apply">Filter</button>
-            <a href="audit.php" class="btn-filter btn-filter--reset">Reset</a>
+            <a href="audit.php<?= $branchKey ? '?branch=' . htmlspecialchars($branchKey) : '' ?>" class="btn-filter btn-filter--reset">Reset</a>
         </div>
     </form>
 

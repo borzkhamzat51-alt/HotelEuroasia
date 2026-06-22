@@ -250,26 +250,8 @@ $currentFile = basename($_SERVER['PHP_SELF']);
         </a>
     <?php endif; ?>
 
-    <?php if (bb_has_permission('guests')): ?>
-        <a class="navbar__item <?= $currentFile === 'guests.php' ? 'navbar__item--active' : '' ?>" href="guests.php">
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-4c0-1.104-.396-2.105-1.05-2.85M7 20H2v-2a3 3 0 015.356-1.857M7 20v-4c0-1.104.396-2.105 1.05-2.85M8 6a4 4 0 118 0 4 4 0 01-8 0z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            Guests
-        </a>
-    <?php endif; ?>
 
-    <?php if (bb_has_permission('reports')): ?>
-        <a class="navbar__item <?= $currentFile === 'reports.php' ? 'navbar__item--active' : '' ?>" href="reports.php">
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            Reports
-        </a>
-    <?php endif; ?>
 
-    <?php if (bb_is_admin()): ?>
-        <a class="navbar__item <?= $currentFile === 'users.php' ? 'navbar__item--active' : '' ?>" href="users.php">
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            Users &amp; Staff
-        </a>
-    <?php endif; ?>
 
     <?php if (bb_is_admin() || bb_has_permission('settings')): ?>
     <div class="navbar__dropdown" id="settingsDropdown">

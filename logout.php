@@ -1,20 +1,20 @@
 <?php
-/**
- * logout.php
- * Destroys the local PHP session. No external service to revoke
- * anything with — MySQL doesn't issue tokens, so there's nothing to
- * call out to.
- */
-
 require_once __DIR__ . '/config.php';
-require_once __DIR__ . '/db.php';
+session_start();
 
-// Log before destroying the session (we need session data for the log)
-if (bb_is_logged_in()) {
-    db_audit_log('auth.logout', 'user', $_SESSION['user_id'] ?? null, $_SESSION['username'] ?? null);
+try {
+    if (isset($_SESSION['user_id']) && function_exists('db_audit_log')) {
+        db_audit_log('user.logout', 'user', $_SESSION['user_id'], $_SESSION['username'] ?? 'unknown', 'Logged out');
+    }
+} catch (Exception $e) {
+    error_log('Logout audit failed: ' . $e->getMessage());
 }
 
 $_SESSION = [];
+if (ini_get('session.use_cookies')) {
+    $params = session_get_cookie_params();
+    setcookie(session_name(), '', time() - 42000, $params['path'], $params['domain'], $params['secure'], $params['httponly']);
+}
 session_destroy();
-
-bb_redirect('index.php');
+header('Location: index.php');
+exit;

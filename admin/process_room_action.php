@@ -5,8 +5,11 @@
  * Now: real DB updates, audit logging, and returns fresh room/reservation data.
  */
 
-require_once __DIR__ . '/config.php';
-require_once __DIR__ . '/db.php';
+ini_set('display_errors', 0);
+error_reporting(E_ALL);
+
+require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/../db.php';
 
 header('Content-Type: application/json');
 
@@ -67,6 +70,33 @@ function closeActiveReservation($roomId, $userId)
         db_update_reservation($res['id'], ['room_id' => $roomId, 'status' => 'checked_out', 'user_id' => $userId]);
         db_log_reservation_activity($res['id'], $userId, 'edited', 'Checked out from floor plan');
     }
+}
+
+/**
+ * Builds the same 'room' / 'reservation' payload shape
+ * process_reservation.php's responses carry, so calendar.js's
+ * updateRoomSidebar()/updateUIFromServer() can consume either file's
+ * response identically instead of needing a second parsing path.
+ * Re-fetches both rather than trusting in-memory state, so this can't
+ * drift from what's actually in the database.
+ */
+function freshRoomActionPayload($roomId) {
+    $freshRoom = db_find_room($roomId);
+    $activeRes = db_find_active_reservation_for_room($roomId);
+    if ($activeRes && $freshRoom) {
+        $activeRes['room_number'] = $freshRoom['room_number'];
+    }
+    return [
+        'room' => $freshRoom ? [
+            'id' => $freshRoom['id'],
+            'room_number' => $freshRoom['room_number'],
+            'room_type' => $freshRoom['room_type'],
+            'price_per_night' => $freshRoom['price_per_night'],
+            'room_status' => $freshRoom['room_status'],
+            'cleaning_status' => $freshRoom['cleaning_status'],
+        ] : null,
+        'reservation' => $activeRes ?: null,
+    ];
 }
 
 try {
@@ -182,7 +212,7 @@ try {
 
             db_set_room_status($roomId, $roomStatus);
             db_audit_log('room.update', 'room', $roomId, 'RM' . $room['room_number'], 'status:' . $roomStatus);
-            echo json_encode(['success' => true, 'message' => 'Status updated.']);
+            echo json_encode(array_merge(['success' => true, 'message' => 'Status updated.'], freshRoomActionPayload($roomId)));
             break;
 
         case 'check_in':
@@ -195,7 +225,7 @@ try {
             db_log_reservation_activity($res['id'], $_SESSION['user_id'], 'edited', 'Checked in');
             db_audit_log('room.check_in', 'room', $roomId, 'RM' . $room['room_number'], 'guest:' . $res['guest_full_name']);
             db_set_room_status($roomId, 'occupied');
-            echo json_encode(['success' => true, 'message' => 'Guest checked in.']);
+            echo json_encode(array_merge(['success' => true, 'message' => 'Guest checked in.'], freshRoomActionPayload($roomId)));
             break;
 
         case 'check_out':
@@ -209,21 +239,52 @@ try {
             db_audit_log('room.check_out', 'room', $roomId, 'RM' . $room['room_number'], 'guest:' . $res['guest_full_name']);
             db_set_room_status($roomId, 'available');
             db_update_room_meta($roomId, 'Pending', null, date('Y-m-d'), null);
-            echo json_encode(['success' => true, 'message' => 'Guest checked out.']);
+            echo json_encode(array_merge(['success' => true, 'message' => 'Guest checked out.'], freshRoomActionPayload($roomId)));
             break;
 
         case 'set_maintenance':
             db_set_room_status($roomId, 'maintenance');
             db_update_room_meta($roomId, null, 'Pending Repair', null, null);
             db_audit_log('room.set_maintenance', 'room', $roomId, 'RM' . $room['room_number']);
-            echo json_encode(['success' => true, 'message' => 'Room marked out of order.']);
+            echo json_encode(array_merge(['success' => true, 'message' => 'Room marked out of order.'], freshRoomActionPayload($roomId)));
             break;
 
         case 'clear_maintenance':
             db_set_room_status($roomId, 'available');
             db_update_room_meta($roomId, null, 'Cleared', null, null);
             db_audit_log('room.clear_maintenance', 'room', $roomId, 'RM' . $room['room_number']);
-            echo json_encode(['success' => true, 'message' => 'Maintenance cleared.']);
+            echo json_encode(array_merge(['success' => true, 'message' => 'Maintenance cleared.'], freshRoomActionPayload($roomId)));
+            break;
+
+        // Editing room number/type/price wasn't previously possible from
+        // either Layout or Calendar — these fields had no admin-facing
+        // edit path at all before this.
+        case 'update_room_details':
+            $newNumber = trim($_POST['room_number'] ?? '');
+            $newType = trim($_POST['room_type'] ?? '');
+            $newPrice = (float) ($_POST['price_per_night'] ?? 0);
+
+            if ($newNumber === '') {
+                echo json_encode(['success' => false, 'message' => 'Room number is required.']);
+                exit;
+            }
+            if ($newType === '') {
+                echo json_encode(['success' => false, 'message' => 'Room type is required.']);
+                exit;
+            }
+            if ($newPrice < 0) {
+                echo json_encode(['success' => false, 'message' => 'Price cannot be negative.']);
+                exit;
+            }
+            if (db_room_number_taken($room['branch'], $newNumber, $roomId)) {
+                echo json_encode(['success' => false, 'message' => 'Room number RM' . $newNumber . ' is already in use on this branch.']);
+                exit;
+            }
+
+            $before = 'RM' . $room['room_number'] . ' (' . $room['room_type'] . ', ₱' . $room['price_per_night'] . ')';
+            db_update_room_details($roomId, $newNumber, $newType, $newPrice);
+            db_audit_log('room.update_details', 'room', $roomId, 'RM' . $newNumber, 'was ' . $before);
+            echo json_encode(array_merge(['success' => true, 'message' => 'Room details updated.'], freshRoomActionPayload($roomId)));
             break;
 
         default:

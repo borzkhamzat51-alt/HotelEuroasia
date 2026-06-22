@@ -1,30 +1,32 @@
 /* ==========================================================================
-   Bluebookers — Minimalist 3D Floor Plan (Color-coded backgrounds)
+   Bluebookers — Corporate Hotel Management Floor Plan
    ========================================================================== */
 
-/* ─── CSS Variables (Minimalist palette) ──────────────────────────── */
+/* ─── CSS Variables (Corporate Palette) ───────────────────────────── */
 :root {
   --corp-bg: #f0f2f5;
   --corp-card-bg: #ffffff;
-  --corp-border: #d1d5db;
-  --corp-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
-  --corp-shadow-hover: 0 24px 64px -8px rgba(0, 0, 0, 0.15);
+  --corp-border: #e4e7ec;
+  --corp-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  --corp-shadow-hover: 0 12px 40px -8px rgba(0, 0, 0, 0.12);
   
-  /* Status Colors – Minimal, clean */
-  --status-available: #3b82f6;
-  --status-available-bg: #eff6ff;
-  --status-reserved: #f59e0b;
-  --status-reserved-bg: #fffbeb;
-  --status-occupied: #10b981;
-  --status-occupied-bg: #ecfdf5;
-  --status-needs-cleaning: #ef4444;
-  --status-needs-cleaning-bg: #fef2f2;
-  --status-maintenance: #4b5563;
-  --status-maintenance-bg: #f3f4f6;
+  /* Status Colors – Corporate */
+  --status-available: #10b981;
+  --status-available-bg: #d1fae5;        /* light green */
+  --status-reserved: #3b82f6;
+  --status-reserved-bg: #dbeafe;         /* light blue */
+  --status-occupied: #f59e0b;
+  --status-occupied-bg: #fef3c7;         /* light amber */
+  --status-needs-cleaning: #fbbf24;
+  --status-needs-cleaning-bg: #fef9c3;   /* light yellow */
+  --status-maintenance: #ef4444;
+  --status-maintenance-bg: #fecaca;      /* light red */
+  --status-blocked: #6b7280;
+  --status-blocked-bg: #f3f4f6;
   
   --text-primary: #1a2332;
   --text-secondary: #4b5563;
-  --text-muted: #6b7280;
+  --text-muted: #9ca3af;
   --border-light: #e5e7eb;
 }
 
@@ -37,16 +39,14 @@
   display: flex;
   align-items: stretch;
   justify-content: center;
-  gap: clamp(30px, 4vw, 60px);
+  gap: clamp(20px, 3vw, 40px);
   width: 100%;
-  max-width: 1600px;
+  max-width: 1400px;
   margin: 40px auto;
-  padding: 40px;
+  padding: 24px;
   background: var(--corp-bg);
-  border-radius: 24px;
-  box-shadow: inset 0 2px 4px rgba(0,0,0,0.02), 0 8px 32px rgba(0,0,0,0.06);
-  perspective: 1200px;
-  transform-style: preserve-3d;
+  border-radius: 12px;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.02);
   opacity: 0;
   animation: fadeGridIn 600ms ease forwards;
 }
@@ -55,41 +55,42 @@
   to { opacity: 1; }
 }
 
+/* ─── Zones ────────────────────────────────────────────────────────── */
 .ef-zone {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 20px;
+  gap: 12px;
 }
 
 .ef-zone--hallway {
   flex-direction: column;
-  gap: 30px;
+  gap: 20px;
   color: var(--text-muted);
   align-items: center;
-  min-width: 40px;
+  min-width: 30px;
 }
 
 .ef-zone--hallway .ef-vertical-text {
   color: var(--text-muted);
-  font-size: 0.8rem;
-  letter-spacing: 0.6em;
+  font-size: 0.65rem;
+  letter-spacing: 0.4em;
   font-weight: 600;
   text-transform: uppercase;
 }
 
 .ef-divider {
-  width: 2px;
+  width: 1px;
   background: linear-gradient(to bottom, transparent, var(--border-light), transparent);
   height: 100%;
-  min-height: 500px;
+  min-height: 350px;
 }
 
 .ef-vertical-text {
   font-family: 'Inter', sans-serif;
-  font-size: 0.8rem;
+  font-size: 0.7rem;
   font-weight: 600;
-  letter-spacing: 0.5em;
+  letter-spacing: 0.4em;
   color: var(--text-muted);
   text-transform: uppercase;
   writing-mode: vertical-rl;
@@ -97,10 +98,10 @@
 }
 
 .ef-arrow {
-  width: 24px;
-  height: 24px;
+  width: 16px;
+  height: 16px;
   display: block;
-  opacity: 0.4;
+  opacity: 0.3;
   color: var(--text-muted);
 }
 .ef-arrow.ef-up { transform: rotate(-90deg); }
@@ -109,90 +110,157 @@
 .ef-room-col {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 16px;
   justify-content: center;
 }
 
 /* ==========================================================================
-   ROOM CARDS – Minimalist, color-coded background
+   ROOM CARDS – Top-down floor plan style with status backgrounds
    ========================================================================== */
 .room-card {
   position: relative;
-  background: var(--corp-card-bg);
-  border-radius: 16px;
-  width: 320px;
-  min-height: 260px;
+  background: var(--corp-card-bg);  /* fallback */
+  border-radius: 8px;
+  width: 260px;
+  min-height: 200px;
   height: auto;
   display: flex;
   flex-direction: column;
   cursor: pointer;
   box-shadow: var(--corp-shadow);
-  transition: all 400ms cubic-bezier(.16, 1, .3, 1);
+  transition: all 320ms cubic-bezier(.16, 1, .3, 1);
   overflow: visible;
-  border: 1px solid var(--corp-border);
-  border-left: 4px solid var(--text-muted);
-  transform: rotateX(0deg) rotateY(0deg) translateZ(0px);
-  transform-style: preserve-3d;
-  backface-visibility: hidden;
+  border: 1.5px solid var(--corp-border);
+  
+  /* ─── Status strip (left) ─── */
+  border-left: 6px solid var(--text-muted);
+  
   opacity: 0;
-  transform: translateY(30px) scale(0.95);
-  animation: popIn 600ms cubic-bezier(.16, 1, .3, 1) forwards;
+  transform: translateY(16px);
+  animation: popIn 500ms ease forwards;
 }
 
-/* ─── Status Colors – Full card background, subtle ────────────────── */
+/* ─── Status Backgrounds & Border Colors ──────────────────────────── */
 .room-card.status-available {
+  background-color: var(--status-available-bg);
   border-left-color: var(--status-available);
-  background: var(--status-available-bg);
 }
+.room-card.status-available .status-badge {
+  color: var(--status-available);
+}
+.room-card.status-available .room-card__status-indicator {
+  background: var(--status-available);
+}
+
 .room-card.status-reserved {
+  background-color: var(--status-reserved-bg);
   border-left-color: var(--status-reserved);
-  background: var(--status-reserved-bg);
 }
+.room-card.status-reserved .status-badge {
+  color: var(--status-reserved);
+}
+.room-card.status-reserved .room-card__status-indicator {
+  background: var(--status-reserved);
+}
+
 .room-card.status-occupied {
+  background-color: var(--status-occupied-bg);
   border-left-color: var(--status-occupied);
-  background: var(--status-occupied-bg);
 }
+.room-card.status-occupied .status-badge {
+  color: var(--status-occupied);
+}
+.room-card.status-occupied .room-card__status-indicator {
+  background: var(--status-occupied);
+}
+
 .room-card.status-available.room-card--dirty {
+  background-color: var(--status-needs-cleaning-bg);
   border-left-color: var(--status-needs-cleaning);
-  background: var(--status-needs-cleaning-bg);
 }
+.room-card.status-available.room-card--dirty .status-badge {
+  color: var(--status-needs-cleaning);
+}
+.room-card.status-available.room-card--dirty .room-card__status-indicator {
+  background: var(--status-needs-cleaning);
+}
+
 .room-card.status-maintenance {
+  background-color: var(--status-maintenance-bg);
   border-left-color: var(--status-maintenance);
-  background: var(--status-maintenance-bg);
   opacity: 0.85;
 }
-
-/* ─── 3D Tilt on hover ────────────────────────────────────────────── */
-.room-card:hover {
-  transform: translateY(-12px) rotateX(2deg) rotateY(4deg) scale(1.04);
-  box-shadow: var(--corp-shadow-hover);
-  border-color: #b0c4de;
-  z-index: 10;
+.room-card.status-maintenance .status-badge {
+  color: var(--status-maintenance);
+}
+.room-card.status-maintenance .room-card__status-indicator {
+  background: var(--status-maintenance);
 }
 
 /* ─── Staggered load ───────────────────────────────────────────────── */
-.ef-room-col:nth-child(2) .room-card:nth-child(1) { animation-delay: 80ms; }
-.ef-room-col:nth-child(2) .room-card:nth-child(2) { animation-delay: 160ms; }
-.ef-room-col:nth-child(4) .room-card:nth-child(1) { animation-delay: 240ms; }
-.ef-room-col:nth-child(4) .room-card:nth-child(2) { animation-delay: 320ms; }
-.ef-room-col:nth-child(6) .room-card:nth-child(1) { animation-delay: 400ms; }
-.ef-room-col:nth-child(6) .room-card:nth-child(2) { animation-delay: 480ms; }
+.ef-room-col:nth-child(2) .room-card:nth-child(1) { animation-delay: 60ms; }
+.ef-room-col:nth-child(2) .room-card:nth-child(2) { animation-delay: 120ms; }
+.ef-room-col:nth-child(4) .room-card:nth-child(1) { animation-delay: 180ms; }
+.ef-room-col:nth-child(4) .room-card:nth-child(2) { animation-delay: 240ms; }
+.ef-room-col:nth-child(6) .room-card:nth-child(1) { animation-delay: 300ms; }
+.ef-room-col:nth-child(6) .room-card:nth-child(2) { animation-delay: 360ms; }
 
 @keyframes popIn {
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-/* ─── Room Number ──────────────────────────────────────────────────── */
+/* ─── Hover ────────────────────────────────────────────────────────── */
+.room-card:hover {
+  transform: translateY(-4px) scale(1.01);
+  box-shadow: var(--corp-shadow-hover);
+  border-color: #d1d5db;
+  z-index: 5;
+}
+
+/* ─── Status Indicator Dot ────────────────────────────────────────── */
+.room-card__status-indicator {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  z-index: 3;
+  transition: all 300ms ease;
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.8);
+}
+
+/* ─── Status Badge (text) ────────────────────────────────────────── */
+.status-badge {
+  position: absolute;
+  top: 12px;
+  right: 30px;
+  font-family: 'Inter', sans-serif;
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  z-index: 2;
+}
+
+/* ─── Room Number (top-left) ──────────────────────────────────────── */
 .room-number-badge {
   position: absolute;
-  top: 16px;
-  left: 18px;
+  top: 8px;
+  left: 12px;
   font-family: 'Inter', sans-serif;
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   font-weight: 700;
   color: var(--text-primary);
   letter-spacing: 0.02em;
+  background: rgba(255,255,255,0.85);
+  padding: 2px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--border-light);
   z-index: 20;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
 }
 
 /* ─── Room Content ────────────────────────────────────────────────── */
@@ -203,86 +271,86 @@
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: 48px 20px 32px;
+  padding: 36px 16px 24px;
   position: relative;
   z-index: 1;
 }
 
 .rc-title {
   font-family: 'Inter', sans-serif;
-  font-size: 1.1rem;
+  font-size: 0.85rem;
   font-weight: 600;
   color: var(--text-primary);
-  margin: 0 0 4px;
+  margin: 0 0 2px;
   transition: color 300ms;
   letter-spacing: -0.01em;
 }
-.room-card:hover .rc-title { color: #3b82f6; }
+.room-card:hover .rc-title { color: #2563eb; }
 
 .rc-subtitle {
   font-family: 'Inter', sans-serif;
-  font-size: 0.7rem;
+  font-size: 0.6rem;
   font-weight: 500;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--text-muted);
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .rc-dates {
   font-family: 'Inter', sans-serif;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
+  font-weight: 500;
   color: var(--text-secondary);
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .rc-price {
   font-family: 'Inter', sans-serif;
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .rc-guest {
-  font-weight: 500;
-  font-size: 0.85rem;
-  color: #3b82f6;
-  margin-top: 8px;
-  background: rgba(59,130,246,0.06);
-  padding: 4px 18px;
-  border-radius: 6px;
+  font-weight: 600;
+  font-size: 0.8rem;
+  color: #1e40af;
+  margin-top: 6px;
+  background: rgba(255,255,255,0.6);
+  padding: 2px 14px;
+  border-radius: 4px;
+  border: 1px solid rgba(255,255,255,0.8);
 }
 
 /* ─── Card footer ──────────────────────────────────────────────────── */
 .rc-footer {
-  background: rgba(0, 0, 0, 0.02);
-  border-top: 1px solid rgba(0,0,0,0.04);
-  padding: 10px 16px;
+  background: rgba(0, 0, 0, 0.03);
+  border-top: 1px solid rgba(0,0,0,0.06);
+  padding: 8px 16px;
   text-align: center;
   font-family: 'Inter', sans-serif;
-  font-weight: 500;
+  font-weight: 600;
   font-size: 0.6rem;
   color: var(--text-muted);
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   transition: all 300ms ease;
-  border-radius: 0 0 16px 16px;
+  border-radius: 0 0 8px 8px;
 }
 .room-card:hover .rc-footer {
-  background: rgba(0, 0, 0, 0.04);
+  background: rgba(0, 0, 0, 0.06);
   color: var(--text-secondary);
 }
 
 /* ─── Hide old elements ────────────────────────────────────────────── */
 .rc-badge { display: none !important; }
 .room-card__admin-controls { display: none !important; }
-.status-badge { display: none !important; }
-.room-card__status-indicator { display: none !important; }
 
 /* ─── Pulse animation for updates ────────────────────────────────── */
 @keyframes statusUpdatePulse {
-  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.15); }
-  50% { transform: scale(1.04); box-shadow: 0 0 0 30px rgba(59, 130, 246, 0); }
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.2); }
+  50% { transform: scale(1.02); box-shadow: 0 0 0 20px rgba(59, 130, 246, 0); }
   100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
 }
 .room-card.is-updating {
@@ -290,28 +358,25 @@
 }
 
 /* ─── Responsive ───────────────────────────────────────────────────── */
-@media (max-width: 1200px) {
-  .elegant-floor-container { flex-wrap: wrap; padding: 24px; gap: 30px; }
-  .room-card { width: 280px; min-height: 220px; }
+@media (max-width: 1100px) {
+  .elegant-floor-container { flex-wrap: wrap; padding: 16px; }
+  .ef-zone--parking, .ef-zone--rightside { display: none; }
 }
 @media (max-width: 768px) {
   .ef-zone--hallway { display: none; }
   .ef-room-col { width: 100%; align-items: center; }
-  .room-card { width: 100%; max-width: 360px; min-height: 200px; }
-  .elegant-floor-container { padding: 16px; gap: 20px; perspective: none; }
-  .room-card:hover { transform: translateY(-8px) scale(1.02); }
+  .room-card { width: 100%; max-width: 320px; min-height: 180px; }
 }
 
 /* ==========================================================================
-   MANAGEMENT CONSOLE – Professional with close button
+   MANAGEMENT CONSOLE – Professional Corporate Style (unchanged)
    ========================================================================== */
-
 .modal-overlay {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -327,17 +392,16 @@
   width: 100%;
   padding: 0;
   overflow: hidden;
-  border-radius: 16px;
+  border-radius: 12px;
   background: var(--corp-card-bg);
   box-shadow: 0 32px 80px -20px rgba(0, 0, 0, 0.25);
   transform: scale(1) translateY(0);
   transition: transform 400ms cubic-bezier(.16, 1, .3, 1);
   position: relative;
 }
-
 .modal-overlay[hidden] .modal { transform: scale(0.96) translateY(16px); }
 
-/* ─── Close button ────────────────────────────────────────────────── */
+/* ─── Close button – properly positioned ──────────────────────────── */
 .modal-overlay.is-pms-dashboard .modal__close {
   position: absolute;
   top: 18px;
@@ -368,6 +432,7 @@
   transform: scale(0.92);
 }
 
+/* ─── Console Header ─────────────────────────────────────────────── */
 .pms-header {
   background: linear-gradient(135deg, #f8fafc, #ffffff);
   padding: 20px 28px;
@@ -413,6 +478,7 @@
   color: var(--text-secondary);
 }
 
+/* ─── Status Dropdown ────────────────────────────────────────────── */
 .pms-status-dropdown {
   -webkit-appearance: none;
   -moz-appearance: none;
@@ -442,12 +508,13 @@
   border-color: #3b82f6;
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
-.pms-status-dropdown.status-available { color: var(--status-available); border-color: rgba(59, 130, 246, 0.2); }
-.pms-status-dropdown.status-needs_cleaning { color: var(--status-needs-cleaning); border-color: rgba(239, 68, 68, 0.2); }
-.pms-status-dropdown.status-occupied { color: var(--status-occupied); border-color: rgba(16, 185, 129, 0.2); }
-.pms-status-dropdown.status-reserved { color: var(--status-reserved); border-color: rgba(245, 158, 11, 0.2); }
-.pms-status-dropdown.status-maintenance { color: var(--status-maintenance); border-color: rgba(75, 85, 99, 0.2); }
+.pms-status-dropdown.status-available { color: var(--status-available); border-color: rgba(16, 185, 129, 0.2); }
+.pms-status-dropdown.status-needs_cleaning { color: var(--status-needs-cleaning); border-color: rgba(251, 191, 36, 0.2); }
+.pms-status-dropdown.status-occupied { color: var(--status-occupied); border-color: rgba(245, 158, 11, 0.2); }
+.pms-status-dropdown.status-reserved { color: var(--status-reserved); border-color: rgba(59, 130, 246, 0.2); }
+.pms-status-dropdown.status-maintenance { color: var(--status-maintenance); border-color: rgba(239, 68, 68, 0.2); }
 
+/* ─── Console Body ───────────────────────────────────────────────── */
 .pms-body {
   padding: 20px 28px 12px;
   max-height: 60vh;
@@ -457,6 +524,7 @@
 .pms-body::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 4px; }
 .pms-body::-webkit-scrollbar-track { background: transparent; }
 
+/* ─── Sections ───────────────────────────────────────────────────── */
 .pms-section {
   margin-top: 18px;
 }
@@ -490,6 +558,7 @@
   margin: 0;
 }
 
+/* ─── Form Grid ──────────────────────────────────────────────────── */
 .pms-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -536,6 +605,7 @@
   cursor: not-allowed;
 }
 
+/* ─── Balance Display ────────────────────────────────────────────── */
 .pms-balance {
   margin-top: 12px;
   padding: 10px 16px;
@@ -560,6 +630,7 @@
 .pms-balance .amount.positive { color: #ef4444; }
 .pms-balance .amount.zero { color: #10b981; }
 
+/* ─── Console Footer ─────────────────────────────────────────────── */
 .pms-footer {
   background: var(--corp-card-bg);
   padding: 14px 28px 20px;

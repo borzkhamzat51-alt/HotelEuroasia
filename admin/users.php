@@ -1,7 +1,20 @@
 <?php
+ini_set('display_errors', 0);
+error_reporting(E_ALL);
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../db.php';
 bb_require_admin();
+
+$branches = [
+    'annex'          => 'BB Apartelle',
+    'mtv'            => 'MTV3',
+    'dormitel'       => 'ELTI Dormitel',
+    'aps'            => 'APS',
+    'euroasia_stall' => 'Euroasia Stall',
+    'annex_stall'    => 'Annex Stall',
+];
+$branchKey  = $_GET['branch'] ?? '';
+$branchName = $branches[$branchKey] ?? '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_id'])) {
     $deleteId = (int) $_POST['delete_id'];
@@ -16,7 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_id'])) {
             $_SESSION['users_flash'] = 'Account deleted.';
         }
     }
-    bb_redirect('admin/users.php');
+    bb_redirect('admin/users.php' . ($branchKey ? '?branch=' . urlencode($branchKey) : ''));
 }
 
 if (empty($_SESSION['csrf_token'])) {
@@ -34,7 +47,7 @@ $accounts = db_list_users();
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Users &amp; Staff · Bluebookers Admin</title>
+<title><?= $branchName ? htmlspecialchars($branchName) . ' — ' : '' ?>Users &amp; Staff · Bluebookers Admin</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,700;1,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -134,13 +147,13 @@ $accounts = db_list_users();
 </header>
 
 <!-- ── NAV BAR ─────────────────────────────────────────────────── -->
-<?php include __DIR__ . '/includes/navbar.php'; ?>
+<?php if ($branchKey): include __DIR__ . '/includes/property_navbar.php'; else: include __DIR__ . '/includes/navbar.php'; endif; ?>
 
 <!-- ── MAIN ────────────────────────────────────────────────────── -->
 <main class="users-main">
 
     <div class="users-header">
-        <h1 class="users-header__title">Users &amp; Staff</h1>
+        <h1 class="users-header__title"><?= $branchName ? htmlspecialchars($branchName) . ' — ' : '' ?>Users &amp; Staff</h1>
         <p class="users-header__sub">Manage accounts and staff permissions.</p>
     </div>
 

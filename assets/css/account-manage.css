@@ -1,0 +1,223 @@
+/* ==========================================================================
+   Bluebookers — Account Management pages
+   (Register Staff, Register Admin, Account Settings)
+
+   These are account/identity tasks, not operational PMS screens — they get
+   their own slim, compact, card-based language instead of the floor-plan/
+   calendar chrome (.property-main, .ptopbar) or the full admin nav. Built on
+   the same color tokens as style.css / property.css, so it still feels like
+   one product, just a quieter register for "managing who can get in."
+   ========================================================================== */
+
+.am-body {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, var(--sky-50, #eef5fc) 0%, #f6fafd 55%, #ffffff 100%);
+}
+
+/* --------------------------------------------------------------------
+   Slim top bar — back link, title, log out. No nav row: these pages are
+   a destination, not a section you browse around in.
+   -------------------------------------------------------------------- */
+.am-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px clamp(20px, 5vw, 48px);
+  background: var(--white, #fff);
+  border-bottom: 1px solid var(--sky-200, #c5deef);
+}
+
+.am-topbar__back {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+  color: var(--ink-700, #2c4a68);
+  font-weight: 600;
+  font-size: 0.86rem;
+  padding: 7px 14px 7px 10px;
+  border-radius: 999px;
+  transition: background 180ms var(--ease-out, ease), color 180ms var(--ease-out, ease);
+}
+.am-topbar__back svg { width: 15px; height: 15px; }
+.am-topbar__back:hover { background: var(--sky-100, #dceaf8); color: var(--blue-700, #2861b3); }
+
+.am-topbar__title {
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--ink-900, #16324f);
+  letter-spacing: 0.01em;
+}
+
+.am-topbar__logout {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--sky-100, #dceaf8);
+  border: 1px solid var(--sky-200, #c5deef);
+  border-radius: 999px;
+  padding: 7px 14px 7px 11px;
+  color: var(--ink-700, #2c4a68);
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 180ms var(--ease-out, ease), color 180ms var(--ease-out, ease);
+}
+.am-topbar__logout svg { width: 14px; height: 14px; }
+.am-topbar__logout:hover { background: var(--blue-500, #3b7dd8); color: #fff; }
+
+/* --------------------------------------------------------------------
+   Content well — compact, top-weighted (not vertically centered), so
+   tall forms don't end up swimming in whitespace.
+   -------------------------------------------------------------------- */
+.am-main {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  padding: clamp(24px, 4vh, 40px) 20px 48px;
+}
+
+.am-col {
+  width: 100%;
+  max-width: 460px;
+}
+
+.am-heading {
+  text-align: center;
+  margin-bottom: 22px;
+  opacity: 0;
+  transform: translateY(10px);
+  animation: amRise 420ms var(--ease-out, ease) forwards;
+}
+@keyframes amRise { to { opacity: 1; transform: translateY(0); } }
+
+.am-heading__eyebrow {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--blue-500, #3b7dd8);
+  margin: 0 0 6px;
+}
+
+.am-heading__title {
+  font-family: var(--font-serif, 'Playfair Display', serif);
+  font-weight: 600;
+  font-size: clamp(1.5rem, 3vw, 1.85rem);
+  color: var(--ink-900, #16324f);
+  margin: 0;
+}
+
+/* --------------------------------------------------------------------
+   Card — same DNA as .login-card, sized for a workflow form instead
+   of a one-time auth screen.
+   -------------------------------------------------------------------- */
+.am-card {
+  background: var(--white, #fff);
+  border: 1px solid var(--sky-200, #c5deef);
+  border-radius: var(--radius-lg, 18px);
+  box-shadow: var(--shadow-card, 0 12px 40px -12px rgba(28,70,130,0.18));
+  padding: 28px 28px 26px;
+  opacity: 0;
+  transform: translateY(14px);
+  animation: amRise 460ms var(--ease-out, ease) forwards;
+  animation-delay: 80ms;
+}
+
+.am-card + .am-card { margin-top: 16px; }
+
+.am-card__title {
+  font-family: var(--font-serif, 'Playfair Display', serif);
+  font-size: 1.08rem;
+  font-weight: 600;
+  color: var(--ink-900, #16324f);
+  margin: 0 0 16px;
+}
+
+/* Compact field rhythm — tighter than the default .field (18px) since
+   these forms run long (Register Staff has 6 fields + permission grid). */
+.am-card .field { margin-bottom: 14px; }
+.am-card .field:last-of-type { margin-bottom: 0; }
+
+/* Notice banners — admin-power-warning (amber) and success (green) */
+.am-notice {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  background: #fff8e9;
+  border: 1px solid #f0d49a;
+  border-radius: var(--radius-md, 12px);
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  font-size: 0.86rem;
+  line-height: 1.5;
+  color: var(--ink-700, #2c4a68);
+}
+.am-notice svg { width: 17px; height: 17px; flex-shrink: 0; margin-top: 1px; color: var(--amber, #f0a857); }
+
+.am-notice--success {
+  background: #eaf7ee;
+  border-color: #bfe5c8;
+}
+.am-notice--success svg { color: #3aa758; }
+
+/* --------------------------------------------------------------------
+   Permission checklist (Register Staff)
+   -------------------------------------------------------------------- */
+.am-perm-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-900, #16324f);
+  display: block;
+  margin: 4px 0 4px;
+}
+.am-perm-hint {
+  color: var(--ink-500, #5b7693);
+  font-size: 0.82rem;
+  margin: 0 0 10px;
+  line-height: 1.5;
+}
+.am-perm-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.am-perm-grid label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+  color: var(--ink-700, #2c4a68);
+  background: var(--sky-50, #eef5fc);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 8px);
+  padding: 8px 10px;
+  cursor: pointer;
+  transition: border-color 160ms var(--ease-out, ease), background 160ms var(--ease-out, ease);
+}
+.am-perm-grid label:has(input:checked) {
+  background: var(--sky-100, #dceaf8);
+  border-color: var(--blue-200, #b8d2ee);
+}
+.am-perm-grid input { accent-color: var(--blue-500, #3b7dd8); }
+
+.am-perm-note {
+  font-size: 0.78rem;
+  color: var(--ink-500, #5b7693);
+  background: var(--sky-50, #eef5fc);
+  border-radius: var(--radius-sm, 8px);
+  padding: 9px 12px;
+  margin: 0 0 16px;
+  line-height: 1.5;
+}
+
+@media (max-width: 480px) {
+  .am-perm-grid { grid-template-columns: 1fr; }
+  .am-card { padding: 22px 18px 20px; }
+}

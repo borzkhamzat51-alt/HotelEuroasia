@@ -52,6 +52,8 @@ $branchName = $branches[$branchKey];
     </a>
 </header>
 
+<?php include __DIR__ . '/includes/property_navbar.php'; ?>
+
 <!-- ===================== MAIN ===================== -->
 <main class="property-main">
 
@@ -61,7 +63,7 @@ $branchName = $branches[$branchKey];
     </div>
 
     <div class="action-grid">
-        <a href="layout.php?branch=<?= htmlspecialchars($branchKey) ?>" class="action-card" data-animate-item style="--d:1">
+        <a href="layout_1st_floor.php?branch=<?= htmlspecialchars($branchKey) ?>" class="action-card" data-animate-item style="--d:1">
             <span class="action-card__icon">
                 <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <rect x="4" y="4" width="7" height="7" rx="1.2" stroke="currentColor" stroke-width="1.6"/>

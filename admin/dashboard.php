@@ -5,12 +5,12 @@ bb_require_permission('dashboard');
 $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
 
 $properties = [
-    ['key' => 'annex',         'name' => 'BB Apartelle',      'tag' => 'Comfort & Style'],
-    ['key' => 'mtv',           'name' => 'MTV3',              'tag' => 'City-view rooms'],
-    ['key' => 'dormitel',      'name' => 'ELTI Dormitel',     'tag' => 'Budget-friendly stays'],
-    ['key' => 'aps',           'name' => 'APS',              'tag' => 'Attendance and payroll system'],
-    ['key' => 'euroasia_stall', 'name' => 'Euroasia Stalls',  'tag' => 'n/a'],
-    ['key' => 'annex_stall',    'name' => 'Annex Stalls',     'tag' => 'n/a'],
+    ['key' => 'annex',         'name' => 'BB Apartelle',   'tag' => 'Comfort & Style'],
+    ['key' => 'mtv',           'name' => 'MTV3',           'tag' => 'City-view rooms'],
+    ['key' => 'dormitel',      'name' => 'ELTI Dormitel',  'tag' => 'Budget-friendly stays'],
+    ['key' => 'aps',           'name' => 'APS',            'tag' => 'Attendance and payroll system'],
+    ['key' => 'euroasia_stall', 'name' => 'Euroasia Stall', 'tag' => 'n/a'],
+    ['key' => 'annex_stall',    'name' => 'Annex Stall',    'tag' => 'n/a'],
 ];
 ?>
 <!DOCTYPE html>
@@ -27,7 +27,6 @@ $properties = [
 </head>
 <body class="dashboard-body">
 
-<!-- ===================== TOP BAR ===================== -->
 <header class="topbar">
     <div class="topbar__brand">
         <span class="topbar__brand-mark">B</span>
@@ -48,10 +47,8 @@ $properties = [
     </div>
 </header>
 
-<!-- ===================== NAV BAR ===================== -->
 <?php include __DIR__ . '/includes/navbar.php'; ?>
 
-<!-- ===================== MAIN ===================== -->
 <main class="dashboard-main">
 
     <div class="dashboard-welcome" data-animate-item style="--d:0">
@@ -96,7 +93,6 @@ $properties = [
 
 </main>
 
-<!-- ===================== FOOTER ===================== -->
 <footer class="dashboard-footer">
     <p class="dashboard-footer__copy">&copy; <?= date('Y') ?> Bluebookers. All rights reserved.</p>
 </footer>

@@ -1,0 +1,157 @@
+# Bluebookers Room Sync — WebSocket Server
+
+Pushes live room updates (status, type, price, number, cleaning/maintenance
+state) AND live reservation updates (guest name, check-in/check-out dates,
+booking status — including checkout) between every open Layout and
+Calendar tab. This is a separate, small Node.js process that runs
+alongside your existing PHP/Apache/MySQL (XAMPP) stack — it does not
+replace or modify how PHP serves pages, it just watches the `rooms` and
+`reservations` tables and tells connected browser tabs when something
+changes.
+
+**This is real infrastructure, not just a code change.** It requires
+installing Node.js and keeping this process running continuously
+(typically as a background service), separate from your web server.
+Read this whole file before deploying.
+
+## What it does
+
+- Connects to your existing MySQL database (same one PHP uses).
+- Every ~1.5 seconds (configurable), checks whether any row in the
+  `rooms` table changed since the last check, and separately whether
+  any *active* reservation (or one that just changed status) is new or
+  different since the last check.
+- If something changed, pushes the new data to every connected browser
+  tab over a WebSocket connection — as a `rooms_changed` message for
+  room-level changes, or a `reservations_changed` message for guest
+  name / dates / booking-status changes.
+- Both Layout pages and the Calendar page connect to this server and
+  update their own DOM in place when a message arrives — no page
+  reload. On Calendar, a reservation transitioning to `checked_out`
+  removes its bar entirely rather than just restyling it.
+
+It does **not** receive "something changed" events from PHP directly. It
+polls the database itself, so any change to either table — from Layout,
+from Calendar, from a future feature, or from a direct DB edit — gets
+picked up automatically, with no PHP write-path needing to remember to
+notify it.
+
+The `reservations` table is never pruned (bookings are kept as a
+permanent record), so unlike `rooms` it isn't polled/diffed in full each
+cycle — only reservations that are currently active (reserved/checked
+in) or changed within the last minute are considered. This keeps the
+poll cheap regardless of how many bookings accumulate over time.
+
+## 1. Install Node.js
+
+If you don't already have it: download the LTS installer from
+https://nodejs.org and run it. Verify with:
+
+```
+node --version
+npm --version
+```
+
+## 2. Install dependencies
+
+From this folder (`ws-server/`):
+
+```
+npm install
+```
+
+This installs `ws` (WebSocket server), `mysql2` (database client), and
+`dotenv` (config loading).
+
+## 3. Configure
+
+Copy `.env.example` to `.env` and fill in your real database credentials
+— the same ones your PHP app's `config.php` uses (`DB_HOST`, `DB_NAME`,
+`DB_USER`, `DB_PASS`). Leave `WS_PORT` at `8081` unless that port is
+already in use on your server, in which case pick another and update it
+in the two browser-side files mentioned in step 5.
+
+## 4. Run it
+
+For a first test, run it in the foreground so you can see its log
+output and confirm it connects:
+
+```
+node server.js
+```
+
+You should see:
+```
+[ws-server] listening on ws://0.0.0.0:8081
+[ws-server] primed snapshot with N room(s)
+```
+
+If you see a database connection error instead, double-check `.env`.
+
+Press Ctrl+C to stop it. For real use, it needs to stay running
+continuously, which means running it as a background service rather
+than a terminal window you have to keep open:
+
+**Windows (XAMPP is commonly run on Windows):**
+- Easiest: install [PM2](https://pm2.keymetrics.io/) (`npm install -g pm2`),
+  then `pm2 start server.js --name room-sync` and `pm2 save`. Use
+  `pm2-startup` (or `pm2-windows-startup`) so it survives a reboot.
+- Alternative: [NSSM](https://nssm.cc/) to register `node server.js` as
+  a proper Windows service.
+
+**Linux/macOS:**
+- `pm2 start server.js --name room-sync && pm2 save && pm2 startup`, or
+- a systemd unit file running `node server.js` with `Restart=always`.
+
+## 5. Point the browser clients at it
+
+Both `assets/js/calendar.js` and the new `assets/js/realtime-room-sync.js`
+(included by the Layout pages) connect to:
+
+```
+ws://<page's own hostname>:8081
+```
+
+by default — it infers the hostname from whatever the browser already
+loaded the page from, so this works out of the box for `localhost`, a
+LAN IP, or a real domain, as long as the port matches `WS_PORT` in your
+`.env`. If you changed `WS_PORT`, update the matching `WS_PORT` constant
+near the top of both `calendar.js` (search for `BB_WS_PORT`) and
+`realtime-room-sync.js`.
+
+If your site is served over HTTPS, browsers will block a plain `ws://`
+connection from a secure page — you'll need `wss://` instead, which
+means putting this server behind a reverse proxy (nginx/Apache/IIS) that
+terminates TLS and forwards to `ws://localhost:8081`, or adding TLS
+directly in `server.js` via Node's `https` module. This isn't set up
+out of the box since it depends on your existing certificate setup.
+
+## Security note
+
+This first version has no authentication on the WebSocket connection
+itself — anyone who can reach the port can see everything broadcast:
+room status/type/price/number changes, and for active reservations,
+guest name and stay dates (contact info, email, address, payment, and
+other reservation fields are *not* broadcast — only what the floor-plan
+card and calendar bar already display). For a production deployment
+reachable beyond your own LAN, consider: restricting the port via
+firewall to your server's own network, adding a shared-secret token
+check in the WebSocket handshake, and the `wss://` (TLS) setup mentioned
+above.
+
+## Known limitations (not solved by this layer)
+
+- **Floor reassignment**: which floor a room appears on in Layout is
+  determined by hardcoded room-number lists in `layout.php` /
+  `layout_1st_floor.php` / `layout_2nd_floor.php` (e.g. `$leftRooms =
+  ['303','302','301']`), not a stored `floor` column. Renaming a room's
+  number to one that belongs to a different floor's hardcoded list (or
+  to no list at all) needs a manual code change to those files — this
+  sync layer propagates the *data* change everywhere correctly, but
+  it can't relocate a room between floor pages on its own.
+- **No room visibility/active flag**: the schema has no "hidden,"
+  "inactive," or similar column on `rooms` — every room that exists is
+  shown everywhere there's a room list. Building a true room-hide
+  feature would need a new schema column and changes to every
+  room-listing query, which is a separate piece of work from the sync
+  layer itself.

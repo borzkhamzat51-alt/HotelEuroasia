@@ -1,663 +1,802 @@
 /**
- * Bluebookers – Front Desk Management (Admin Layout)
- * Fully interactive inline-editing dashboard with clean guest dossier.
- * Now with auto‑save draft – your data stays even if you close the modal.
+ * Bluebookers — Calendar (Reservations)
+ * Drag & drop that actually sticks.
+ * Now updates its own source‑of‑truth after a successful save.
  */
-(function() {
+(function () {
   'use strict';
 
-  const roomModal = document.getElementById('roomModal');
-  const modalContent = document.getElementById('modalContent');
-  const modalClose = document.getElementById('modalClose');
-  
-  const isAdmin = document.body.dataset.admin === 'true'; 
+  const cfg = window.BB_CALENDAR;
 
-  // ─── SVG Icons ──────────────────────────────────────────────────
-  const ICONS = {
-    save: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;display:inline-block;vertical-align:middle;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>`,
-    walkin: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;display:inline-block;vertical-align:middle;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/><line x1="12" y1="11" x2="12" y2="15"/><line x1="10" y1="13" x2="14" y2="13"/></svg>`,
-    outOfOrder: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;display:inline-block;vertical-align:middle;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="15" x2="15" y2="15"/><line x1="9" y1="11" x2="15" y2="11"/><line x1="9" y1="19" x2="15" y2="19"/></svg>`,
-    checkin: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;display:inline-block;vertical-align:middle;"><path d="M3 12h4l2-4 2 8 2-6 2 6 2-4 2 4h4"/><path d="M3 12v4"/><path d="M21 12v4"/></svg>`,
-    checkout: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;display:inline-block;vertical-align:middle;"><path d="M13 4h6a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6"/><path d="M9 16l4-4-4-4"/><path d="M13 12H3"/></svg>`,
-    clear: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;display:inline-block;vertical-align:middle;"><path d="M20 6L9 17l-5-5"/></svg>`,
-    history: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;display:inline-block;vertical-align:middle;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
-  };
-
-  // ─── DRAFT SAVING ──────────────────────────────────────────────
-  function getDraftKey(roomId) {
-    return 'layout_draft_' + roomId;
+  function formatLocalDate(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + day;
   }
 
-  function saveDraft(roomId) {
-    const form = document.getElementById('adminRoomForm');
-    if (!form) return;
-    
-    const formData = new FormData(form);
-    const draft = {};
-    for (let [key, value] of formData.entries()) {
-      draft[key] = value;
-    }
-    const statusSelect = document.getElementById('directStatusOverride');
-    if (statusSelect) {
-      draft.status = statusSelect.value;
-    }
-    try {
-      sessionStorage.setItem(getDraftKey(roomId), JSON.stringify(draft));
-    } catch (e) {
-      // Silently fail if storage is full
-    }
-  }
+  const overlay = document.getElementById('reservationModal');
+  const content = document.getElementById('reservationModalContent');
+  const closeBtn = document.getElementById('reservationModalClose');
+  const newBtn = document.getElementById('newReservationBtn');
 
-  function loadDraft(roomId) {
-    try {
-      const raw = sessionStorage.getItem(getDraftKey(roomId));
-      if (!raw) return null;
-      return JSON.parse(raw);
-    } catch (e) {
-      return null;
-    }
-  }
+  function openModal() { overlay.hidden = false; }
+  function closeModal() { overlay.hidden = true; content.innerHTML = ''; }
 
-  function clearDraft(roomId) {
-    try {
-      sessionStorage.removeItem(getDraftKey(roomId));
-    } catch (e) {
-      // Silently fail
-    }
-  }
+  function showConfirmDialog(message, title) {
+    title = title || 'Confirm Changes';
+    return new Promise(function (resolve) {
+      const existing = document.getElementById('bbConfirmDialog');
+      if (existing) existing.remove();
 
-  // ─── Debounce helper ─────────────────────────────────────────────
-  function debounce(fn, delay) {
-    let timer = null;
-    return function(...args) {
-      clearTimeout(timer);
-      timer = setTimeout(() => fn.apply(this, args), delay);
-    };
-  }
+      const dialogOverlay = document.createElement('div');
+      dialogOverlay.id = 'bbConfirmDialog';
+      dialogOverlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.55);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;z-index:10050;padding:20px;';
+      dialogOverlay.innerHTML =
+        '<div style="background:#fff;border-radius:12px;max-width:380px;width:100%;padding:26px 24px 22px;box-shadow:0 24px 60px -12px rgba(0,0,0,0.35);text-align:center;font-family:\'Inter\',sans-serif;">' +
+          '<h3 style="margin:0 0 10px;font-size:1.05rem;font-weight:700;color:#16324f;">' + title + '</h3>' +
+          '<p style="margin:0 0 22px;font-size:0.86rem;color:#5b7693;line-height:1.55;">' + message + '</p>' +
+          '<div style="display:flex;gap:10px;justify-content:center;">' +
+            '<button type="button" id="bbConfirmCancel" style="flex:1;padding:10px 16px;border-radius:6px;border:1.5px solid #c5deef;background:#dceaf8;color:#2c4a68;font-weight:600;font-size:0.85rem;cursor:pointer;font-family:inherit;">Cancel</button>' +
+            '<button type="button" id="bbConfirmOk" style="flex:1;padding:10px 16px;border-radius:6px;border:none;background:#3b7dd8;color:#fff;font-weight:600;font-size:0.85rem;cursor:pointer;font-family:inherit;">Confirm</button>' +
+          '</div>' +
+        '</div>';
 
-  // ─── Helper: format date display ────────────────────────────────
-  function formatDateDisplay(checkIn, checkOut, status) {
-    if (status === 'available' || status === 'maintenance') return '';
-    if (!checkIn || !checkOut) return '';
-    return new Date(checkIn).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) +
-           ' - ' +
-           new Date(checkOut).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  }
+      document.body.appendChild(dialogOverlay);
 
-  // ─── Render card from its dataset ────────────────────────────────
-  function renderCard(card) {
-    const status = card.dataset.status || 'available';
-    const guestName = card.dataset.guestName || '';
-    const checkIn = card.dataset.checkIn || '';
-    const checkOut = card.dataset.checkOut || '';
-    const cleaning = card.dataset.cleaning || 'Clean';
-    const isDirty = status === 'available' && cleaning !== 'Clean';
-
-    card.className = card.className.split(' ').filter(c => !c.startsWith('status-')).join(' ');
-    card.classList.add('status-' + status);
-    if (isDirty) card.classList.add('room-card--dirty');
-    else card.classList.remove('room-card--dirty');
-
-    const datesEl = card.querySelector('.rc-dates');
-    if (datesEl) {
-      if (status === 'available') {
-        datesEl.textContent = isDirty ? 'Needs Cleaning' : 'Vacant - Ready';
-      } else if (status === 'maintenance') {
-        datesEl.textContent = 'Out of Order';
-      } else if (checkIn && checkOut) {
-        datesEl.textContent = formatDateDisplay(checkIn, checkOut, status);
-      } else {
-        datesEl.textContent = '—';
+      function cleanup(result) {
+        dialogOverlay.remove();
+        document.removeEventListener('keydown', onKey);
+        resolve(result);
       }
-    }
-
-    let guestEl = card.querySelector('.rc-guest');
-    if (guestName && (status === 'occupied' || status === 'reserved')) {
-      if (!guestEl) {
-        const content = card.querySelector('.rc-content');
-        const newGuest = document.createElement('div');
-        newGuest.className = 'rc-guest';
-        newGuest.style.cssText = 'font-weight:600; font-size:0.9rem; color:var(--blue-700); margin-top:4px;';
-        content.appendChild(newGuest);
-        guestEl = newGuest;
+      function onKey(e) {
+        if (e.key === 'Escape') cleanup(false);
       }
-      guestEl.textContent = guestName;
-    } else {
-      if (guestEl) guestEl.remove();
-    }
-  }
+      document.addEventListener('keydown', onKey);
 
-  // ─── Update card with fresh data from server ─────────────────────
-  function updateCardFromData(card, data) {
-    const room = data.room;
-    const res = data.reservation;
-
-    card.dataset.status = room.room_status;
-    card.dataset.cleaning = room.cleaning_status;
-    card.dataset.maintenance = room.maintenance_status;
-    card.dataset.lastOccupancy = room.last_occupancy || '';
-    card.dataset.notes = room.staff_notes || '';
-
-    if (res) {
-      card.dataset.guestName = res.guest_full_name || '';
-      card.dataset.checkIn = res.check_in || '';
-      card.dataset.checkOut = res.check_out || '';
-      card.dataset.phone = res.contact_number || '';
-      card.dataset.email = res.email || '';
-      card.dataset.pax = res.num_adults || 1;
-      card.dataset.address = res.address || '';
-      card.dataset.validIdType = res.valid_id_type || '';
-      card.dataset.validIdNumber = res.valid_id_number || '';
-      card.dataset.paymentMethod = res.payment_method || '';
-      card.dataset.amountPaid = res.amount_paid || 0;
-      card.dataset.totalAmount = res.total_amount || 0;
-      card.dataset.securityDeposit = res.security_deposit || 0;
-      card.dataset.roomRate = res.room_rate || 0;
-      card.dataset.specialRequests = res.special_requests || '';
-    } else {
-      card.dataset.guestName = '';
-      card.dataset.checkIn = '';
-      card.dataset.checkOut = '';
-      card.dataset.phone = '';
-      card.dataset.email = '';
-      card.dataset.pax = '';
-      card.dataset.address = '';
-      card.dataset.validIdType = '';
-      card.dataset.validIdNumber = '';
-      card.dataset.paymentMethod = '';
-      card.dataset.amountPaid = 0;
-      card.dataset.totalAmount = 0;
-      card.dataset.securityDeposit = 0;
-      card.dataset.roomRate = 0;
-      card.dataset.specialRequests = '';
-    }
-
-    renderCard(card);
-    clearDraft(card.dataset.roomId);
-  }
-
-  // ─── Live Balance Calculator ──────────────────────────────────────
-  function wireBalance() {
-    const form = document.getElementById('adminRoomForm');
-    if (!form) return;
-    
-    const totalInput = form.querySelector('input[name="total_amount"]');
-    const paidInput = form.querySelector('input[name="amount_paid"]');
-    const balanceEl = document.getElementById('liveBalance');
-    
-    if (!totalInput || !paidInput || !balanceEl) return;
-
-    function recalcBalance() {
-      const total = parseFloat(totalInput.value) || 0;
-      const paid = parseFloat(paidInput.value) || 0;
-      const remaining = total - paid;
-      
-      balanceEl.textContent = '₱' + remaining.toLocaleString(undefined, { 
-        minimumFractionDigits: 2, 
-        maximumFractionDigits: 2 
-      });
-      
-      if (remaining > 0) {
-        balanceEl.style.color = '#d93025';
-      } else if (remaining === 0 && total > 0) {
-        balanceEl.style.color = '#1e8e3e';
-      } else {
-        balanceEl.style.color = 'var(--ink-500)';
-      }
-    }
-
-    totalInput.addEventListener('input', recalcBalance);
-    paidInput.addEventListener('input', recalcBalance);
-    recalcBalance();
-  }
-
-  // ─── Open Admin Console ──────────────────────────────────────────
-  function openAdminConsole(card, overrideStatus = null) {
-    if (!isAdmin) return;
-
-    const roomId = card.dataset.roomId;
-    const number = card.dataset.roomNumber;
-    const type = (card.dataset.typeMain || '') + ' ' + (card.dataset.typeSub || '');
-    const status = overrideStatus || card.dataset.status || 'available';
-    
-    const draft = loadDraft(roomId);
-    
-    const guestName = draft?.guest_name || card.dataset.guestName || '';
-    const phone = draft?.phone || card.dataset.phone || '';
-    const email = draft?.email || card.dataset.email || '';
-    const address = draft?.address || card.dataset.address || '';
-    const validIdType = draft?.valid_id_type || card.dataset.validIdType || '';
-    const validIdNumber = draft?.valid_id_number || card.dataset.validIdNumber || '';
-    const pax = draft?.pax || card.dataset.pax || 1;
-    const ref = draft?.ref || card.dataset.ref || '';
-    const paymentMethod = draft?.payment_method || card.dataset.paymentMethod || '';
-    const amountPaid = draft?.amount_paid || card.dataset.amountPaid || 0;
-    const totalAmount = draft?.total_amount || card.dataset.totalAmount || 0;
-    const securityDeposit = draft?.security_deposit || card.dataset.securityDeposit || 0;
-    const roomRate = draft?.room_rate || card.dataset.roomRate || 0;
-    const specialRequests = draft?.special_requests || card.dataset.specialRequests || '';
-    const checkIn = draft?.check_in || card.dataset.checkIn || '';
-    const checkOut = draft?.check_out || card.dataset.checkOut || '';
-    const lastOccupancy = draft?.last_occupancy || card.dataset.lastOccupancy || '';
-    const cleaning = draft?.cleaning || card.dataset.cleaning || 'Clean';
-    const maintenance = draft?.maintenance_status || card.dataset.maintenance || 'Cleared';
-    const notes = draft?.notes || card.dataset.notes || '';
-    
-    const draftStatus = draft?.status || null;
-    const effectiveStatus = draftStatus || overrideStatus || card.dataset.status || 'available';
-
-    const displayStatus = (effectiveStatus === 'available' && cleaning !== 'Clean') ? 'needs_cleaning' : effectiveStatus;
-    const initialBalance = parseFloat(totalAmount) - parseFloat(amountPaid);
-
-    let html = `
-      <form id="adminRoomForm">
-        <div class="pms-header">
-          <div>
-            <p class="pms-eyebrow">Management Console ${draft ? '📝 Draft' : ''}</p>
-            <h2 style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
-              <span>Room ${number}</span>
-              <select id="directStatusOverride" name="status" class="pms-status-dropdown status-${displayStatus}">
-                <option value="available" ${displayStatus === 'available' ? 'selected' : ''}>Available</option>
-                <option value="needs_cleaning" ${displayStatus === 'needs_cleaning' ? 'selected' : ''}>Needs Cleaning</option>
-                <option value="occupied" ${effectiveStatus === 'occupied' ? 'selected' : ''}>Occupied</option>
-                <option value="reserved" ${effectiveStatus === 'reserved' ? 'selected' : ''}>Reserved</option>
-                <option value="maintenance" ${effectiveStatus === 'maintenance' ? 'selected' : ''}>Out of Order</option>
-              </select>
-            </h2>
-          </div>
-        </div>
-        <div class="pms-body">
-          <input type="hidden" name="action" value="save_room_data">
-          <input type="hidden" name="room_id" value="${roomId}">
-    `;
-
-    html += `
-      <div class="pms-section">
-        <h3>Guest Dossier</h3>
-        <div class="pms-grid">
-          <div class="pms-data">
-            <label>Full Name *</label>
-            <input type="text" name="guest_name" class="pms-input" value="${guestName}" placeholder="Enter guest name">
-          </div>
-          <div class="pms-data">
-            <label>Contact Number</label>
-            <input type="text" name="phone" class="pms-input" value="${phone}" placeholder="Phone number">
-          </div>
-          <div class="pms-data">
-            <label>Email Address</label>
-            <input type="email" name="email" class="pms-input" value="${email}" placeholder="Email address">
-          </div>
-          <div class="pms-data">
-            <label>Address</label>
-            <input type="text" name="address" class="pms-input" value="${address}" placeholder="Address">
-          </div>
-          <div class="pms-data">
-            <label>Valid ID Type</label>
-            <input type="text" name="valid_id_type" class="pms-input" value="${validIdType}" placeholder="e.g. Passport, Driver's License">
-          </div>
-          <div class="pms-data">
-            <label>Valid ID Number</label>
-            <input type="text" name="valid_id_number" class="pms-input" value="${validIdNumber}" placeholder="ID number">
-          </div>
-          <div class="pms-data">
-            <label>Number of Guests</label>
-            <input type="number" name="pax" class="pms-input" value="${pax}" min="1" placeholder="1">
-          </div>
-          <div class="pms-data">
-            <label>Booking Reference</label>
-            <input type="text" name="ref" class="pms-input" value="${ref}" placeholder="Auto-generated if empty">
-          </div>
-        </div>
-      </div>
-    `;
-
-    html += `
-      <div class="pms-section">
-        <h3>Reservation Details</h3>
-        <div class="pms-grid">
-          <div class="pms-data">
-            <label>Check-in Date</label>
-            <input type="date" name="check_in" class="pms-input" value="${checkIn}">
-          </div>
-          <div class="pms-data">
-            <label>Check-out Date</label>
-            <input type="date" name="check_out" class="pms-input" value="${checkOut}">
-          </div>
-          <div class="pms-data">
-            <label>Room Rate (₱)</label>
-            <input type="number" step="0.01" name="room_rate" class="pms-input" value="${roomRate}">
-          </div>
-          <div class="pms-data">
-            <label>Security Deposit (₱)</label>
-            <input type="number" step="0.01" name="security_deposit" class="pms-input" value="${securityDeposit}">
-          </div>
-          <div class="pms-data">
-            <label>Total Amount (₱)</label>
-            <input type="number" step="0.01" name="total_amount" class="pms-input" value="${totalAmount}">
-          </div>
-          <div class="pms-data">
-            <label>Amount Paid (₱)</label>
-            <input type="number" step="0.01" name="amount_paid" class="pms-input" value="${amountPaid}">
-          </div>
-          <div class="pms-data">
-            <label>Payment Method</label>
-            <select name="payment_method" class="pms-select">
-              <option value="">— Select —</option>
-              <option value="cash" ${paymentMethod === 'cash' ? 'selected' : ''}>Cash</option>
-              <option value="gcash" ${paymentMethod === 'gcash' ? 'selected' : ''}>GCash</option>
-              <option value="bank_transfer" ${paymentMethod === 'bank_transfer' ? 'selected' : ''}>Bank Transfer</option>
-              <option value="card" ${paymentMethod === 'card' ? 'selected' : ''}>Credit/Debit Card</option>
-            </select>
-          </div>
-        </div>
-        
-        <div class="pms-balance">
-          <span style="font-weight:600;">Amount Due:</span>
-          <strong id="liveBalance" style="font-size:1.1rem; margin-left:4px;">
-            ₱${initialBalance.toFixed(2)}
-          </strong>
-          <span style="font-size:0.75rem; color:var(--ink-500); margin-left:8px;">
-            (auto-calculated)
-          </span>
-        </div>
-      </div>
-    `;
-
-    html += `
-      <div class="pms-section">
-        <h3>Additional Information</h3>
-        <div class="pms-grid">
-          <div class="pms-data" style="grid-column: 1 / -1;">
-            <label>Special Requests</label>
-            <input type="text" name="special_requests" class="pms-input" value="${specialRequests}" placeholder="Any special requests?">
-          </div>
-          <div class="pms-data" style="grid-column: 1 / -1;">
-            <label>Staff Notes</label>
-            <input type="text" name="notes" class="pms-input" value="${notes}" placeholder="Enter any operational notes here...">
-          </div>
-        </div>
-      </div>
-    `;
-
-    html += `</div><div class="pms-footer">`; 
-    html += `<button type="submit" class="btn btn--primary" id="saveRoomBtn">${ICONS.save} Save</button>`;
-
-    if (effectiveStatus === 'available') {
-      html += `<button type="button" class="btn btn--secondary action-walkin">${ICONS.walkin} Walk-In</button>`;
-      html += `<button type="button" class="btn btn--outline action-maintenance">${ICONS.outOfOrder} Out of Order</button>`;
-    } else if (effectiveStatus === 'reserved') {
-      html += `<button type="button" class="btn btn--outline action-checkin" style="border-color:#1e8e3e; color:#1e8e3e;">${ICONS.checkin} Check In</button>`;
-    } else if (effectiveStatus === 'occupied') {
-      html += `<button type="button" class="btn btn--outline action-checkout" style="border-color:#d93025; color:#d93025;">${ICONS.checkout} Check Out</button>`;
-    } else if (effectiveStatus === 'maintenance') {
-      html += `<button type="button" class="btn btn--outline action-clear-maint">${ICONS.clear} Clear Out of Order</button>`;
-    }
-
-    html += `<button type="button" class="btn btn--text action-history">${ICONS.history} History</button></div></form>`;
-
-    modalContent.innerHTML = html;
-    roomModal.classList.add('is-pms-dashboard');
-    roomModal.hidden = false;
-
-    // ─── Wire up live balance ──────────────────────────────────────
-    wireBalance();
-
-    // ─── Bind Interactivity ──────────────────────────────────────────
-    const form = modalContent.querySelector('#adminRoomForm');
-    const statusSelect = modalContent.querySelector('#directStatusOverride');
-
-    // ─── Auto-save draft ────────────────────────────────────────────
-    const saveDraftDebounced = debounce(() => saveDraft(roomId), 300);
-
-    form.querySelectorAll('input, select, textarea').forEach(field => {
-      field.addEventListener('input', saveDraftDebounced);
-      field.addEventListener('change', saveDraftDebounced);
+      dialogOverlay.querySelector('#bbConfirmCancel').addEventListener('click', function () { cleanup(false); });
+      dialogOverlay.querySelector('#bbConfirmOk').addEventListener('click', function () { cleanup(true); });
+      dialogOverlay.addEventListener('click', function (e) { if (e.target === dialogOverlay) cleanup(false); });
     });
+  }
 
-    // ─── Status dropdown handler ─────────────────────────────────────
-    if (statusSelect) {
-      statusSelect.addEventListener('change', function(e) {
-        const newStatus = e.target.value;
-        saveDraft(roomId);
-        
-        const originalText = statusSelect.value;
-        statusSelect.disabled = true;
+  closeBtn.addEventListener('click', closeModal);
+  overlay.addEventListener('click', function (e) {
+    if (e.target === overlay) closeModal();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !overlay.hidden) closeModal();
+  });
 
-        const formData = new FormData();
-        formData.append('action', 'update_status');
-        formData.append('room_id', roomId);
-        formData.append('new_status', newStatus);
+  // --- Form rendering (unchanged) ----------------------------------
+  function roomOptions(selectedRoomId) {
+    return cfg.rooms.map(function (r) {
+      const sel = String(r.id) === String(selectedRoomId) ? 'selected' : '';
+      return '<option value="' + r.id + '" ' + sel + '>RM' + r.room_number + ' — ' + r.room_type + ' (₱' + Number(r.price_per_night).toLocaleString() + '/night)</option>';
+    }).join('');
+  }
 
-        fetch('/process_room_action.php', { method: 'POST', body: formData })
-          .then(res => res.json())
-          .then(data => {
-            statusSelect.disabled = false;
-            if (data.success) {
-              clearDraft(roomId);
-              if (data.data) {
-                updateCardFromData(card, data.data);
-              } else {
-                const roomStatus = newStatus === 'needs_cleaning' ? 'available' : newStatus;
-                card.dataset.status = roomStatus;
-                if (newStatus === 'needs_cleaning') {
-                  card.dataset.cleaning = 'Pending';
-                } else if (newStatus === 'available') {
-                  card.dataset.cleaning = 'Clean';
-                }
-                renderCard(card);
-              }
-              openAdminConsole(card, newStatus === 'needs_cleaning' ? 'available' : newStatus);
+  function optionList(map, selected) {
+    return Object.keys(map).map(function (key) {
+      const sel = key === selected ? 'selected' : '';
+      return '<option value="' + key + '" ' + sel + '>' + map[key] + '</option>';
+    }).join('');
+  }
+
+  function fieldError(errors, key) {
+    return errors && errors[key] ? '<span class="form-error">' + errors[key] + '</span>' : '';
+  }
+
+  function renderForm(resv, prefill, errors) {
+    resv = resv || {};
+    prefill = prefill || {};
+    const isEdit = !!resv.id;
+    const roomId = resv.room_id || prefill.room_id || (cfg.rooms[0] && cfg.rooms[0].id) || '';
+    const checkIn = resv.check_in || prefill.check_in || '';
+    const checkOut = resv.check_out || prefill.check_out || '';
+
+    let html = '';
+    html += '<h2 style="font-family:\'Playfair Display\',serif; margin-bottom:4px;">' + (isEdit ? 'Reservation Details' : 'New Reservation') + '</h2>';
+    html += '<p style="color:var(--ink-500); font-size:0.85rem; margin-bottom:6px;">' + cfg.branchLabel + '</p>';
+
+    html += '<form id="resvForm" class="resv-form" autocomplete="off">';
+    if (isEdit) html += '<input type="hidden" name="id" value="' + resv.id + '">';
+
+    html += '<h3>Guest Information</h3><div class="resv-grid">';
+    html += field('Full Name', 'guest_full_name', resv.guest_full_name, 'text', errors, true);
+    html += field('Contact Number', 'contact_number', resv.contact_number, 'text', errors);
+    html += field('Email Address', 'email', resv.email, 'email', errors);
+    html += field('Address', 'address', resv.address, 'text', errors);
+    html += field('Valid ID Type', 'valid_id_type', resv.valid_id_type, 'text', errors);
+    html += field('Valid ID Number', 'valid_id_number', resv.valid_id_number, 'text', errors);
+    html += '</div>';
+
+    html += '<h3>Booking Information</h3><div class="resv-grid">';
+    html += '<div><label for="room_id">Room Number</label><select id="room_id" name="room_id" required>' + roomOptions(roomId) + '</select>' + fieldError(errors, 'room_id') + '</div>';
+    html += '<div><label for="status">Booking Status</label><select id="status" name="status">' + optionList(cfg.statusLabels, resv.status || 'reserved') + '</select></div>';
+    html += field('Check-in Date', 'check_in', checkIn, 'date', errors, true);
+    html += field('Check-out Date', 'check_out', checkOut, 'date', errors, true);
+    html += field('Number of Adults', 'num_adults', resv.num_adults || 1, 'number', errors);
+    html += field('Number of Children', 'num_children', resv.num_children || 0, 'number', errors);
+    html += '</div>';
+
+    html += '<h3>Payment Information</h3><div class="resv-grid">';
+    html += field('Room Rate', 'room_rate', resv.room_rate || 0, 'number', errors);
+    html += field('Security Deposit', 'security_deposit', resv.security_deposit || 0, 'number', errors);
+    html += field('Total Amount', 'total_amount', resv.total_amount || 0, 'number', errors);
+    html += field('Amount Paid', 'amount_paid', resv.amount_paid || 0, 'number', errors);
+    html += '<div><label for="payment_method">Payment Method</label><select id="payment_method" name="payment_method"><option value="">— Select —</option>' + optionList(cfg.paymentLabels, resv.payment_method || '') + '</select></div>';
+    html += '</div>';
+    html += '<div class="resv-balance">Remaining Balance: <span id="resvBalance">₱0.00</span></div>';
+
+    html += '<h3>Additional Information</h3><div class="resv-grid">';
+    html += '<div class="resv-grid--full"><label for="notes">Notes</label><textarea id="notes" name="notes" rows="2">' + (resv.notes || '') + '</textarea></div>';
+    html += '<div class="resv-grid--full"><label for="special_requests">Special Requests</label><textarea id="special_requests" name="special_requests" rows="2">' + (resv.special_requests || '') + '</textarea></div>';
+    html += '</div>';
+
+    if (errors && errors._general) {
+      html += '<p class="form-error" style="margin-top:14px;">' + errors._general + '</p>';
+    }
+
+    html += '<div class="resv-actions">';
+    html += '<button type="submit" class="btn btn--primary">' + (isEdit ? 'Save Changes' : 'Create Reservation') + '</button>';
+    if (isEdit && cfg.canDelete) {
+      html += '<button type="button" class="btn btn--danger" id="resvDeleteBtn">Delete</button>';
+    }
+    html += '<button type="button" class="btn btn--secondary" id="resvCancelBtn">Cancel</button>';
+    html += '</div>';
+    html += '</form>';
+
+    if (isEdit) {
+      html += '<details class="resv-log"><summary>Activity Log</summary><ul id="resvLogList"><li>Loading…</li></ul></details>';
+    }
+
+    content.innerHTML = html;
+
+    wireBalance();
+    wireFormSubmit(isEdit, resv.id);
+    wireAutoCheckout();
+
+    document.getElementById('resvCancelBtn').addEventListener('click', closeModal);
+    if (isEdit && cfg.canDelete) {
+      document.getElementById('resvDeleteBtn').addEventListener('click', function () { deleteReservation(resv.id); });
+    }
+    if (isEdit) loadActivityLog(resv);
+
+    openModal();
+  }
+
+  function field(label, name, value, type, errors, required) {
+    value = value === undefined || value === null ? '' : value;
+    const id = name;
+    return '<div><label for="' + id + '">' + label + (required ? ' *' : '') + '</label>' +
+      '<input type="' + type + '" id="' + id + '" name="' + name + '" value="' + String(value).replace(/"/g, '&quot;') + '"' + (required ? ' required' : '') + ' autocomplete="off">' +
+      fieldError(errors, name) + '</div>';
+  }
+
+  function wireBalance() {
+    const form = document.getElementById('resvForm');
+    const balanceEl = document.getElementById('resvBalance');
+    function recalc() {
+      const total = parseFloat(form.total_amount.value) || 0;
+      const paid = parseFloat(form.amount_paid.value) || 0;
+      const remaining = total - paid;
+      balanceEl.textContent = '₱' + remaining.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      balanceEl.style.color = remaining > 0 ? '#b3433f' : 'inherit';
+    }
+    form.total_amount.addEventListener('input', recalc);
+    form.amount_paid.addEventListener('input', recalc);
+    recalc();
+  }
+
+  function wireAutoCheckout() {
+    const form = document.getElementById('resvForm');
+    const checkIn = form.check_in;
+    const checkOut = form.check_out;
+    if (!checkIn || !checkOut) return;
+    const isEdit = !!form.querySelector('input[name="id"]');
+    if (isEdit) return;
+
+    function setCheckout30Days() {
+      const dateVal = checkIn.value;
+      if (!dateVal) return;
+      const d = new Date(dateVal);
+      d.setDate(d.getDate() + 30);
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      checkOut.value = year + '-' + month + '-' + day;
+    }
+    if (checkIn.value) setCheckout30Days();
+    checkIn.addEventListener('change', setCheckout30Days);
+  }
+
+  function wireFormSubmit(isEdit, id) {
+    const form = document.getElementById('resvForm');
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      const confirmMsg = isEdit
+        ? 'Are you sure you want to save these changes to this reservation?'
+        : 'Are you sure you want to create this reservation?';
+      showConfirmDialog(confirmMsg, 'Confirm Changes').then(function (confirmed) {
+        if (!confirmed) return;
+        const fd = new FormData(form);
+        fd.append('action', isEdit ? 'update' : 'create');
+        fd.append('csrf_token', cfg.csrfToken);
+        fetch('/process_reservation.php', { method: 'POST', body: fd })
+          .then(function (r) { return r.json(); })
+          .then(function (res) {
+            if (res.success) {
+              window.location.reload();
             } else {
-              alert('Error: ' + data.message);
-              statusSelect.value = originalText;
+              const resv = isEdit ? Object.assign({ id: id }, formToObject(fd)) : formToObject(fd);
+              renderForm(resv, null, Object.assign({ _general: res.message }, res.errors || {}));
             }
           })
-          .catch(err => {
-            statusSelect.disabled = false;
-            console.error('Status update error:', err);
-            alert('Network error. Please try again.');
-            statusSelect.value = originalText;
+          .catch(function (err) {
+            console.error('[calendar.js] AJAX error:', err);
+            alert('Error: ' + (err.message || 'Something went wrong. Please try again.'));
           });
       });
-    }
+    });
+  }
 
-    // ─── Form submit (Save) ──────────────────────────────────────────
-    form.addEventListener('submit', function(e) {
-      e.preventDefault();
-      const submitBtn = form.querySelector('#saveRoomBtn');
-      const originalHTML = submitBtn.innerHTML;
-      submitBtn.innerHTML = ICONS.save + ' Saving...';
-      submitBtn.disabled = true;
+  function formToObject(fd) {
+    const obj = {};
+    fd.forEach(function (value, key) { obj[key] = value; });
+    return obj;
+  }
 
-      const formData = new FormData(form);
-
-      fetch('/process_room_action.php', { method: 'POST', body: formData })
-        .then(res => res.json())
-        .then(data => {
-          if (data.success) {
-            clearDraft(roomId);
-            if (data.data) {
-              updateCardFromData(card, data.data);
-            } else {
-              renderCard(card);
-            }
-            closeModal();
+  function deleteReservation(id) {
+    showConfirmDialog('Delete this reservation permanently? This cannot be undone.', 'Confirm Deletion').then(function (confirmed) {
+      if (!confirmed) return;
+      const fd = new FormData();
+      fd.append('action', 'delete');
+      fd.append('id', id);
+      fd.append('csrf_token', cfg.csrfToken);
+      fetch('/process_reservation.php', { method: 'POST', body: fd })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (res.success) {
+            window.location.reload();
           } else {
-            alert('Error: ' + data.message);
-            submitBtn.innerHTML = originalHTML;
-            submitBtn.disabled = false;
+            alert(res.message || 'Could not delete this reservation.');
           }
         })
-        .catch(err => {
-          alert('Network error: ' + err.message);
-          console.error(err);
-          submitBtn.innerHTML = originalHTML;
-          submitBtn.disabled = false;
+        .catch(function (err) {
+          console.error('[calendar.js] Delete AJAX error:', err);
+          alert('Error: ' + (err.message || 'Could not delete.'));
         });
     });
+  }
 
-    // ─── Quick Actions ──────────────────────────────────────────────
-    function attachQuickAction(selector, actionType, confirmMsg, targetStatus) {
-      const btn = modalContent.querySelector(selector);
-      if (!btn) return;
-      btn.addEventListener('click', () => {
-        if (!confirm(confirmMsg)) return;
-        const originalHTML = btn.innerHTML;
-        btn.innerHTML = '⏳ Processing...';
-        btn.disabled = true;
-        const formData = new FormData();
-        formData.append('action', actionType);
-        formData.append('room_id', roomId);
-        fetch('/process_room_action.php', { method: 'POST', body: formData })
-          .then(res => res.json())
-          .then(data => {
-            if (data.success) {
-              clearDraft(roomId);
-              if (data.data) {
-                updateCardFromData(card, data.data);
-              } else {
-                card.dataset.status = targetStatus;
-                if (actionType === 'check_out') {
-                  card.dataset.cleaning = 'Pending';
-                  card.dataset.guestName = '';
-                  card.dataset.checkIn = '';
-                  card.dataset.checkOut = '';
-                  card.dataset.phone = '';
-                  card.dataset.email = '';
-                  card.dataset.address = '';
-                  card.dataset.validIdType = '';
-                  card.dataset.validIdNumber = '';
-                  card.dataset.paymentMethod = '';
-                  card.dataset.amountPaid = 0;
-                  card.dataset.totalAmount = 0;
-                  card.dataset.securityDeposit = 0;
-                  card.dataset.roomRate = 0;
-                  card.dataset.specialRequests = '';
-                }
-                renderCard(card);
-              }
-              openAdminConsole(card, targetStatus);
-            } else {
-              alert('Error: ' + data.message);
-              btn.innerHTML = originalHTML;
-              btn.disabled = false;
-            }
-          })
-          .catch(err => {
-            alert('Network error: ' + err.message);
-            console.error(err);
-            btn.innerHTML = originalHTML;
-            btn.disabled = false;
-          });
-      });
+  function loadActivityLog(resv) {
+    const list = document.getElementById('resvLogList');
+    if (!list) return;
+    const entries = resv._activity || [];
+    if (entries.length === 0) {
+      list.innerHTML = '<li>No activity recorded yet.</li>';
+      return;
     }
+    list.innerHTML = entries.map(function (e) {
+      const who = e.full_name || e.username || 'Unknown';
+      const when = new Date(e.created_at.replace(' ', 'T')).toLocaleString();
+      return '<li><strong>' + e.action.charAt(0).toUpperCase() + e.action.slice(1) + '</strong> by ' + who + ' — ' + when + (e.details ? '<br>' + e.details : '') + '</li>';
+    }).join('');
+  }
 
-    attachQuickAction('.action-checkin', 'check_in', 'Confirm check-in for this guest?', 'occupied');
-    attachQuickAction('.action-checkout', 'check_out', 'Check out this guest?', 'available');
-    attachQuickAction('.action-maintenance', 'set_maintenance', 'Mark this room out of order?', 'maintenance');
-    attachQuickAction('.action-clear-maint', 'clear_maintenance', 'Mark room available?', 'available');
+  // --- Entry points ------------------------------------------------
+  newBtn.addEventListener('click', function () { renderForm(null, {}); });
 
-    const walkinBtn = modalContent.querySelector('.action-walkin');
-    if (walkinBtn) {
-      walkinBtn.addEventListener('click', () => {
-        clearDraft(roomId);
-        openAdminConsole(card, 'occupied');
-      });
-    }
-
-    const historyBtn = modalContent.querySelector('.action-history');
-    if (historyBtn) {
-      historyBtn.addEventListener('click', function() {
-        fetch('/process_room_action.php?action=get_history&room_id=' + roomId)
-          .then(res => res.json())
-          .then(data => {
-            if (data.success) {
-              showHistoryModal(roomId, data.history);
-            } else {
-              alert('Error loading history: ' + data.message);
-            }
-          })
-          .catch(err => {
-            alert('Network error: ' + err.message);
-            console.error(err);
-          });
-      });
-    }
-
-    // ─── Auto‑checkout (30 days) ─────────────────────────────────────
-    const checkInInput = form.querySelector('input[name="check_in"]');
-    const checkOutInput = form.querySelector('input[name="check_out"]');
-    if (checkInInput && checkOutInput) {
-      function setCheckout() {
-        const dateVal = checkInInput.value;
-        if (!dateVal) return;
-        const d = new Date(dateVal);
-        d.setDate(d.getDate() + 30);
-        const year = d.getFullYear();
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        checkOutInput.value = year + '-' + month + '-' + day;
-        saveDraft(roomId);
+  document.querySelectorAll('.cal-day-slot').forEach(function (slot) {
+    slot.addEventListener('click', function () {
+      const row = this.closest('.cal-row');
+      if (row && row.classList.contains('maintenance')) {
+        alert('This room is currently Out of Order. Please clear the maintenance flag on the Layout page before booking.');
+        return;
       }
-      if (checkInInput.value) setCheckout();
-      checkInInput.addEventListener('change', setCheckout);
-    }
-  }
-
-  // ─── Show History Modal ──────────────────────────────────────────
-  function showHistoryModal(roomId, history) {
-    const existing = document.getElementById('historyModal');
-    if (existing) existing.remove();
-
-    const overlay = document.createElement('div');
-    overlay.id = 'historyModal';
-    overlay.className = 'modal-overlay';
-    overlay.style.display = 'flex';
-    overlay.style.alignItems = 'center';
-    overlay.style.justifyContent = 'center';
-    overlay.style.position = 'fixed';
-    overlay.style.inset = '0';
-    overlay.style.background = 'rgba(22, 50, 79, 0.4)';
-    overlay.style.backdropFilter = 'blur(8px)';
-    overlay.style.zIndex = '10000';
-
-    let historyHtml = '<div class="modal" style="max-width:600px; max-height:80vh; overflow-y:auto; background:white; border-radius:24px; padding:30px;">';
-    historyHtml += '<h2 style="font-family:Playfair Display,serif; margin-bottom:16px;">Room ' + roomId + ' History</h2>';
-    if (history.length === 0) {
-      historyHtml += '<p>No activity recorded for this room.</p>';
-    } else {
-      historyHtml += '<ul style="list-style:none; padding:0; margin:0;">';
-      history.forEach(function(entry) {
-        const who = entry.full_name || entry.username || 'Unknown';
-        const when = new Date(entry.created_at.replace(' ', 'T')).toLocaleString();
-        historyHtml += '<li style="padding:10px 0; border-bottom:1px solid #eee;">';
-        historyHtml += '<strong>' + entry.action.charAt(0).toUpperCase() + entry.action.slice(1) + '</strong> by ' + who + ' — ' + when;
-        if (entry.details) historyHtml += '<br><span style="color:#666; font-size:0.9rem;">' + entry.details + '</span>';
-        historyHtml += '</li>';
-      });
-      historyHtml += '</ul>';
-    }
-    historyHtml += '<button class="btn btn--secondary" style="margin-top:16px;" onclick="this.closest(\'.modal-overlay\').remove()">Close</button>';
-    historyHtml += '</div>';
-
-    overlay.innerHTML = historyHtml;
-    document.body.appendChild(overlay);
-  }
-
-  // ─── Attach Click Listeners to Room Cards ──────────────────────
-  document.querySelectorAll('.room-card').forEach(card => {
-    card.addEventListener('click', function() {
-      openAdminConsole(this);
+      const roomId = slot.dataset.roomId;
+      const date = slot.dataset.date;
+      const nextDay = new Date(date + 'T00:00:00');
+      nextDay.setDate(nextDay.getDate() + 1);
+      renderForm(null, { room_id: roomId, check_in: date, check_out: formatLocalDate(nextDay) });
     });
   });
 
-  // ─── Close modal logic ──────────────────────────────────────────
-  function closeModal() {
-    roomModal.hidden = true;
-    setTimeout(() => roomModal.classList.remove('is-pms-dashboard'), 300);
+  document.querySelectorAll('.cal-label-col[data-room-id]').forEach(function (label) {
+    label.addEventListener('click', function () {
+      const row = this.closest('.cal-row');
+      if (row && row.classList.contains('maintenance')) {
+        alert('This room is currently Out of Order. Please clear the maintenance flag on the Layout page before booking.');
+        return;
+      }
+      renderForm(null, { room_id: label.dataset.roomId });
+    });
+  });
+
+  document.querySelectorAll('.cal-day-header').forEach(function (header, idx) {
+    header.style.cursor = 'pointer';
+    header.addEventListener('click', function () {
+      const slots = document.querySelectorAll('.cal-row__track .cal-day-slot');
+      const firstRoomDate = slots[idx] ? slots[idx].dataset.date : null;
+      renderForm(null, { check_in: firstRoomDate });
+    });
+  });
+
+  // ─── DRAG LOGIC (Fixed) ──────────────────────────────────────────
+  // Now uses mutable originalRow/originalTrack and updates its own state.
+  function wireBarInteractions(bar) {
+    let originalRow = bar.closest('.cal-row');
+    let originalTrack = bar.closest('.cal-row__track');
+    const isMaintenanceRow = originalRow && originalRow.classList.contains('maintenance');
+    const resv = JSON.parse(bar.dataset.reservation);
+    const draggable = !isMaintenanceRow && (resv.status === 'reserved' || resv.status === 'checked_in');
+
+    function getSlotsForTrack(track) {
+      return Array.prototype.slice.call(track.querySelectorAll('.cal-day-slot'));
+    }
+
+    function dateOffset(dateStr, slots) {
+      if (!slots || slots.length === 0) return 0;
+      const base = new Date(slots[0].dataset.date + 'T00:00:00');
+      const target = new Date(dateStr + 'T00:00:00');
+      return Math.round((target - base) / 86400000);
+    }
+
+    function dateAtOffset(idx, slots) {
+      const base = new Date(slots[0].dataset.date + 'T00:00:00');
+      const d = new Date(base);
+      d.setDate(d.getDate() + idx);
+      return formatLocalDate(d);
+    }
+
+    function mouseDayIndex(clientX, track) {
+      const rect = track.getBoundingClientRect();
+      const slots = getSlotsForTrack(track);
+      if (slots.length === 0) return 0;
+      const dayWidth = rect.width / slots.length;
+      const relX = clientX - rect.left;
+      return relX / dayWidth;
+    }
+
+    function applyPosition(startIdx, endIdx, track) {
+      const slots = getSlotsForTrack(track);
+      const total = slots.length;
+      bar.style.left = (startIdx / total * 100) + '%';
+      bar.style.width = ((endIdx - startIdx) / total * 100) + '%';
+    }
+
+    let slots = getSlotsForTrack(originalTrack);
+    let origStartIdx = dateOffset(resv.check_in, slots);
+    let origEndIdx = dateOffset(resv.check_out, slots);
+    const duration = origEndIdx - origStartIdx;
+    const totalDays = slots.length;
+    const canMove = (totalDays - duration) > 0;
+
+    if (draggable && totalDays > 0 && canMove) {
+      bar.classList.add('is-draggable');
+      if (origStartIdx >= 0 && origStartIdx <= totalDays) {
+        const leftHandle = document.createElement('span');
+        leftHandle.className = 'cal-bar__handle cal-bar__handle--left';
+        bar.appendChild(leftHandle);
+      }
+      if (origEndIdx >= 0 && origEndIdx <= totalDays) {
+        const rightHandle = document.createElement('span');
+        rightHandle.className = 'cal-bar__handle cal-bar__handle--right';
+        bar.appendChild(rightHandle);
+      }
+    }
+
+    let dragMode = null;
+    let currentTrack = originalTrack;
+    let currentRow = originalRow;
+    let offsetDays = 0;
+    let liveStartIdx = origStartIdx;
+    let liveEndIdx = origEndIdx;
+    let moved = false;
+
+    function clearDropTarget() {
+      document.querySelectorAll('.cal-row.drop-target').forEach(function (r) { r.classList.remove('drop-target'); });
+    }
+
+    function revertToOriginal() {
+      if (currentTrack !== originalTrack) {
+        originalTrack.appendChild(bar);
+        currentTrack = originalTrack;
+        currentRow = originalRow;
+        slots = getSlotsForTrack(currentTrack);
+      }
+      clearDropTarget();
+      applyPosition(origStartIdx, origEndIdx, currentTrack);
+    }
+
+    function computeOffset(clientX) {
+      const trackRect = currentTrack.getBoundingClientRect();
+      const dayWidth = trackRect.width / slots.length;
+      const barLeftPx = (parseFloat(bar.style.left) || 0) / 100 * trackRect.width;
+      const barLeftIdx = barLeftPx / dayWidth;
+      const cursorIdx = (clientX - trackRect.left) / dayWidth;
+      return Math.round(cursorIdx - barLeftIdx);
+    }
+
+    function recalculateOffset(clientX) {
+      offsetDays = computeOffset(clientX);
+    }
+
+    function onPointerDown(e) {
+      if (!draggable || totalDays === 0) return;
+      const handleSide = e.target.classList && e.target.classList.contains('cal-bar__handle--left') ? 'left'
+                        : e.target.classList && e.target.classList.contains('cal-bar__handle--right') ? 'right' : null;
+
+      e.preventDefault();
+
+      currentTrack = originalTrack;
+      currentRow = originalRow;
+      slots = getSlotsForTrack(currentTrack);
+      moved = false;
+      liveStartIdx = origStartIdx;
+      liveEndIdx = origEndIdx;
+
+      if (handleSide === 'left' && origStartIdx >= 0) {
+        dragMode = 'resize-left';
+      } else if (handleSide === 'right' && origEndIdx <= slots.length) {
+        dragMode = 'resize-right';
+      } else if (!handleSide && canMove) {
+        dragMode = 'move';
+        recalculateOffset(e.clientX);
+      } else {
+        dragMode = null;
+      }
+
+      if (dragMode) {
+        bar.classList.add('is-dragging');
+        if (dragMode !== 'move' && bar.setPointerCapture) {
+          try { bar.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+        }
+      }
+
+      document.body.style.userSelect = 'none';
+      document.addEventListener('pointermove', onPointerMove);
+      document.addEventListener('pointerup', onPointerUp);
+      e.stopPropagation();
+    }
+
+    function findRowAtY(clientY) {
+      const rows = Array.prototype.slice.call(document.querySelectorAll('.cal-row[data-room-id]'));
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i].getBoundingClientRect();
+        if (clientY >= r.top && clientY <= r.bottom) return rows[i];
+      }
+      return null;
+    }
+
+    function onPointerMove(e) {
+      if (!dragMode) return;
+      moved = true;
+
+      if (dragMode === 'move') {
+        const hoveredRow = findRowAtY(e.clientY);
+        if (hoveredRow && hoveredRow !== currentRow && !hoveredRow.classList.contains('maintenance')) {
+          const newTrack = hoveredRow.querySelector('.cal-row__track');
+          if (newTrack) {
+            newTrack.appendChild(bar);
+            currentTrack = newTrack;
+            currentRow = hoveredRow;
+            slots = getSlotsForTrack(currentTrack);
+            clearDropTarget();
+            hoveredRow.classList.add('drop-target');
+            recalculateOffset(e.clientX);
+          }
+        }
+      }
+
+      const mouseIdx = mouseDayIndex(e.clientX, currentTrack);
+
+      if (dragMode === 'move') {
+        let newStart = Math.round(mouseIdx - offsetDays);
+        const maxStart = slots.length - duration;
+        newStart = Math.max(0, Math.min(newStart, maxStart));
+        liveStartIdx = newStart;
+        liveEndIdx = liveStartIdx + duration;
+      } else if (dragMode === 'resize-left') {
+        let newStart = Math.round(mouseIdx);
+        newStart = Math.max(0, Math.min(newStart, liveEndIdx - 1));
+        liveStartIdx = newStart;
+      } else if (dragMode === 'resize-right') {
+        let newEnd = Math.round(mouseIdx);
+        newEnd = Math.min(slots.length, Math.max(newEnd, liveStartIdx + 1));
+        liveEndIdx = newEnd;
+      }
+
+      applyPosition(liveStartIdx, liveEndIdx, currentTrack);
+    }
+
+    function onPointerUp(e) {
+      document.removeEventListener('pointermove', onPointerMove);
+      document.removeEventListener('pointerup', onPointerUp);
+      document.body.style.userSelect = '';
+      bar.classList.remove('is-dragging');
+      clearDropTarget();
+      const mode = dragMode;
+      dragMode = null;
+
+      if (!mode) {
+        renderForm(resv, null);
+        return;
+      }
+
+      if (!moved) {
+        revertToOriginal();
+        renderForm(resv, null);
+        return;
+      }
+
+      const roomChanged = currentRow !== originalRow;
+      if (!roomChanged && liveStartIdx === origStartIdx && liveEndIdx === origEndIdx) {
+        return;
+      }
+
+      const finalStart = liveStartIdx;
+      const finalEnd = liveEndIdx;
+      const newCheckIn = dateAtOffset(finalStart, slots);
+      const newCheckOut = dateAtOffset(finalEnd, slots);
+      const newRoomId = currentRow.dataset.roomId;
+
+      const siblingBars = Array.prototype.slice.call(currentTrack.querySelectorAll('.cal-bar')).filter(function (b) { return b !== bar; });
+      const conflict = siblingBars.some(function (b) {
+        const other = JSON.parse(b.dataset.reservation);
+        return other.check_in < newCheckOut && other.check_out > newCheckIn;
+      });
+
+      if (conflict) {
+        alert('That would overlap another reservation in this room.');
+        revertToOriginal();
+        return;
+      }
+
+      let confirmMsg;
+      if (roomChanged && (finalStart !== origStartIdx || finalEnd !== origEndIdx)) {
+        confirmMsg = 'Move this reservation to Room ' + currentRow.querySelector('.cal-label-col').dataset.roomNumber + ', ' + newCheckIn + ' – ' + newCheckOut + '?';
+      } else if (roomChanged) {
+        confirmMsg = 'Move this reservation to Room ' + currentRow.querySelector('.cal-label-col').dataset.roomNumber + '?';
+      } else {
+        const verb = mode === 'move' ? 'move this reservation to' : 'change this reservation\'s dates to';
+        confirmMsg = 'Are you sure you want to ' + verb + ' ' + newCheckIn + ' – ' + newCheckOut + '?';
+      }
+
+      showConfirmDialog(confirmMsg, 'Confirm Changes').then(function (confirmed) {
+        if (!confirmed) {
+          revertToOriginal();
+          return;
+        }
+
+        // Build updated reservation object
+        const updatedResv = Object.assign({}, resv, {
+          check_in: newCheckIn,
+          check_out: newCheckOut,
+          room_id: parseInt(newRoomId)
+        });
+
+        const fd = new FormData();
+        fd.append('action', 'update');
+        fd.append('id', resv.id);
+        fd.append('csrf_token', cfg.csrfToken);
+        fd.append('room_id', newRoomId);
+        fd.append('guest_full_name', resv.guest_full_name || '');
+        fd.append('contact_number', resv.contact_number || '');
+        fd.append('email', resv.email || '');
+        fd.append('address', resv.address || '');
+        fd.append('valid_id_type', resv.valid_id_type || '');
+        fd.append('valid_id_number', resv.valid_id_number || '');
+        fd.append('check_in', newCheckIn);
+        fd.append('check_out', newCheckOut);
+        fd.append('num_adults', resv.num_adults || 1);
+        fd.append('num_children', resv.num_children || 0);
+        fd.append('status', resv.status);
+        fd.append('room_rate', resv.room_rate || 0);
+        fd.append('security_deposit', resv.security_deposit || 0);
+        fd.append('total_amount', resv.total_amount || 0);
+        fd.append('amount_paid', resv.amount_paid || 0);
+        fd.append('payment_method', resv.payment_method || '');
+        fd.append('notes', resv.notes || '');
+        fd.append('special_requests', resv.special_requests || '');
+
+        fetch('/process_reservation.php', { method: 'POST', body: fd })
+          .then(function (r) {
+            return r.json().catch(function () {
+              throw new Error('Server returned invalid JSON. Check PHP error log.');
+            });
+          })
+          .then(function (res) {
+            if (res.success) {
+              // ── Update the source of truth ──────────────────────────
+              Object.assign(resv, updatedResv);
+              bar.dataset.reservation = JSON.stringify(resv);
+              bar.dataset.checkIn = newCheckIn;
+              bar.dataset.checkOut = newCheckOut;
+              bar.dataset.roomId = newRoomId;
+
+              // ── Make the new location the new "original" ────────────
+              originalRow = currentRow;
+              originalTrack = currentTrack;
+              origStartIdx = liveStartIdx;
+              origEndIdx = liveEndIdx;
+
+              // ── Re-apply the position (it's already correct, but this locks it in) ──
+              applyPosition(origStartIdx, origEndIdx, currentTrack);
+
+              // ── Reload to fetch fresh server data ─────────────────────
+              window.location.reload();
+            } else {
+              alert('Server error: ' + (res.message || 'Unknown error.'));
+              revertToOriginal();
+            }
+          })
+          .catch(function (err) {
+            console.error('[DRAG] Error:', err);
+            alert('Error: ' + (err.message || 'Network error. Please try again.'));
+            revertToOriginal();
+          });
+      });
+    }
+
+    bar.addEventListener('pointerdown', onPointerDown);
   }
-  if(modalClose) modalClose.addEventListener('click', closeModal);
-  if(roomModal) { roomModal.addEventListener('click', function(e) { if (e.target === this) closeModal(); }); }
-  document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeModal(); });
+
+  // Wire all bars
+  document.querySelectorAll('.cal-bar').forEach(function (bar) {
+    try {
+      wireBarInteractions(bar);
+    } catch (err) {
+      console.error('[calendar.js] failed to wire a bar:', err);
+    }
+  });
+
+  // ─── Today line ──────────────────────────────────────────────────
+  (function wireTodayLine() {
+    const grid = document.querySelector('.cal-grid');
+    if (!grid) return;
+    let lineEl = null;
+
+    function position() {
+      const todaySlot = grid.querySelector('.cal-day-slot.is-today');
+      if (!todaySlot) return;
+      const gridRect = grid.getBoundingClientRect();
+      const slotRect = todaySlot.getBoundingClientRect();
+      if (!lineEl) {
+        lineEl = document.createElement('div');
+        lineEl.className = 'cal-today-line';
+        grid.appendChild(lineEl);
+      }
+      lineEl.style.left = (slotRect.left - gridRect.left) + 'px';
+      lineEl.style.width = slotRect.width + 'px';
+    }
+
+    position();
+    let resizeTimer = null;
+    window.addEventListener('resize', function () {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(position, 150);
+    });
+  })();
+
+  // ─── Day‑boundary lines (overlay) ──────────────────────────────
+  (function wireDayBoundaryLines() {
+    const grid = document.querySelector('.cal-grid');
+    const firstRow = grid ? grid.querySelector('.cal-row[data-room-id]') : null;
+    if (!grid || !firstRow) return;
+    const slots = Array.prototype.slice.call(firstRow.querySelectorAll('.cal-day-slot'));
+    if (slots.length === 0) return;
+
+    let lineEls = [];
+
+    function draw() {
+      lineEls.forEach(function (el) { el.remove(); });
+      lineEls = [];
+      const gridRect = grid.getBoundingClientRect();
+
+      function addLineAt(xPx) {
+        const line = document.createElement('div');
+        line.className = 'cal-day-boundary';
+        line.style.left = xPx + 'px';
+        grid.appendChild(line);
+        lineEls.push(line);
+      }
+
+      slots.forEach(function (slot) {
+        const r = slot.getBoundingClientRect();
+        addLineAt(r.left - gridRect.left);
+      });
+      const lastRect = slots[slots.length - 1].getBoundingClientRect();
+      addLineAt(lastRect.right - gridRect.left);
+    }
+
+    draw();
+    let resizeTimer = null;
+    window.addEventListener('resize', function () {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(draw, 150);
+    });
+  })();
+
+  // ─── Synced top scrollbar ──────────────────────────────────────
+  (function wireTopScroll() {
+    const topScroll = document.querySelector('.cal-top-scroll');
+    const spacer = document.querySelector('.cal-top-scroll__spacer');
+    const wrap = document.querySelector('.cal-grid-wrap');
+    const grid = document.querySelector('.cal-grid');
+    if (!topScroll || !spacer || !wrap || !grid) return;
+
+    let syncing = false;
+
+    function syncWidth() {
+      spacer.style.width = grid.scrollWidth + 'px';
+    }
+
+    topScroll.addEventListener('scroll', function () {
+      if (syncing) return;
+      syncing = true;
+      wrap.scrollLeft = topScroll.scrollLeft;
+      syncing = false;
+    });
+    wrap.addEventListener('scroll', function () {
+      if (syncing) return;
+      syncing = true;
+      topScroll.scrollLeft = wrap.scrollLeft;
+      syncing = false;
+    });
+
+    syncWidth();
+    let resizeTimer = null;
+    window.addEventListener('resize', function () {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(syncWidth, 150);
+    });
+  })();
+
+  // ─── Filters ──────────────────────────────────────────────────
+  (function wireFilters() {
+    const typeSel = document.getElementById('filterRoomType');
+    const statusSel = document.getElementById('filterRoomStatus');
+    const floorSel = document.getElementById('filterFloor');
+    const availSel = document.getElementById('filterAvailability');
+    const occSel = document.getElementById('filterOccupancy');
+    const resetBtn = document.getElementById('calFilterReset');
+    const countEl = document.getElementById('calFilterCount');
+    if (!typeSel) return;
+
+    const rows = Array.prototype.slice.call(document.querySelectorAll('.cal-row[data-room-id]'));
+
+    function applyFilters() {
+      let visible = 0;
+      rows.forEach(function (row) {
+        const show =
+          (!typeSel.value || row.dataset.roomType === typeSel.value) &&
+          (!statusSel.value || row.dataset.statusKey === statusSel.value) &&
+          (!floorSel.value || row.dataset.floor === floorSel.value) &&
+          (!availSel.value || row.dataset.available === availSel.value) &&
+          (!occSel.value || row.dataset.hasBookings === occSel.value);
+        row.style.display = show ? '' : 'none';
+        if (show) visible++;
+      });
+      if (countEl) countEl.textContent = visible + ' of ' + rows.length + ' rooms';
+    }
+
+    [typeSel, statusSel, floorSel, availSel, occSel].forEach(function (sel) {
+      sel.addEventListener('change', applyFilters);
+    });
+    if (resetBtn) {
+      resetBtn.addEventListener('click', function () {
+        typeSel.value = '';
+        statusSel.value = '';
+        floorSel.value = '';
+        availSel.value = '';
+        occSel.value = '';
+        applyFilters();
+      });
+    }
+
+    applyFilters();
+  })();
 
 })();

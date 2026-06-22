@@ -1,7 +1,20 @@
 <?php
+ini_set('display_errors', 0);
+error_reporting(E_ALL);
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../db.php';
 bb_require_permission('guests');
+
+$allBranches = [
+    'annex'          => 'BB Apartelle',
+    'mtv'            => 'MTV3',
+    'dormitel'       => 'ELTI Dormitel',
+    'aps'            => 'APS',
+    'euroasia_stall' => 'Euroasia Stall',
+    'annex_stall'    => 'Annex Stall',
+];
+$branchKey  = $_GET['branch'] ?? '';
+$branchName = $allBranches[$branchKey] ?? '';
 
 // ── Filters ──────────────────────────────────────────────────────────────────
 $search   = trim($_GET['search']   ?? '');
@@ -75,7 +88,7 @@ $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Guests · Bluebookers Admin</title>
+<title><?= $branchName ? htmlspecialchars($branchName) . ' — ' : '' ?>Guests · Bluebookers Admin</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -248,14 +261,14 @@ $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
 </header>
 
 <!-- ── NAV BAR ─────────────────────────────────────────────────── -->
-<?php include __DIR__ . '/includes/navbar.php'; ?>
+<?php if ($branchKey): include __DIR__ . '/includes/property_navbar.php'; else: include __DIR__ . '/includes/navbar.php'; endif; ?>
 
 <!-- ── MAIN ────────────────────────────────────────────────────── -->
 <main class="guests-main">
 
     <div class="guests-header">
-        <h1 class="guests-header__title">Guests &amp; Folios</h1>
-        <p class="guests-header__sub">All guest reservations across every property.</p>
+        <h1 class="guests-header__title"><?= $branchName ? htmlspecialchars($branchName) . ' — ' : '' ?>Guests &amp; Folios</h1>
+        <p class="guests-header__sub"><?= $branchName ? 'Guest reservations for ' . htmlspecialchars($branchName) : 'All guest reservations across every property.' ?></p>
     </div>
 
     <!-- Stats bar -->

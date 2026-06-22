@@ -2,8 +2,14 @@
 /**
  * process_room_action.php
  * Handles AJAX requests from the PMS Dashboard.
- * Now with robust error handling for checkout and all actions.
+ * Now: real DB updates, audit logging, and returns fresh room/reservation data.
  */
+
+// XAMPP defaults to display_errors = On which causes PHP warnings to mix
+// into JSON responses, breaking JSON.parse() on the client. Always suppress
+// display_errors on AJAX endpoints — errors are logged server-side instead.
+ini_set('display_errors', 0);
+error_reporting(E_ALL);
 
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/db.php';
@@ -57,6 +63,7 @@ if (!$room) {
     exit;
 }
 
+// Maps room_status -> reservation.status
 $reservationStatusFor = ['occupied' => 'checked_in', 'reserved' => 'reserved'];
 
 function closeActiveReservation($roomId, $userId)
@@ -65,32 +72,47 @@ function closeActiveReservation($roomId, $userId)
     if ($res) {
         db_update_reservation($res['id'], ['room_id' => $roomId, 'status' => 'checked_out', 'user_id' => $userId]);
         db_log_reservation_activity($res['id'], $userId, 'edited', 'Checked out from floor plan');
-        db_audit_log('reservation.update', 'reservation', $res['id'], $res['guest_full_name'], 'status:checked_out (from floor plan)');
     }
-    return $res; // return the closed reservation
+}
+
+/**
+ * Builds the same 'room' / 'reservation' payload shape
+ * process_reservation.php's responses carry, so calendar.js's
+ * updateRoomSidebar()/updateUIFromServer() can consume either file's
+ * response identically instead of needing a second parsing path.
+ * Re-fetches both rather than trusting in-memory state, so this can't
+ * drift from what's actually in the database.
+ */
+function freshRoomActionPayload($roomId) {
+    $freshRoom = db_find_room($roomId);
+    $activeRes = db_find_active_reservation_for_room($roomId);
+    if ($activeRes && $freshRoom) {
+        $activeRes['room_number'] = $freshRoom['room_number'];
+    }
+    return [
+        'room' => $freshRoom ? [
+            'id' => $freshRoom['id'],
+            'room_number' => $freshRoom['room_number'],
+            'room_type' => $freshRoom['room_type'],
+            'price_per_night' => $freshRoom['price_per_night'],
+            'room_status' => $freshRoom['room_status'],
+            'cleaning_status' => $freshRoom['cleaning_status'],
+        ] : null,
+        'reservation' => $activeRes ?: null,
+    ];
 }
 
 try {
     switch ($action) {
 
-        // ─── SAVE ROOM DATA ──────────────────────────────────────────
         case 'save_room_data':
             $status = $_POST['status'] ?? 'available';
             $guestName = trim($_POST['guest_name'] ?? '');
             $phone = trim($_POST['phone'] ?? '');
             $email = trim($_POST['email'] ?? '');
-            $address = trim($_POST['address'] ?? '');
-            $validIdType = trim($_POST['valid_id_type'] ?? '');
-            $validIdNumber = trim($_POST['valid_id_number'] ?? '');
             $pax = (int) ($_POST['pax'] ?? 1);
             $checkIn = $_POST['check_in'] ?? '';
             $checkOut = $_POST['check_out'] ?? '';
-            $roomRate = (float) ($_POST['room_rate'] ?? 0);
-            $securityDeposit = (float) ($_POST['security_deposit'] ?? 0);
-            $totalAmount = (float) ($_POST['total_amount'] ?? 0);
-            $amountPaid = (float) ($_POST['amount_paid'] ?? 0);
-            $paymentMethod = $_POST['payment_method'] ?? null;
-            $specialRequests = trim($_POST['special_requests'] ?? '');
             $cleaning = $_POST['cleaning'] ?? null;
             $maintenance = $_POST['maintenance_status'] ?? null;
             $lastOccupancy = $_POST['last_occupancy'] ?? null;
@@ -108,42 +130,15 @@ try {
             if (isset($reservationStatusFor[$status])) {
                 if (empty($checkIn)) $checkIn = date('Y-m-d');
                 if (empty($checkOut)) $checkOut = date('Y-m-d', strtotime($checkIn . ' +30 days'));
-
                 $data = [
-                    'room_id' => $roomId,
-                    'guest_full_name' => $guestName,
-                    'contact_number' => $phone,
-                    'email' => $email,
-                    'address' => $address,
-                    'valid_id_type' => $validIdType,
-                    'valid_id_number' => $validIdNumber,
-                    'check_in' => $checkIn,
-                    'check_out' => $checkOut,
-                    'num_adults' => max(1, $pax),
-                    'num_children' => 0,
-                    'status' => $reservationStatusFor[$status],
-                    'room_rate' => $roomRate,
-                    'security_deposit' => $securityDeposit,
-                    'total_amount' => $totalAmount,
-                    'amount_paid' => $amountPaid,
-                    'payment_method' => $paymentMethod ?: null,
-                    'notes' => $notes ?? '',
-                    'special_requests' => $specialRequests,
-                    'user_id' => $_SESSION['user_id'],
+                    'room_id' => $roomId, 'guest_full_name' => $guestName, 'contact_number' => $phone,
+                    'email' => $email, 'address' => '', 'valid_id_type' => '', 'valid_id_number' => '',
+                    'check_in' => $checkIn, 'check_out' => $checkOut, 'num_adults' => max(1, $pax),
+                    'num_children' => 0, 'status' => $reservationStatusFor[$status],
+                    'room_rate' => $room['price_per_night'], 'security_deposit' => 0, 'total_amount' => 0,
+                    'amount_paid' => 0, 'payment_method' => null, 'notes' => $notes ?? '',
+                    'special_requests' => '', 'user_id' => $_SESSION['user_id'],
                 ];
-
-                // Conflict check
-                $existingReservation = db_find_active_reservation_for_room($roomId);
-                $excludeId = $existingReservation ? $existingReservation['id'] : null;
-
-                if (db_room_has_conflict($roomId, $checkIn, $checkOut, $excludeId)) {
-                    echo json_encode([
-                        'success' => false,
-                        'message' => 'This room is already booked for that date range. Please choose different dates or check out the existing guest first.'
-                    ]);
-                    exit;
-                }
-
                 $existing = db_find_active_reservation_for_room($roomId);
                 if ($existing) {
                     db_update_reservation($existing['id'], $data);
@@ -167,6 +162,7 @@ try {
             db_update_room_meta($roomId, $cleaning, $maintenance, $lastOccupancy, $notes);
             db_audit_log('room.update', 'room', $roomId, 'RM' . $room['room_number'], 'status:' . $status);
 
+            // Return fresh data for frontend update
             $updatedRoom = db_find_room($roomId);
             $activeRes = db_find_active_reservation_for_room($roomId);
             echo json_encode([
@@ -176,61 +172,29 @@ try {
             ]);
             break;
 
-        // ─── QUICK STATUS DROPDOWN CHANGE ────────────────────────────
         case 'update_status':
             $newStatus = $_POST['new_status'] ?? 'available';
             if (!in_array($newStatus, ['available', 'occupied', 'reserved', 'maintenance', 'needs_cleaning'], true)) {
                 echo json_encode(['success' => false, 'message' => 'Invalid status.']);
                 exit;
             }
-
             $roomStatus = $newStatus === 'needs_cleaning' ? 'available' : $newStatus;
 
             if (isset($reservationStatusFor[$roomStatus])) {
-                // Conflict check
-                $checkIn = date('Y-m-d');
-                $checkOut = date('Y-m-d', strtotime('+30 days'));
-                $existingReservation = db_find_active_reservation_for_room($roomId);
-                $excludeId = $existingReservation ? $existingReservation['id'] : null;
-
-                if (db_room_has_conflict($roomId, $checkIn, $checkOut, $excludeId)) {
-                    echo json_encode([
-                        'success' => false,
-                        'message' => 'This room is already booked for that date range. Please check out the existing guest first.'
-                    ]);
-                    exit;
-                }
-
                 $existing = db_find_active_reservation_for_room($roomId);
                 if ($existing) {
-                    db_update_reservation($existing['id'], [
-                        'room_id' => $roomId,
-                        'status' => $reservationStatusFor[$roomStatus],
-                        'user_id' => $_SESSION['user_id']
-                    ]);
+                    db_update_reservation($existing['id'], ['room_id' => $roomId, 'status' => $reservationStatusFor[$roomStatus], 'user_id' => $_SESSION['user_id']]);
                     db_log_reservation_activity($existing['id'], $_SESSION['user_id'], 'edited', "Status changed to $roomStatus");
                     db_audit_log('reservation.update', 'reservation', $existing['id'], $existing['guest_full_name'], 'status:' . $roomStatus);
                 } else {
+                    // Create a walk‑in reservation
                     $data = [
-                        'room_id' => $roomId,
-                        'guest_full_name' => 'Walk-in Guest',
-                        'contact_number' => '',
-                        'email' => '',
-                        'address' => '',
-                        'valid_id_type' => '',
-                        'valid_id_number' => '',
-                        'check_in' => date('Y-m-d'),
-                        'check_out' => date('Y-m-d', strtotime('+30 days')),
-                        'num_adults' => 1,
-                        'num_children' => 0,
-                        'status' => $reservationStatusFor[$roomStatus],
-                        'room_rate' => $room['price_per_night'],
-                        'security_deposit' => 0,
-                        'total_amount' => 0,
-                        'amount_paid' => 0,
-                        'payment_method' => null,
-                        'notes' => '',
-                        'special_requests' => '',
+                        'room_id' => $roomId, 'guest_full_name' => 'Walk-in Guest', 'contact_number' => '',
+                        'email' => '', 'address' => '', 'valid_id_type' => '', 'valid_id_number' => '',
+                        'check_in' => date('Y-m-d'), 'check_out' => date('Y-m-d', strtotime('+30 days')),
+                        'num_adults' => 1, 'num_children' => 0, 'status' => $reservationStatusFor[$roomStatus],
+                        'room_rate' => $room['price_per_night'], 'security_deposit' => 0, 'total_amount' => 0,
+                        'amount_paid' => 0, 'payment_method' => null, 'notes' => '', 'special_requests' => '',
                         'user_id' => $_SESSION['user_id'],
                     ];
                     $newId = db_create_reservation($data);
@@ -251,17 +215,9 @@ try {
 
             db_set_room_status($roomId, $roomStatus);
             db_audit_log('room.update', 'room', $roomId, 'RM' . $room['room_number'], 'status:' . $roomStatus);
-
-            $updatedRoom = db_find_room($roomId);
-            $activeRes = db_find_active_reservation_for_room($roomId);
-            echo json_encode([
-                'success' => true,
-                'message' => 'Status updated.',
-                'data' => ['room' => $updatedRoom, 'reservation' => $activeRes]
-            ]);
+            echo json_encode(array_merge(['success' => true, 'message' => 'Status updated.'], freshRoomActionPayload($roomId)));
             break;
 
-        // ─── CHECK IN ──────────────────────────────────────────────────
         case 'check_in':
             $res = db_find_active_reservation_for_room($roomId);
             if (!$res) {
@@ -272,90 +228,66 @@ try {
             db_log_reservation_activity($res['id'], $_SESSION['user_id'], 'edited', 'Checked in');
             db_audit_log('room.check_in', 'room', $roomId, 'RM' . $room['room_number'], 'guest:' . $res['guest_full_name']);
             db_set_room_status($roomId, 'occupied');
-
-            $updatedRoom = db_find_room($roomId);
-            $activeRes = db_find_active_reservation_for_room($roomId);
-            echo json_encode([
-                'success' => true,
-                'message' => 'Guest checked in.',
-                'data' => ['room' => $updatedRoom, 'reservation' => $activeRes]
-            ]);
+            echo json_encode(array_merge(['success' => true, 'message' => 'Guest checked in.'], freshRoomActionPayload($roomId)));
             break;
 
-        // ─── CHECK OUT ─────────────────────────────────────────────────
         case 'check_out':
-            try {
-                // Ensure user_id is set
-                $userId = $_SESSION['user_id'] ?? null;
-                if (!$userId) {
-                    echo json_encode(['success' => false, 'message' => 'User not logged in.']);
-                    exit;
-                }
-
-                $res = db_find_active_reservation_for_room($roomId);
-                if (!$res) {
-                    echo json_encode(['success' => false, 'message' => 'No active reservation to check out.']);
-                    exit;
-                }
-
-                // Update reservation status to checked_out
-                $updateData = [
-                    'room_id' => $roomId,
-                    'status' => 'checked_out',
-                    'user_id' => $userId,
-                ];
-                db_update_reservation($res['id'], $updateData);
-                db_log_reservation_activity($res['id'], $userId, 'edited', 'Checked out');
-                db_audit_log('room.check_out', 'room', $roomId, 'RM' . $room['room_number'], 'guest:' . $res['guest_full_name']);
-
-                // Update room status to available and set cleaning to pending
-                db_set_room_status($roomId, 'available');
-                db_update_room_meta($roomId, 'Pending', null, date('Y-m-d'), null);
-
-                $updatedRoom = db_find_room($roomId);
-                $activeRes = db_find_active_reservation_for_room($roomId);
-                echo json_encode([
-                    'success' => true,
-                    'message' => 'Guest checked out.',
-                    'data' => ['room' => $updatedRoom, 'reservation' => $activeRes]
-                ]);
-            } catch (Exception $e) {
-                error_log('Checkout error: ' . $e->getMessage());
-                echo json_encode([
-                    'success' => false,
-                    'message' => 'Checkout failed: ' . $e->getMessage()
-                ]);
+            $res = db_find_active_reservation_for_room($roomId);
+            if (!$res) {
+                echo json_encode(['success' => false, 'message' => 'No active reservation to check out.']);
+                exit;
             }
+            db_update_reservation($res['id'], ['room_id' => $roomId, 'status' => 'checked_out', 'user_id' => $_SESSION['user_id']]);
+            db_log_reservation_activity($res['id'], $_SESSION['user_id'], 'edited', 'Checked out');
+            db_audit_log('room.check_out', 'room', $roomId, 'RM' . $room['room_number'], 'guest:' . $res['guest_full_name']);
+            db_set_room_status($roomId, 'available');
+            db_update_room_meta($roomId, 'Pending', null, date('Y-m-d'), null);
+            echo json_encode(array_merge(['success' => true, 'message' => 'Guest checked out.'], freshRoomActionPayload($roomId)));
             break;
 
-        // ─── SET MAINTENANCE ──────────────────────────────────────────
         case 'set_maintenance':
             db_set_room_status($roomId, 'maintenance');
             db_update_room_meta($roomId, null, 'Pending Repair', null, null);
             db_audit_log('room.set_maintenance', 'room', $roomId, 'RM' . $room['room_number']);
-
-            $updatedRoom = db_find_room($roomId);
-            $activeRes = db_find_active_reservation_for_room($roomId);
-            echo json_encode([
-                'success' => true,
-                'message' => 'Room marked out of order.',
-                'data' => ['room' => $updatedRoom, 'reservation' => $activeRes]
-            ]);
+            echo json_encode(array_merge(['success' => true, 'message' => 'Room marked out of order.'], freshRoomActionPayload($roomId)));
             break;
 
-        // ─── CLEAR MAINTENANCE ────────────────────────────────────────
         case 'clear_maintenance':
             db_set_room_status($roomId, 'available');
             db_update_room_meta($roomId, null, 'Cleared', null, null);
             db_audit_log('room.clear_maintenance', 'room', $roomId, 'RM' . $room['room_number']);
+            echo json_encode(array_merge(['success' => true, 'message' => 'Maintenance cleared.'], freshRoomActionPayload($roomId)));
+            break;
 
-            $updatedRoom = db_find_room($roomId);
-            $activeRes = db_find_active_reservation_for_room($roomId);
-            echo json_encode([
-                'success' => true,
-                'message' => 'Maintenance cleared.',
-                'data' => ['room' => $updatedRoom, 'reservation' => $activeRes]
-            ]);
+        // Editing room number/type/price wasn't previously possible from
+        // either Layout or Calendar — these fields had no admin-facing
+        // edit path at all before this.
+        case 'update_room_details':
+            $newNumber = trim($_POST['room_number'] ?? '');
+            $newType = trim($_POST['room_type'] ?? '');
+            $newPrice = (float) ($_POST['price_per_night'] ?? 0);
+
+            if ($newNumber === '') {
+                echo json_encode(['success' => false, 'message' => 'Room number is required.']);
+                exit;
+            }
+            if ($newType === '') {
+                echo json_encode(['success' => false, 'message' => 'Room type is required.']);
+                exit;
+            }
+            if ($newPrice < 0) {
+                echo json_encode(['success' => false, 'message' => 'Price cannot be negative.']);
+                exit;
+            }
+            if (db_room_number_taken($room['branch'], $newNumber, $roomId)) {
+                echo json_encode(['success' => false, 'message' => 'Room number RM' . $newNumber . ' is already in use on this branch.']);
+                exit;
+            }
+
+            $before = 'RM' . $room['room_number'] . ' (' . $room['room_type'] . ', ₱' . $room['price_per_night'] . ')';
+            db_update_room_details($roomId, $newNumber, $newType, $newPrice);
+            db_audit_log('room.update_details', 'room', $roomId, 'RM' . $newNumber, 'was ' . $before);
+            echo json_encode(array_merge(['success' => true, 'message' => 'Room details updated.'], freshRoomActionPayload($roomId)));
             break;
 
         default:
@@ -363,5 +295,6 @@ try {
     }
 } catch (Exception $e) {
     error_log('Room action error: ' . $e->getMessage());
+    error_log('Stack trace: ' . $e->getTraceAsString());
     echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
 }
