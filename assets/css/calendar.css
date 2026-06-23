@@ -1,15 +1,9 @@
 /* ==========================================================================
-   Bluebookers — Calendar / Reservations grid
-   Rooms as rows, dates as columns. Built on property.css's tokens.
+   Bluebookers — Calendar / Reservations grid (Table‑based)
+   Fixed column widths, sticky left columns, sticky header, perfect alignment
+   All functionality preserved – CSS only
    ========================================================================== */
 
-/* property.css defines --sky-*/--ink-* but reservations.php never loads
-   that file, so every var(--sky-*)/var(--ink-*) reference below (and
-   there are many, including pre-existing ones) was silently falling back
-   to transparent/inherited rather than the intended tints — this is what
-   was flattening a lot of the page's color. Declaring just the missing
-   tokens here fixes that without touching --blue-*/--radius-*/--white,
-   which style.css already defines correctly for the rest of the page. */
 :root {
   --sky-50:  #eef5fc;
   --sky-100: #dceaf8;
@@ -17,7 +11,17 @@
   --ink-900: #16324f;
   --ink-700: #2c4a68;
   --ink-500: #5b7693;
+  --blue-500: #3b7dd8;
+  --blue-700: #2861b3;
+  --radius-lg: 18px;
   --radius-xl: 24px;
+
+  /* ── Frozen columns: fixed widths ──────────────────────────────── */
+  --frozen-col-room:     220px;
+  --frozen-col-status:   150px;
+  --frozen-col-roomno:   110px;
+  --frozen-col-category: 120px;
+  --frozen-width: calc(var(--frozen-col-room) + var(--frozen-col-status) + var(--frozen-col-roomno) + var(--frozen-col-category));
 }
 
 /* ── Two-column calendar body ──────────────────────────────────────── */
@@ -37,9 +41,8 @@
   box-shadow: var(--shadow-card);
   padding: 16px 14px 20px;
   position: sticky;
-  top: 12px;            /* stays in view while scrolling the grid */
+  top: 12px;
 }
-
 .cal-legend-panel__heading {
   font-family: var(--font-serif);
   font-size: 0.9rem;
@@ -49,12 +52,8 @@
   padding-bottom: 10px;
   border-bottom: 1px solid var(--sky-200);
 }
-
-.cal-legend-group {
-  margin-bottom: 16px;
-}
+.cal-legend-group { margin-bottom: 16px; }
 .cal-legend-group:last-child { margin-bottom: 0; }
-
 .cal-legend-group__label {
   font-size: 0.64rem;
   font-weight: 700;
@@ -63,7 +62,6 @@
   color: var(--ink-500);
   margin: 0 0 8px;
 }
-
 .cal-legend-item {
   display: flex;
   align-items: center;
@@ -74,8 +72,6 @@
   line-height: 1.3;
 }
 .cal-legend-item:last-child { margin-bottom: 0; }
-
-/* Booking bar swatches */
 .cal-legend-swatch {
   display: inline-block;
   width: 28px;
@@ -87,8 +83,6 @@
 .cal-legend-swatch--checked_in  { background: linear-gradient(135deg, #34d399, #0f7a4f); border-left: 3px solid #0a5e3c; }
 .cal-legend-swatch--checked_out { background: linear-gradient(135deg, #94a3b8, #5d6b7d); border-left: 3px solid #46525f; }
 .cal-legend-swatch--cancelled   { background: linear-gradient(135deg, #f87171, #c0202f); border-left: 3px solid #9c1824; }
-
-/* Room status pips */
 .cal-legend-pip {
   display: inline-block;
   width: 10px;
@@ -96,8 +90,6 @@
   border-radius: 50%;
   flex-shrink: 0;
 }
-
-/* Grid indicator chips */
 .cal-legend-today-chip,
 .cal-legend-weekend-chip {
   display: inline-block;
@@ -115,17 +107,13 @@
 .cal-legend-today-chip   { background: rgba(59,125,216,0.18); border: 1.5px solid rgba(59,125,216,0.35); }
 .cal-legend-weekend-chip { background: rgba(91,118,147,0.1);  border: 1.5px solid rgba(91,118,147,0.2); }
 
-/* ── Grid area (takes remaining space) ────────────────────────────── */
+/* ── Grid area ────────────────────────────────────────────────────── */
 .cal-grid-area {
   flex: 1;
-  min-width: 0;       /* let it shrink below its content width */
+  min-width: 0;
 }
 
-/* Remove old flat bottom legend */
-.cal-legend { display: none; }
-
-
-
+/* ── Toolbar and filters (unchanged) ────────────────────────────── */
 .cal-toolbar {
   display: flex;
   align-items: center;
@@ -134,7 +122,6 @@
   flex-wrap: wrap;
   margin: 8px 0 22px;
 }
-
 .cal-branch-tabs { display: flex; gap: 8px; }
 .cal-branch-tabs a {
   padding: 8px 16px;
@@ -153,7 +140,6 @@
   color: var(--white);
   box-shadow: 0 6px 16px -6px rgba(40, 97, 179, 0.55);
 }
-
 .cal-month-nav { display: flex; align-items: center; gap: 10px; }
 .cal-nav-btn, .cal-today-btn {
   display: inline-flex;
@@ -171,116 +157,6 @@
 .cal-nav-btn:hover, .cal-today-btn:hover { background: var(--sky-50); border-color: var(--blue-500); }
 .cal-month-label { font-family: 'Playfair Display', serif; font-size: 1.15rem; min-width: 160px; text-align: center; color: var(--ink-900); }
 
-/* --------------------------------------------------------------------
-   Grid
-   -------------------------------------------------------------------- */
-.cal-top-scroll {
-  overflow-x: auto;
-  overflow-y: hidden;
-  height: 14px;
-  border: 1px solid var(--sky-200);
-  border-bottom: none;
-  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-  background: var(--sky-50);
-}
-.cal-top-scroll__spacer { height: 1px; }
-.cal-grid-wrap { overflow-x: auto; border: 1px solid var(--sky-200); border-radius: 0 0 var(--radius-lg) var(--radius-lg); background: var(--white); }
-.cal-grid { min-width: max-content; position: relative; }
-.cal-today-line {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  background: rgba(59, 125, 216, 0.10);
-  border-left: 2px solid var(--blue-500);
-  border-right: 2px solid var(--blue-500);
-  pointer-events: none;
-  z-index: 1;
-}
-.cal-day-boundary {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  background: rgba(255, 255, 255, 0.85);
-  box-shadow: 0 0 0 0.5px rgba(22, 50, 79, 0.45);
-  pointer-events: none;
-  z-index: 5;
-}
-
-.cal-header-row, .cal-row { display: flex; border-bottom: 1px solid var(--sky-200); }
-.cal-header-row { background: var(--sky-50); z-index: 5; }
-.cal-row:nth-child(even) { background: rgba(238, 245, 252, 0.5); }
-.cal-row:hover { background: var(--sky-50); }
-.cal-row:hover .cal-label-col { background: var(--sky-50); }
-.cal-row.drop-target { background: rgba(59, 125, 216, 0.16) !important; }
-.cal-row.drop-target .cal-label-col { background: rgba(59, 125, 216, 0.1) !important; }
-.cal-row.drop-target .cal-row__track { box-shadow: inset 0 0 0 2px var(--blue-500); }
-
-.cal-label-col {
-  width: 250px;
-  flex-shrink: 0;
-  padding: 10px 14px 10px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  position: sticky;
-  left: 0;
-  background: var(--white);
-  z-index: 20;
-  border-right: 1px solid var(--sky-200);
-  border-left: 4px solid var(--sky-200);
-  cursor: pointer;
-  box-shadow: 3px 0 8px -2px rgba(22, 50, 79, 0.08);
-}
-.cal-row[data-status-key="available"] .cal-label-col      { border-left-color: #10b981; }
-.cal-row[data-status-key="needs_cleaning"] .cal-label-col { border-left-color: #eab308; }
-.cal-row[data-status-key="occupied"] .cal-label-col       { border-left-color: #d97706; }
-.cal-row[data-status-key="reserved"] .cal-label-col       { border-left-color: #3b82f6; }
-.cal-row.maintenance .cal-label-col                        { border-left-color: #ef4444; }
-.cal-row:nth-child(even) .cal-label-col { background: rgb(238, 245, 252); }
-.cal-label-col strong { font-size: 0.95rem; color: var(--ink-900); }
-.cal-label-col span { font-size: 0.74rem; color: var(--ink-500); }
-.cal-label-col--header {
-  background: var(--sky-50);
-  cursor: default;
-  font-size: 0.8rem;
-  font-weight: 700;
-  color: var(--ink-700);
-  justify-content: center;
-  z-index: 25;
-}
-
-/* ── Room info panel (Room / Type / Code / Status / Rate) ─────────── */
-.cal-room-top { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
-.cal-room-code {
-  font-size: 0.66rem;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  color: var(--blue-500);
-  background: var(--sky-100);
-  border-radius: 4px;
-  padding: 1px 6px;
-}
-.cal-room-type { font-size: 0.78rem; color: var(--ink-500); }
-.cal-room-meta { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 2px; }
-.cal-room-rate { font-size: 0.83rem; font-weight: 700; color: var(--ink-900); }
-
-.cal-status-pill {
-  display: inline-block;
-  font-size: 0.64rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  padding: 2px 8px;
-  border-radius: 999px;
-  white-space: nowrap;
-}
-.cal-status-pill--available        { background: #d1fae5; color: #047857; }
-.cal-status-pill--needs_cleaning   { background: #fef9c3; color: #92400e; }
-.cal-status-pill--occupied         { background: #fef3c7; color: #b45309; }
-.cal-status-pill--reserved         { background: #dbeafe; color: #1d4ed8; }
-.cal-status-pill--maintenance      { background: #fecaca; color: #b91c1c; }
-
-/* ── Filter bar ────────────────────────────────────────────────── */
 .cal-filter-bar {
   display: flex;
   align-items: flex-end;
@@ -327,35 +203,254 @@
 .cal-filter-reset:hover { background: var(--sky-200); }
 .cal-filter-count { font-size: 0.78rem; color: var(--ink-500); margin-left: auto; align-self: center; white-space: nowrap; }
 
-.cal-days-track { display: flex; flex: 1; position: relative; }
-
-.cal-day-header {
-  flex: 1;
-  min-width: 72px;
-  text-align: center;
-  padding: 10px 2px;
-  display: flex;
-  flex-direction: column;
-  border-right: 1px solid var(--sky-200);
+/* ─── Scroll container ───────────────────────────────────────────── */
+.cal-grid-wrap {
+  overflow-x: auto;
+  overflow-y: auto;
+  border: 1px solid var(--sky-200);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  background: var(--white);
 }
-.cal-day-header__num { font-weight: 700; font-size: 1rem; color: var(--ink-900); }
-.cal-day-header__wd { font-size: 0.72rem; color: var(--ink-500); text-transform: uppercase; letter-spacing: 0.03em; }
-.cal-day-header.is-today { background: rgba(59, 125, 216, 0.12); }
-.cal-day-header.is-today .cal-day-header__num { color: var(--blue-600); }
-.cal-day-header.is-weekend { background: rgba(91, 118, 147, 0.07); }
 
-.cal-row__track { height: 68px; }
-.cal-day-slot {
-  flex: 1;
+/* ─── Table grid ──────────────────────────────────────────────────── */
+.cal-grid {
+  border-collapse: collapse;
+  table-layout: fixed;
+  width: 100%;
+  min-width: max-content;
+  position: relative;
+}
+
+/* ─── Header row ──────────────────────────────────────────────────── */
+.cal-header-row {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: var(--white);
+  border-bottom: 2px solid var(--blue-200);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+
+/* ─── Sticky left block (header) ──────────────────────────────────── */
+.cal-label-col--header {
+  position: sticky;
+  left: 0;
+  z-index: 40;
+  width: var(--frozen-width);
+  min-width: var(--frozen-width);
+  max-width: var(--frozen-width);
+  padding: 0;
+  background: var(--white);
+  border-right: 1px solid var(--sky-200);
+  box-sizing: border-box;
+  height: 72px;
+  min-height: 72px;
+  max-height: 72px;
+}
+
+/* ─── Sticky left block (body rows) ───────────────────────────────── */
+.cal-label-col {
+  position: sticky;
+  left: 0;
+  z-index: 20;
+  width: var(--frozen-width);
+  min-width: var(--frozen-width);
+  max-width: var(--frozen-width);
+  padding: 0;
+  background: var(--white);
+  border-right: 1px solid var(--sky-200);
+  box-sizing: border-box;
+  height: 68px;
+  min-height: 68px;
+  max-height: 68px;
+  box-shadow: 3px 0 8px -2px rgba(22,50,79,0.08);
+}
+
+/* ─── The frozen panel grid ───────────────────────────────────────── */
+.cal-room-row {
+  display: grid;
+  grid-template-columns: var(--frozen-col-room) var(--frozen-col-status) var(--frozen-col-roomno) var(--frozen-col-category);
+  align-items: center;
+  gap: 0;
+  width: 100%;
+  height: 100%;
+  font-size: 0.82rem;
+  line-height: 1.2;
+}
+.cal-room-row--header {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--blue-700);
+  font-weight: 700;
+}
+
+/* ─── All grid cells ──────────────────────────────────────────────── */
+.cal-room-row > * {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 0 12px;
+  box-sizing: border-box;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  border-right: 1px solid #edf2f7;
+}
+.cal-room-row > *:last-child {
+  border-right: none;
+}
+
+/* ─── Individual column alignment ────────────────────────────────── */
+.cal-room-name {
+  justify-content: flex-start;
+  padding-left: 12px;
+  text-align: left;
+}
+.cal-room-number,
+.cal-room-category {
+  justify-content: center;
+  text-align: center;
+}
+.cal-status-pill {
+  justify-content: center;
+  text-align: center;
+}
+
+/* ─── Status pill ────────────────────────────────────────────────── */
+.cal-status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 110px;
+  height: 32px;
+  padding: 0 16px;
+  margin: 0 auto;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+.cal-status-pill--header {
+  background: transparent;
+  color: var(--blue-700);
+  padding: 0;
+  min-width: auto;
+  height: auto;
+  border: none;
+}
+.cal-status-pill--available        { background: #d1fae5; color: #047857; }
+.cal-status-pill--needs_cleaning   { background: #fef9c3; color: #92400e; }
+.cal-status-pill--occupied         { background: #fef3c7; color: #b45309; }
+.cal-status-pill--reserved         { background: #dbeafe; color: #1d4ed8; }
+.cal-status-pill--maintenance      { background: #fecaca; color: #b91c1c; }
+
+/* ─── Room name, number, category ───────────────────────────────── */
+.cal-room-name {
+  font-weight: 500;
+  color: var(--ink-900);
+}
+.cal-room-number {
+  font-weight: 700;
+  color: var(--ink-900);
+}
+.cal-room-category {
+  font-weight: 600;
+  color: var(--blue-700);
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+}
+
+/* ─── Maintenance badge ──────────────────────────────────────────── */
+.maintenance-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: #6c757d;
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  margin-left: 4px;
+  height: 24px;
+  line-height: 24px;
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* ─── Day headers (scrollable) ───────────────────────────────────── */
+.cal-day-header {
+  width: 72px;
   min-width: 72px;
+  max-width: 72px;
+  height: 72px;
+  padding: 4px 0;
+  background: var(--white);
+  border-right: 1px solid var(--sky-200);
+  box-sizing: border-box;
+  text-align: center;
+  vertical-align: middle;
+}
+.cal-day-header:last-child { border-right: none; }
+.cal-day-header__num {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--ink-900);
+  line-height: 1.2;
+}
+.cal-day-header__wd {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  color: var(--ink-500);
+  text-transform: uppercase;
+}
+.cal-day-header.is-today { background: rgba(59,125,216,0.10); }
+.cal-day-header.is-today .cal-day-header__num { color: var(--blue-600); }
+.cal-day-header.is-weekend { background: rgba(91,118,147,0.05); }
+
+/* ─── Body rows ───────────────────────────────────────────────────── */
+.cal-row {
+  height: 68px;
+  min-height: 68px;
+  max-height: 68px;
+  background: var(--white);
+  border-bottom: 1px solid var(--sky-200);
+}
+.cal-row:nth-child(even) { background: rgba(238,245,252,0.5); }
+.cal-row:hover { background: var(--sky-50); }
+
+/* ─── Day cells (scrollable) ────────────────────────────────────── */
+.cal-day-slot {
+  width: 72px;
+  min-width: 72px;
+  max-width: 72px;
+  height: 68px;
+  padding: 0;
   border-right: 1px solid var(--sky-200);
   cursor: pointer;
   transition: background 120ms;
+  box-sizing: border-box;
+  text-align: center;
+  vertical-align: middle;
 }
+.cal-day-slot:last-child { border-right: none; }
 .cal-day-slot:hover { background: var(--sky-50); }
-.cal-day-slot.is-today { background: rgba(59, 125, 216, 0.06); }
-.cal-day-slot.is-weekend { background: rgba(91, 118, 147, 0.04); }
+.cal-day-slot.is-today { background: rgba(59,125,216,0.06); }
+.cal-day-slot.is-weekend { background: rgba(91,118,147,0.04); }
 .cal-day-slot.is-weekend:hover { background: var(--sky-50); }
+
+/* ─── Reservation bars (inside each row, positioned absolutely) ───── */
+.cal-row__track {
+  display: none; /* hide the container – we use the row itself as the track */
+}
 
 .cal-bar {
   position: absolute;
@@ -384,56 +479,43 @@
 .cal-bar:hover { filter: brightness(1.08); transform: translateY(-1px); }
 .cal-bar span { -webkit-user-drag: none; user-drag: none; -webkit-user-select: none; user-select: none; pointer-events: none; text-shadow: 0 1px 2px rgba(0,0,0,0.25); position: sticky; left: 8px; }
 
-/* ── Draggable bars (extend / shorten / move within the same room row) ── */
-.cal-bar.is-draggable { cursor: grab; }
-.cal-bar.is-draggable.is-dragging {
-  cursor: grabbing;
-  opacity: 0.88;
-  transform: none;
-  transition: none !important;
-  box-shadow: 0 10px 24px -6px rgba(0,0,0,0.45);
-  z-index: 10;
-}
-.cal-bar__handle {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 9px;
-  cursor: ew-resize;
-  z-index: 3;
-}
-.cal-bar__handle--left { left: 0; border-radius: 3px 0 0 3px; }
-.cal-bar__handle--right { right: 0; border-radius: 0 3px 3px 0; }
-.cal-bar__handle:hover { background: rgba(255,255,255,0.35); }
+.cal-bar--reserved    { background: linear-gradient(135deg, #fbbf24, #f08c0a); border-left: 4px solid #c9670a; }
+.cal-bar--checked_in  { background: linear-gradient(135deg, #34d399, #0f7a4f); border-left: 4px solid #0a5e3c; }
+.cal-bar--checked_out { background: linear-gradient(135deg, #94a3b8, #5d6b7d); border-left: 4px solid #46525f; }
+.cal-bar--cancelled   { background: linear-gradient(135deg, #f87171, #c0202f); border-left: 4px solid #9c1824; }
 
-/* Calendar bar colours — a richer gradient per status plus a slightly
-   darker left edge, so the timeline reads with more depth than flat
-   fills while keeping each status clearly distinguishable at a glance. */
-.cal-bar--reserved {
-    background: linear-gradient(135deg, #fbbf24, #f08c0a);
-    border-left: 4px solid #c9670a;
+/* ─── Maintenance row ────────────────────────────────────────────── */
+.cal-row.maintenance .cal-day-slot {
+  background-color: #f5f5f5 !important;
+  cursor: not-allowed;
+  opacity: 0.6;
+  pointer-events: none;
 }
-.cal-bar--checked_in {
-    background: linear-gradient(135deg, #34d399, #0f7a4f);
-    border-left: 4px solid #0a5e3c;
+.cal-row.maintenance .cal-label-col {
+  background-color: #f5f5f5;
 }
-.cal-bar--checked_out {
-    background: linear-gradient(135deg, #94a3b8, #5d6b7d);
-    border-left: 4px solid #46525f;
+.cal-row.maintenance .cal-room-name {
+  color: #999;
+  text-decoration: line-through;
 }
-.cal-bar--cancelled {
-    background: linear-gradient(135deg, #f87171, #c0202f);
-    border-left: 4px solid #9c1824;
+.cal-row.maintenance .cal-status-pill {
+  background: #ddd;
+  color: #666;
 }
 
-.cal-legend i.cal-bar--reserved { background: linear-gradient(135deg, #fbbf24, #f08c0a); }
-.cal-legend i.cal-bar--checked_in { background: linear-gradient(135deg, #34d399, #0f7a4f); }
-.cal-legend i.cal-bar--checked_out { background: linear-gradient(135deg, #94a3b8, #5d6b7d); }
+/* ─── Top scrollbar ──────────────────────────────────────────────── */
+.cal-top-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  height: 14px;
+  border: 1px solid var(--sky-200);
+  border-bottom: none;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  background: var(--sky-50);
+}
+.cal-top-scroll__spacer { height: 1px; }
 
-/* --------------------------------------------------------------------
-   Modal base (this page doesn't link layout.css, so these are copied
-   from there to stay visually consistent with the rest of the admin).
-   -------------------------------------------------------------------- */
+/* ─── Modal (unchanged) ───────────────────────────────────────────── */
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -475,12 +557,6 @@
   line-height: 1;
 }
 .modal__close:hover { color: var(--blue-500); transform: rotate(90deg); }
-
-/* --------------------------------------------------------------------
-   Reservation form fields — this page doesn't use the .field__control
-   wrapper convention from style.css, so basic tag styling is scoped
-   here to .resv-form only.
-   -------------------------------------------------------------------- */
 .resv-form label { display: block; font-size: 0.78rem; font-weight: 600; color: var(--ink-700); margin-bottom: 5px; }
 .resv-form input,
 .resv-form select,
@@ -498,10 +574,7 @@
 .resv-form input:focus, .resv-form select:focus, .resv-form textarea:focus { outline: none; border-color: var(--blue-500); }
 .resv-form textarea { resize: vertical; }
 .resv-form .form-error { display: block; color: #b3433f; font-size: 0.74rem; margin-top: 4px; }
-
-
 .modal--wide .modal__content { max-width: 760px; }
-
 .resv-form h3 {
   font-family: 'Playfair Display', serif;
   font-size: 1.05rem;
@@ -514,7 +587,6 @@
 .resv-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 16px; }
 .resv-grid--full { grid-column: 1 / -1; }
 @media (max-width: 620px) { .resv-grid { grid-template-columns: 1fr; } }
-
 .resv-balance {
   background: var(--sky-50);
   border-radius: var(--radius-md);
@@ -524,80 +596,16 @@
   color: var(--ink-900);
   margin-top: 4px;
 }
-
 .resv-actions { display: flex; gap: 10px; margin-top: 22px; flex-wrap: wrap; }
 .resv-actions .btn { width: auto; padding: 12px 24px; }
 .resv-actions .btn--secondary { background: var(--sky-100); color: var(--ink-700); }
 .resv-actions .btn--secondary:hover { background: var(--sky-200); }
 .resv-actions .btn--danger { background: #b3433f; color: var(--white); }
-
 .resv-log { margin-top: 18px; border-top: 1px solid var(--sky-200); padding-top: 14px; }
 .resv-log summary { cursor: pointer; font-size: 0.85rem; font-weight: 600; color: var(--ink-700); }
 .resv-log ul { list-style: none; margin: 10px 0 0; padding: 0; font-size: 0.8rem; color: var(--ink-500); display: flex; flex-direction: column; gap: 6px; }
 
-/* ==========================================================================
-   Calendar – Out of Order (maintenance) row styling
-   ========================================================================== */
-
-/* Gray out the entire row */
-.cal-row.maintenance .cal-day-slot {
-    background-color: #f0f0f0 !important;
-    cursor: not-allowed;
-    opacity: 0.6;
-    pointer-events: none; /* prevents click on individual slots */
-}
-.cal-row.maintenance .cal-day-slot:hover {
-    background-color: #f0f0f0 !important;
-}
-.cal-row.maintenance .cal-day-slot.is-today {
-    background-color: #f0f0f0 !important;
-}
-
-/* Gray out the label column too, but keep it clickable for the badge info */
-.cal-row.maintenance .cal-label-col {
-    background-color: #f5f5f5;
-    border-right-color: #ddd;
-    cursor: default;
-}
-.cal-row.maintenance .cal-label-col strong {
-    color: #999;
-    text-decoration: line-through;
-}
-.cal-row.maintenance .cal-label-col span {
-    color: #bbb;
-}
-.cal-row.maintenance .cal-label-col .cal-status-pill {
-    color: #b91c1c;
-}
-
-/* Maintenance badge – pill next to room number */
-.maintenance-badge {
-    display: inline-block;
-    margin-top: 4px;
-    padding: 2px 12px;
-    border-radius: 999px;
-    background: #6c757d;
-    color: #fff;
-    font-size: 0.65rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    white-space: nowrap;
-}
-
-/* Any existing reservation bars on maintenance rows – faded */
-.cal-row.maintenance .cal-bar {
-    opacity: 0.5;
-    cursor: default;
-}
-.cal-row.maintenance .cal-bar:hover {
-    filter: none;
-    transform: none;
-}
-.cal-bar {
-  box-sizing: border-box; /* ensures padding doesn't add extra width */
-}
-/* ─── Selection highlight ────────────────────────────────────────── */
+/* ─── Context menu, selection, etc. ──────────────────────────────── */
 .cal-bar--selected {
   outline: 3px solid #2563eb;
   outline-offset: 2px;
@@ -605,8 +613,12 @@
   z-index: 5;
   transition: outline 0.15s, box-shadow 0.15s;
 }
-
-/* ─── Context menu styling ───────────────────────────────────────── */
+.cal-day-slot--selected {
+  background: rgba(59, 125, 216, 0.25) !important;
+  outline: 2px solid #3b7dd8;
+  outline-offset: -2px;
+  border-radius: 2px;
+}
 .context-menu {
   font-family: 'Inter', sans-serif;
 }
@@ -617,22 +629,30 @@
   color: #1a2332;
   transition: background 0.15s;
 }
-.context-menu ul li:hover {
-  background: #f0f2f5;
-}
-.cal-day-slot--selected {
-  background: rgba(59, 125, 216, 0.25) !important;
-  outline: 2px solid #3b7dd8;
-  outline-offset: -2px;
-  border-radius: 2px;
-}
-
-/* Plays on the cell once it scrolls into view after a refresh */
+.context-menu ul li:hover { background: #f0f2f5; }
 @keyframes calSlotPulse {
-  0%   { box-shadow: 0 0 0 0   rgba(59, 125, 216, 0.55); background: rgba(59, 125, 216, 0.40); }
+  0%   { box-shadow: 0 0 0 0 rgba(59, 125, 216, 0.55); background: rgba(59, 125, 216, 0.40); }
   50%  { box-shadow: 0 0 0 8px rgba(59, 125, 216, 0);    background: rgba(59, 125, 216, 0.28); }
-  100% { box-shadow: 0 0 0 0   rgba(59, 125, 216, 0);    background: rgba(59, 125, 216, 0.25); }
+  100% { box-shadow: 0 0 0 0 rgba(59, 125, 216, 0);    background: rgba(59, 125, 216, 0.25); }
 }
-.cal-day-slot--restored {
-  animation: calSlotPulse 700ms ease-out 2;
+.cal-day-slot--restored { animation: calSlotPulse 700ms ease-out 2; }
+.cal-today-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(59, 125, 216, 0.10);
+  border-left: 2px solid var(--blue-500);
+  border-right: 2px solid var(--blue-500);
+  pointer-events: none;
+  z-index: 1;
+}
+.cal-day-boundary {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 0 0.5px rgba(22, 50, 79, 0.45);
+  pointer-events: none;
+  z-index: 5;
 }

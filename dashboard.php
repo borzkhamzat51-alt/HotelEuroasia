@@ -4,14 +4,28 @@ bb_require_permission('dashboard');
 
 $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
 
+// Load saved card customizations
+$settingsFile   = __DIR__ . '/data/property_settings.json';
+$customSettings = file_exists($settingsFile)
+    ? (json_decode(file_get_contents($settingsFile), true) ?: [])
+    : [];
+
 $properties = [
-    ['key' => 'annex',         'name' => 'BB Apartelle',   'tag' => 'Comfort & Style'],
-    ['key' => 'mtv',           'name' => 'MTV3',           'tag' => 'City-view rooms'],
-    ['key' => 'dormitel',      'name' => 'ELTI Dormitel',  'tag' => 'Budget-friendly stays'],
-    ['key' => 'aps',           'name' => 'APS',            'tag' => 'Attendance and payroll system'],
+    ['key' => 'annex',          'name' => 'BB Apartelle',   'tag' => 'Comfort & Style'],
+    ['key' => 'mtv',            'name' => 'MTV3',           'tag' => 'City-view rooms'],
+    ['key' => 'dormitel',       'name' => 'ELTI Dormitel',  'tag' => 'Budget-friendly stays'],
+    ['key' => 'aps',            'name' => 'APS',            'tag' => 'Attendance and payroll system'],
     ['key' => 'euroasia_stall', 'name' => 'Euroasia Stall', 'tag' => 'n/a'],
     ['key' => 'annex_stall',    'name' => 'Annex Stall',    'tag' => 'n/a'],
 ];
+
+foreach ($properties as &$p) {
+    $c = $customSettings[$p['key']] ?? [];
+    if (!empty($c['name']))        $p['name'] = $c['name'];
+    if (!empty($c['description'])) $p['tag']  = $c['description'];
+    $p['custom_image'] = $c['image'] ?? '';
+}
+unset($p);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -53,19 +67,15 @@ $properties = [
     <?php if (bb_has_permission('guests')): ?>
         <a class="navbar__item" href="guests.php">Guests</a>
     <?php endif; ?>
-
     <?php if (bb_has_permission('billing')): ?>
         <a class="navbar__item" href="billing.php">Billing</a>
     <?php endif; ?>
-
     <?php if (bb_has_permission('reports')): ?>
         <a class="navbar__item" href="reports.php">Reports</a>
     <?php endif; ?>
-
     <?php if (bb_is_admin()): ?>
         <a class="navbar__item" href="users.php">Users &amp; Staff</a>
     <?php endif; ?>
-
     <?php if (bb_is_admin() || bb_has_permission('settings')): ?>
     <div class="navbar__dropdown" id="settingsDropdown">
         <button type="button" class="navbar__item navbar__item--dropdown" id="settingsToggle" aria-haspopup="true" aria-expanded="false">
@@ -105,9 +115,12 @@ $properties = [
         <article class="property-card" data-animate-item style="--d:<?= $i + 1 ?>">
             <a href="property.php?branch=<?= htmlspecialchars($p['key']) ?>" class="property-card__link">
                 <div class="property-card__image-frame">
+                    <?php $imgSrc = !empty($p['custom_image'])
+                        ? htmlspecialchars($p['custom_image'])
+                        : '../assets/images/properties/' . htmlspecialchars($p['key']) . '.jpg'; ?>
                     <img class="property-card__image"
-                         src="../assets/images/properties/<?= htmlspecialchars($p['key']) ?>.jpg"
-                         onerror="this.onerror=null;this.src='../assets/images/properties/<?= htmlspecialchars($p['key']) ?>.svg';"
+                         src="<?= $imgSrc ?>"
+                         <?php if (empty($p['custom_image'])): ?>onerror="this.onerror=null;this.src='../assets/images/properties/<?= htmlspecialchars($p['key']) ?>.svg';"<?php endif; ?>
                          alt="<?= htmlspecialchars($p['name']) ?>">
                     <div class="property-card__shade"></div>
                 </div>
@@ -117,10 +130,19 @@ $properties = [
                 </div>
             </a>
             <?php if (bb_has_permission('rooms')): ?>
-            <a href="property.php?branch=<?= htmlspecialchars($p['key']) ?>" class="property-card__manage" aria-label="Manage <?= htmlspecialchars($p['name']) ?>">
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15.5 4.5l3 3-9 9-3.5 1 1-3.5 9-9.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
-                <span>Manage</span>
-            </a>
+                <?php if (bb_is_admin()): ?>
+                <button type="button" class="property-card__manage"
+                        aria-label="Edit <?= htmlspecialchars($p['name']) ?>"
+                        onclick='openPropertyEdit(<?= json_encode(["key"=>$p["key"],"name"=>$p["name"],"tag"=>$p["tag"],"image"=>$p["custom_image"]]) ?>)'>
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15.5 4.5l3 3-9 9-3.5 1 1-3.5 9-9.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+                    <span>Manage</span>
+                </button>
+                <?php else: ?>
+                <a href="property.php?branch=<?= htmlspecialchars($p['key']) ?>" class="property-card__manage" aria-label="Manage <?= htmlspecialchars($p['name']) ?>">
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15.5 4.5l3 3-9 9-3.5 1 1-3.5 9-9.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+                    <span>Manage</span>
+                </a>
+                <?php endif; ?>
             <?php endif; ?>
         </article>
         <?php endforeach; ?>
@@ -133,6 +155,7 @@ $properties = [
     <p class="dashboard-footer__copy">&copy; <?= date('Y') ?> Bluebookers. All rights reserved.</p>
 </footer>
 
+<?php include __DIR__ . '/includes/prop-edit-modal.php'; ?>
 <script src="../assets/js/dashboard.js" defer></script>
 </body>
 </html>

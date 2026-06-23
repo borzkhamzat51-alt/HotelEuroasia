@@ -23,22 +23,13 @@ foreach ($reservations as $r) {
 }
 
 function formatDateDisplay($checkIn, $checkOut, $status, $isDirty = false) {
-    // Occupied/reserved: show the actual stay date range.
     if (!empty($checkIn) && !empty($checkOut)) {
         return date('M d', strtotime($checkIn)) . ' - ' . date('M d', strtotime($checkOut));
     }
-    // Vacant rooms show cleaning state as text — this is genuinely
-    // useful staff info (which rooms need cleaning before resale).
-    // Maintenance and other statuses: blank, color alone is enough.
     if ($status === 'available') return $isDirty ? 'Vacant Dirty' : 'Vacant Clean';
     return '';
 }
 
-// Mirrors reservations.php's cal_room_status_label()/cal_room_status_key()
-// exactly, so the status word/CSS hook on a room card always matches what
-// Calendar would call the same room. 'needs_cleaning' is a synthetic key
-// (same convention as the floor-plan status dropdown), not a real
-// room_status value.
 function roomStatusLabel($status, $isDirty = false) {
     if ($status === 'maintenance') return 'Out of Order';
     if ($status === 'occupied') return 'Checked In';
@@ -90,11 +81,18 @@ foreach ($rooms as $room) {
     elseif (in_array($num, $rightRooms, true)) $columns['right'][] = $roomData;
 }
 
+$branches = [
+    'annex' => 'BB Apartelle',
+    'mtv' => 'MTV3',
+    'dormitel' => 'ELTI Dormitel',
+];
+$branchName = $branches[$branch] ?? ucfirst($branch);
+
 $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
 ?>
 <!DOCTYPE html>
 <html lang="en">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>3rd Floor Plan · Bluebookers</title>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>3rd Floor Plan · <?= htmlspecialchars($branchName) ?> · Bluebookers</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../assets/css/style.css"><link rel="stylesheet" href="../assets/css/dashboard.css"><link rel="stylesheet" href="../assets/css/layout.css">

@@ -898,3 +898,18 @@ function db_report_total_outstanding($branch)
     $stmt->execute($params);
     return (float) $stmt->fetchColumn();
 }
+/**
+ * Count active checked‑in reservations for a given branch.
+ * Returns 0 if no rooms exist for that branch.
+ */
+function db_count_checked_in($branch)
+{
+    if ($branch === 'all' || $branch === null || $branch === '') {
+        $stmt = bb_db()->prepare('SELECT COUNT(*) FROM reservations r JOIN rooms ro ON ro.id = r.room_id WHERE r.status = "checked_in"');
+        $stmt->execute();
+    } else {
+        $stmt = bb_db()->prepare('SELECT COUNT(*) FROM reservations r JOIN rooms ro ON ro.id = r.room_id WHERE r.status = "checked_in" AND ro.branch = ?');
+        $stmt->execute([$branch]);
+    }
+    return (int) $stmt->fetchColumn();
+}

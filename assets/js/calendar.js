@@ -1,7 +1,8 @@
 /**
  * Bluebookers — Calendar (Reservations)
- * ... (all previous comments)
  * Fixed drag: moving a bar preserves its duration (width) exactly.
+ * Sidebar now shows: Room Name → Status → Room Number → Room Code → Category.
+ * Fixed room context menu – header excluded, roomId parsed as int.
  */
 (function () {
   'use strict';
@@ -11,15 +12,8 @@
   const STORAGE_BAR_KEY = 'bb_selected_bar';
 
   // ─── PERSISTENT CALENDAR STATE ─────────────────────────────────────
-  // Stores bar ID, selected date, and scroll position in localStorage so
-  // the calendar returns to exactly where the user was after any refresh.
-  // localStorage is used (not sessionStorage) so state survives across
-  // browser sessions, not just page reloads.
   const CAL_STATE_KEY = 'bb_cal_state_' + (cfg.branch || 'default');
 
-  // Raised during programmatic smooth scrolling so the topScroll↔wrap
-  // bidirectional sync doesn't hard-set wrap.scrollLeft and cancel the
-  // smooth animation mid-flight (see wireTopScroll below).
   let _smoothScrollActive = false;
 
   function saveCalState(patch) {
@@ -42,8 +36,6 @@
     } catch(e) {}
   }
 
-  // Throttled scroll-position saver so we don't thrash localStorage on
-  // every pixel of scroll movement.
   let _scrollSaveTimer = null;
   function saveScrollPosition() {
     if (_scrollSaveTimer) return;
@@ -54,24 +46,9 @@
     }, 200);
   }
 
-  // Also save vertical scroll when the window scrolls
   window.addEventListener('scroll', saveScrollPosition, { passive: true });
 
   // ─── SCROLL POSITION CALCULATORS ──────────────────────────────────
-  //
-  // WHY NOT getBoundingClientRect():
-  //   When an element is scrolled out of view inside overflow:auto,
-  //   browsers clip getBoundingClientRect() to the container's visible
-  //   bounds — the reported left/top are clamped, not the true layout
-  //   position. This makes the horizontal target come out as ~0, so
-  //   wrap.scrollTo() does nothing visible.
-  //
-  // THE FIX — walk offsetParent to .cal-grid:
-  //   .cal-grid has position:relative, so it IS in the offsetParent
-  //   chain. A slot's offsetLeft summed up to .cal-grid equals its
-  //   true content position within the scroll container, completely
-  //   independent of viewport clipping or current scroll state.
-
   function offsetFromGrid(el) {
     const grid = document.querySelector('.cal-grid');
     let left = 0, top = 0, node = el;
@@ -83,13 +60,11 @@
     return { left: left, top: top };
   }
 
-  // Absolute page-level top (for window.scrollTo vertical centering).
   function pageTopOf(el) {
     let top = 0, node = el;
     while (node) { top += node.offsetTop; node = node.offsetParent; }
     return top;
   }
-
 
   function formatLocalDate(d) {
     const y = d.getFullYear();
@@ -98,8 +73,50 @@
     return y + '-' + m + '-' + day;
   }
 
-  // Mirrors cal_bar_icon() in reservations.php exactly, so a bar's icon
-  // stays correct after an in-place status change (no reload).
+  // ─── Helper functions for room sidebar ────────────────────────────
+  function roomStatusLabel(room) {
+    if (room.room_status === 'maintenance') return 'Out of Order';
+    if (room.room_status === 'occupied') return 'Checked In';
+    if (room.room_status === 'reserved') return 'Reserved';
+    return (room.cleaning_status !== 'Clean') ? 'Vacant Dirty' : 'Vacant Clean';
+  }
+
+  function roomStatusKey(room) {
+    if (room.room_status === 'available' && room.cleaning_status !== 'Clean') return 'needs_cleaning';
+    return room.room_status;
+  }
+
+  const ROOM_CODE_KNOWN = {
+    'Studio w/ Veranda': 'STD-V',
+    'Studio': 'STD',
+    'Family A 1BR w/ Veranda': 'FAM-A',
+    'Family B 1BR w/ Veranda': 'FAM-B'
+  };
+  const ROOM_CODE_STOPWORDS = ['w/', 'with', 'the', 'and', '1br'];
+  function roomCode(roomType) {
+    if (ROOM_CODE_KNOWN[roomType]) return ROOM_CODE_KNOWN[roomType];
+    let letters = '';
+    (roomType || '').split(/\s+/).forEach(function (word) {
+      const clean = word.toLowerCase().replace(/^\/+|\/+$/g, '');
+      if (clean === '' || ROOM_CODE_STOPWORDS.indexOf(clean) !== -1) return;
+      letters += word.charAt(0).toUpperCase();
+    });
+    return letters !== '' ? letters.slice(0, 4) : 'RM';
+  }
+
+  function roomFloor(roomNumber) {
+    return roomNumber ? String(roomNumber).charAt(0) : '?';
+  }
+
+  function roomCategory(roomType) {
+    const t = (roomType || '').toLowerCase();
+    if (t.includes('suite')) return 'Suite';
+    if (t.includes('deluxe')) return 'Deluxe';
+    if (t.includes('family')) return 'Deluxe';
+    return 'Standard';
+  }
+
+  // ─── BAR ICONS ──────────────────────────────────────────────────────
   const BAR_ICONS = {
     checked_in: '<svg viewBox="0 0 24 24" class="cal-bar__icon" fill="none" aria-hidden="true"><path d="M5 4h6a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 12H9m0 0 3.5-3.5M9 12l3.5 3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     checked_out: '<svg viewBox="0 0 24 24" class="cal-bar__icon" fill="none" aria-hidden="true"><path d="M13 4H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 12h10m0 0-3.5-3.5M19 12l-3.5 3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -107,6 +124,7 @@
     reserved: '<svg viewBox="0 0 24 24" class="cal-bar__icon" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><path d="M12 7v5l3.5 2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
   };
 
+  // ─── MODAL ──────────────────────────────────────────────────────────
   const overlay = document.getElementById('reservationModal');
   const content = document.getElementById('reservationModalContent');
   const closeBtn = document.getElementById('reservationModalClose');
@@ -160,7 +178,7 @@
     if (e.key === 'Escape' && !overlay.hidden) closeModal();
   });
 
-  // --- Form rendering ----------------------------------
+  // ─── FORM RENDER ────────────────────────────────────────────────────
   function roomOptions(selectedRoomId) {
     return cfg.rooms.map(function (r) {
       const sel = String(r.id) === String(selectedRoomId) ? 'selected' : '';
@@ -280,12 +298,8 @@
     recalc();
   }
 
-  // ─── FORM SUBMIT – Auto‑close modal on success ────────────────────
   function wireFormSubmit(isEdit, id) {
     const form = document.getElementById('resvForm');
-    // ── Dirty room guard ──────────────────────────────────────────
-    // Warn immediately when the room dropdown changes to a dirty room,
-    // and block submission if one is somehow selected.
     const roomSel = form.querySelector('[name="room_id"]');
     function isDirtyRoom(roomId) {
       const room = cfg.rooms.find(function(r) { return String(r.id) === String(roomId); });
@@ -295,7 +309,6 @@
       roomSel.addEventListener('change', function() {
         if (isDirtyRoom(this.value)) {
           alert('This room is Vacant Dirty. Please mark it as clean before creating a reservation.');
-          // Reset to blank so the user must pick a different room
           this.value = '';
         }
       });
@@ -303,7 +316,6 @@
 
     form.addEventListener('submit', function (e) {
       e.preventDefault();
-      // Block new reservations on dirty rooms (edit of existing resv is OK)
       if (!isEdit && roomSel && isDirtyRoom(roomSel.value)) {
         alert('This room is Vacant Dirty. Please mark it as clean before creating a reservation.');
         return;
@@ -354,9 +366,6 @@
           if (res.success) {
             const bar = document.querySelector('.cal-bar[data-reservation-id="' + id + '"]');
             if (bar) bar.remove();
-            // Remove the bar first, then refresh — updateRoomSidebar
-            // recomputes "has bookings this month" by counting bars
-            // still present in the track, so ordering matters here.
             if (Array.isArray(res.rooms)) {
               res.rooms.forEach(updateRoomSidebar);
             }
@@ -386,33 +395,19 @@
     }).join('');
   }
 
-  // ─── UI Update Helpers ─────────────────────────────────────────────
+  // ─── UPDATE UI HELPERS ─────────────────────────────────────────────
   function updateUIFromServer(serverResv) {
     if (!serverResv || !serverResv.id) return;
 
     const id = serverResv.id;
     let bar = document.querySelector('.cal-bar[data-reservation-id="' + id + '"]');
 
-    // A checked-out stay is over — remove its bar rather than just
-    // restyling it, so the grid only shows active/upcoming bookings.
-    // This is deliberately specific to checked_out: cancelled keeps its
-    // existing muted-grey/strikethrough treatment and stays visible,
-    // that distinction was an earlier, separate design decision and
-    // isn't being changed here. If no bar exists yet (e.g. this arrived
-    // via WS before any bar was ever created for it), there's nothing
-    // to do either way.
     if (serverResv.status === 'checked_out') {
       if (bar) bar.remove();
       return;
     }
 
     if (!bar) {
-      // No bar exists for this reservation yet — almost always because
-      // it was just created. Previously this function only ever updated
-      // an existing bar, so a brand-new reservation simply never
-      // appeared on the grid until the next full page reload. Build the
-      // element now so "Created" actually shows up live, matching how
-      // drag/resize/status updates already do.
       const creationRow = document.querySelector('.cal-row[data-room-id="' + serverResv.room_id + '"]');
       const creationTrack = creationRow ? creationRow.querySelector('.cal-row__track') : null;
       if (!creationTrack) {
@@ -433,11 +428,6 @@
     bar.dataset.roomId = serverResv.room_id;
     bar.dataset.reservationId = id;
 
-    // A freshly-created bar has no icon/name spans yet — build the full
-    // inner structure once rather than trying to patch pieces that don't
-    // exist. Updating an existing bar still goes through the same path
-    // afterward (icon swap, class list, position), so the two cases stay
-    // in lockstep instead of slowly drifting apart as two code paths.
     if (!bar.querySelector('.cal-bar__name')) {
       bar.innerHTML = (BAR_ICONS[serverResv.status] || BAR_ICONS.reserved) + '<span class="cal-bar__name"></span>';
     }
@@ -453,17 +443,10 @@
       return !c.startsWith('cal-bar--');
     }).join(' ');
     bar.classList.add('cal-bar--' + serverResv.status);
-    // Brief confirmation flash so an in-place update (no reload) still
-    // gives clear visual feedback that the save landed.
     bar.classList.remove('cal-bar--just-updated');
-    void bar.offsetWidth; // restart the animation if it's already mid-flash
+    void bar.offsetWidth;
     bar.classList.add('cal-bar--just-updated');
 
-    // If the room changed — via the edit form's dropdown or a context-menu
-    // action, as opposed to a drag (which already reparents live during
-    // the gesture itself) — move the bar into the correct row's track so
-    // it doesn't end up sitting under the wrong room with the right dates
-    // but the wrong vertical position.
     const targetRow = document.querySelector('.cal-row[data-room-id="' + serverResv.room_id + '"]');
     if (targetRow) {
       const targetTrack = targetRow.querySelector('.cal-row__track');
@@ -479,11 +462,6 @@
         const monthDate = new Date(slots[0].dataset.date + 'T00:00:00');
         const checkIn = new Date(serverResv.check_in + 'T00:00:00');
         const checkOut = new Date(serverResv.check_out + 'T00:00:00');
-        // Deliberately unclamped and symmetric — matching dateOffset() in
-        // wireBarInteractions exactly. Clamping only startOffset while
-        // leaving endOffset free (the previous behavior) could produce a
-        // mismatched, collapsed, or even negative-width bar whenever the
-        // two ended up on opposite sides of that asymmetry.
         const startOffset = Math.round((checkIn - monthDate) / 86400000);
         const endOffset = Math.round((checkOut - monthDate) / 86400000);
         const duration = endOffset - startOffset;
@@ -494,11 +472,6 @@
       }
     }
 
-    // Drag/resize interactions are still wired per-element (a gesture
-    // needs to own its own state for its whole lifecycle), so a
-    // freshly-created bar needs this exactly once. Click-to-select and
-    // right-click are handled separately via delegation further down, so
-    // they need nothing here regardless of when this bar was created.
     if (!bar.__bbWired) {
       try {
         wireBarInteractions(bar);
@@ -512,54 +485,6 @@
     }
   }
 
-  /**
-   * Mirrors cal_room_status_label() / cal_room_status_key() / cal_room_code()
-   * / cal_room_floor() in reservations.php exactly, so the sidebar can be
-   * refreshed in place with the same labels/keys/derived values the
-   * server would have rendered.
-   */
-  function roomStatusLabel(room) {
-    if (room.room_status === 'maintenance') return 'Out of Order';
-    if (room.room_status === 'occupied') return 'Checked In';
-    if (room.room_status === 'reserved') return 'Reserved';
-    return (room.cleaning_status !== 'Clean') ? 'Vacant Dirty' : 'Vacant Clean';
-  }
-  function roomStatusKey(room) {
-    if (room.room_status === 'available' && room.cleaning_status !== 'Clean') return 'needs_cleaning';
-    return room.room_status;
-  }
-  const ROOM_CODE_KNOWN = {
-    'Studio w/ Veranda': 'STD-V',
-    'Studio': 'STD',
-    'Family A 1BR w/ Veranda': 'FAM-A',
-    'Family B 1BR w/ Veranda': 'FAM-B'
-  };
-  const ROOM_CODE_STOPWORDS = ['w/', 'with', 'the', 'and', '1br'];
-  function roomCode(roomType) {
-    if (ROOM_CODE_KNOWN[roomType]) return ROOM_CODE_KNOWN[roomType];
-    let letters = '';
-    (roomType || '').split(/\s+/).forEach(function (word) {
-      const clean = word.toLowerCase().replace(/^\/+|\/+$/g, '');
-      if (clean === '' || ROOM_CODE_STOPWORDS.indexOf(clean) !== -1) return;
-      letters += word.charAt(0).toUpperCase();
-    });
-    return letters !== '' ? letters.slice(0, 4) : 'RM';
-  }
-  function roomFloor(roomNumber) {
-    return roomNumber ? String(roomNumber).charAt(0) : '?';
-  }
-
-  /**
-   * Refreshes one room's entire sidebar panel in place — number, code,
-   * type, floor, price, status pill, availability dot, maintenance
-   * badge, and the row's filterable data attributes. Previously nothing
-   * ever touched this panel after page load, so it silently went stale
-   * not just on reservation changes but on Layout-side room edits too
-   * (renumbering, retyping, repricing, marking out of order). This is
-   * the single function both the AJAX success paths and the live
-   * WebSocket room-sync layer funnel through, so the two stay
-   * consistent rather than drifting into two separate update code paths.
-   */
   function updateRoomSidebar(room) {
     if (!room || !room.id) return;
     const row = document.querySelector('.cal-row[data-room-id="' + room.id + '"]');
@@ -571,6 +496,7 @@
     const isMaintenance = room.room_status === 'maintenance';
     const hasFullDetails = room.room_number !== undefined && room.room_type !== undefined;
     const floor = hasFullDetails ? roomFloor(room.room_number) : row.dataset.floor;
+    const category = roomCategory(room.room_type);
 
     row.classList.toggle('maintenance', isMaintenance);
     row.dataset.statusKey = statusKey;
@@ -580,12 +506,6 @@
       row.dataset.floor = floor;
     }
 
-    // Occupancy ("has bookings this month") is recomputed straight from
-    // the DOM rather than carried as separate server state — by this
-    // point in the flow every bar in this room's track is already
-    // current (updateUIFromServer/deleteReservation's bar.remove() both
-    // run before this is called), so counting bars actually present is
-    // always accurate without a second round-trip.
     const track = row.querySelector('.cal-row__track');
     const hasBookings = !!(track && track.querySelector('.cal-bar'));
     row.dataset.hasBookings = hasBookings ? '1' : '0';
@@ -593,31 +513,24 @@
     const labelCol = row.querySelector('.cal-label-col');
     if (labelCol && hasFullDetails) {
       labelCol.dataset.roomNumber = room.room_number;
-      const numberEl = labelCol.querySelector('.cal-room-id strong');
-      if (numberEl) numberEl.textContent = 'RM' + room.room_number;
-      const codeEl = labelCol.querySelector('.cal-room-code');
-      if (codeEl) codeEl.textContent = roomCode(room.room_type);
-      const typeEl = labelCol.querySelector('.cal-room-type');
-      if (typeEl) typeEl.textContent = room.room_type;
-      const floorEl = labelCol.querySelector('.cal-room-floor-chip');
-      if (floorEl) floorEl.textContent = 'Floor ' + floor;
-      const rateEl = labelCol.querySelector('.cal-room-rate');
-      if (rateEl && room.price_per_night !== undefined) {
-        rateEl.textContent = '₱' + Number(room.price_per_night).toLocaleString();
+
+      const nameEl = labelCol.querySelector('.cal-room-name');
+      if (nameEl) nameEl.textContent = room.room_type;
+
+      const pill = labelCol.querySelector('.cal-status-pill');
+      if (pill) {
+        pill.className = 'cal-status-pill cal-status-pill--' + statusKey;
+        pill.textContent = statusLabel;
       }
+
+      const numEl = labelCol.querySelector('.cal-room-number');
+      if (numEl) numEl.textContent = 'RM' + room.room_number;
+
+      const catEl = labelCol.querySelector('.cal-room-category');
+      if (catEl) catEl.textContent = category;
     }
 
-    const pill = row.querySelector('.cal-status-pill');
-    if (pill) {
-      pill.className = 'cal-status-pill cal-status-pill--' + statusKey;
-      pill.textContent = statusLabel;
-    }
-    const dot = row.querySelector('.cal-room-avail-dot');
-    if (dot) {
-      dot.className = 'cal-room-avail-dot ' + (isAvailableNow ? 'cal-room-avail-dot--available' : 'cal-room-avail-dot--unavailable');
-      dot.title = isAvailableNow ? 'Available now' : 'Not available now';
-    }
-
+    // Maintenance badge
     if (labelCol) {
       let badge = labelCol.querySelector('.maintenance-badge');
       if (isMaintenance && !badge) {
@@ -630,46 +543,27 @@
       }
     }
 
-    // The row's filterable attributes (status/availability/occupancy/
-    // type/floor) may have just changed under an active filter
-    // selection — re-apply filters so a room doesn't linger visible (or
-    // hidden) against its own current state.
     if (typeof window.__bbApplyCalFilters === 'function') {
       window.__bbApplyCalFilters();
     }
   }
 
-  /**
-   * Single entry point for "a reservation create/update AJAX call
-   * succeeded" — updates the bar itself and every room sidebar the
-   * server flagged as affected (the reservation's current room, and its
-   * previous room too if it just moved). Every create/update success
-   * handler in this file should call this instead of updateUIFromServer
-   * directly, so the sidebar-sync requirement can't be accidentally
-   * skipped by a future call site.
-   */
   function handleReservationSaveSuccess(res) {
     updateUIFromServer(res.reservation);
     if (Array.isArray(res.rooms)) {
       res.rooms.forEach(updateRoomSidebar);
     }
-    // Persist the just-saved reservation so that if the page reloads
-    // (e.g. from a manual refresh after saving) the calendar scrolls
-    // back to it automatically.
     if (res.reservation && res.reservation.id) {
       saveCalState({ barId: String(res.reservation.id), date: null });
     }
   }
 
-  // ─── Reload with cache-buster (kept as a manual fallback / for actions
-  // that don't yet return fresh data) ────────────────────────────────
   function reloadWithCacheBuster() {
     const url = new URL(window.location.href);
     url.searchParams.set('t', Date.now());
     window.location.href = url.toString();
   }
 
-  // ─── Update room status on the left label ─────────────────────────
   function updateRoomStatus(roomId, newStatus) {
     const fd = new FormData();
     fd.append('action', 'update_status');
@@ -681,10 +575,6 @@
       .then(res => res.json())
       .then(data => {
         if (data.success) {
-          // process_room_action.php now returns fresh room/reservation
-          // data on every status change (it used to return nothing but
-          // {success:true}, which is why this previously had no choice
-          // but to force a full page reload to show the result).
           if (data.room) updateRoomSidebar(data.room);
           if (data.reservation) updateUIFromServer(data.reservation);
         } else {
@@ -721,7 +611,6 @@
     }
   }
 
-  // ─── DATE SLOT HIGHLIGHTING ────────────────────────────────────────
   let selectedDate = null;
   let selectedSlotEl = null;
 
@@ -733,8 +622,6 @@
       slotEl.classList.add('cal-day-slot--selected');
       selectedSlotEl = slotEl;
       selectedDate = slotEl.dataset.date;
-      // Save both date AND room_id so restore lands on the exact cell,
-      // not just the first cell on that date across all rooms.
       saveCalState({ date: selectedDate, roomId: slotEl.dataset.roomId || null, barId: null });
     } else {
       selectedSlotEl = null;
@@ -745,16 +632,10 @@
   }
 
   // ─── SMOOTH CENTERING ─────────────────────────────────────────────
-  // Horizontal: wrap.scrollTo on .cal-grid-wrap (overflow-x: auto).
-  // Vertical:   window.scrollTo (.cal-grid-wrap has no overflow-y).
-  // Both fire simultaneously; onDone fires when both have settled.
   function smoothCenterIn(wrap, el, onDone) {
     const pos = offsetFromGrid(el);
 
-    // Center horizontally within the scroll container
     const targetLeft = Math.max(0, pos.left - wrap.clientWidth  / 2 + el.offsetWidth  / 2);
-
-    // Center vertically in the page (wrap has no vertical scroll)
     const targetTop  = Math.max(0, pageTopOf(el) - window.innerHeight / 2 + el.offsetHeight / 2);
 
     let hDone = false, vDone = false;
@@ -780,34 +661,24 @@
         emitter.removeEventListener('scroll', onScroll);
         clearTimeout(timer);
         markDone();
-      }, 1200); // safety timeout
+      }, 1200);
     }
 
     makeSettleWatcher(wrap,   wrap.scrollLeft, targetLeft, function() { hDone = true; checkBothDone(); });
     makeSettleWatcher(window, window.scrollY,  targetTop,  function() { vDone = true; checkBothDone(); });
 
-    // Raise flag BEFORE scrollTo so the topScroll→wrap sync handler
-    // (wireTopScroll) doesn't cancel the animation mid-flight.
     _smoothScrollActive = true;
     wrap.scrollTo({ left: targetLeft, behavior: 'smooth' });
     window.scrollTo({ top:  targetTop,  behavior: 'smooth' });
 
-    // Clear flag once both animations have settled (handled inside
-    // checkBothDone → onDone, but also via the safety timeouts above).
-    // We piggyback on the existing safety timeout (1200ms) by resetting
-    // after a guaranteed-safe margin.
     setTimeout(function() { _smoothScrollActive = false; }, 1400);
   }
 
-  // ─── RESTORE FULL CALENDAR STATE ON LOAD ──────────────────────────
-  // Priority: bar > slot (by room_id + date) > raw scroll position.
-  // Highlight + pulse animation are applied AFTER smooth scroll settles.
   function restoreCalendarState() {
     const state = loadCalState();
     const wrap  = document.querySelector('.cal-grid-wrap');
     if (!wrap) return;
 
-    // ── 1. Restore selected reservation bar ───────────────────────
     if (state.barId) {
       const bars = document.querySelectorAll('.cal-bar');
       let targetBar = null;
@@ -827,7 +698,6 @@
       }
     }
 
-    // ── 2. Restore selected date slot (matched by room_id + date) ─
     if (state.date) {
       let targetSlot = null;
       if (state.roomId) {
@@ -841,14 +711,11 @@
 
       if (targetSlot) {
         smoothCenterIn(wrap, targetSlot, function() {
-          // Highlight first, then trigger the pulse animation on the
-          // next frame so both CSS classes are active together.
           highlightSlot(targetSlot);
           requestAnimationFrame(function() {
             targetSlot.classList.remove('cal-day-slot--restored');
-            void targetSlot.offsetWidth; // force reflow to restart animation
+            void targetSlot.offsetWidth;
             targetSlot.classList.add('cal-day-slot--restored');
-            // Clean up the animation class once it finishes (2 × 700ms)
             setTimeout(function() {
               targetSlot.classList.remove('cal-day-slot--restored');
             }, 1500);
@@ -861,13 +728,11 @@
       }
     }
 
-    // ── 3. Fall back to raw scroll position ───────────────────────
     if (state.scrollLeft != null || state.scrollTop != null) {
       wrap.scrollTo({ left: Math.max(0, state.scrollLeft || 0), behavior: 'smooth' });
       window.scrollTo({ top: Math.max(0, state.scrollTop  || 0), behavior: 'smooth' });
     }
   }
-
 
   // ─── CONTEXT MENU ──────────────────────────────────────────────────
   let contextMenu = null;
@@ -884,19 +749,10 @@
     contextMenu = document.createElement('div');
     contextMenu.className = 'context-menu';
     contextMenu.id = 'bbContextMenu';
-    // position:fixed + appended to <body> — coordinates are plain
-    // viewport coordinates (clientX/clientY), with no scroll-container
-    // offset math needed and no risk of being clipped by an ancestor's
-    // overflow:hidden/auto the way an absolutely-positioned menu nested
-    // inside .cal-grid-wrap would be.
     contextMenu.style.cssText = 'display:none;position:fixed;z-index:10000;background:#fff;border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,0.2);padding:6px 0;min-width:200px;font-family:\'Inter\',sans-serif;';
     document.body.appendChild(contextMenu);
   }
 
-  // Registered once, not per right-click — building this fresh inside
-  // buildContextMenu() (the previous approach) silently stacked up one
-  // duplicate "click outside closes the menu" listener per right-click
-  // for the lifetime of the page.
   document.addEventListener('click', function (e) {
     if (contextMenu && contextMenu.style.display !== 'none' && !contextMenu.contains(e.target)) {
       hideContextMenu();
@@ -996,17 +852,12 @@
     contextMenu.innerHTML = '';
     contextMenu.appendChild(ul);
 
-    // Render once (off-screen-safe, display:none already set) so
-    // offsetWidth/offsetHeight reflect this menu's actual content
-    // (item count varies by type/status) rather than a guessed constant.
     contextMenu.style.left = '0px';
     contextMenu.style.top = '0px';
     contextMenu.style.display = 'block';
     const menuWidth = contextMenu.offsetWidth || 200;
     const menuHeight = contextMenu.offsetHeight || 100;
 
-    // Open exactly at the cursor — like a desktop app's right-click menu
-    // — then nudge back onto-screen only if it would actually overflow.
     let left = x;
     let top = y;
     const margin = 8;
@@ -1029,7 +880,7 @@
     contextMenuType = null;
   }
 
-  // ─── Handle room status actions ───────────────────────────────────
+  // ─── Room status actions ──────────────────────────────────────────
   const ROOM_STATUS_MENU_LABELS = {
     available: 'Available (Vacant Clean)',
     needs_cleaning: 'Vacant Dirty',
@@ -1039,9 +890,9 @@
   };
 
   function handleRoomStatusAction(action) {
-    const roomId = contextRoomId;
+    const roomId = parseInt(contextRoomId, 10);
     if (!roomId) {
-      alert('No room selected.');
+      alert('Invalid room selected.');
       return;
     }
 
@@ -1073,10 +924,7 @@
       });
   }
 
-  // ─── Edit Room Details (number / type / price) ─────────────────────
-  // No admin-facing edit path for these fields existed in either module
-  // before this — they were effectively fixed at however the room was
-  // originally seeded.
+  // ─── Edit Room Details ────────────────────────────────────────────
   function openEditRoomModal(roomId) {
     const row = document.querySelector('.cal-row[data-room-id="' + roomId + '"]');
     const labelCol = row ? row.querySelector('.cal-label-col') : null;
@@ -1149,7 +997,7 @@
     });
   }
 
-  // ─── CONTEXT ACTION HANDLERS ─────────────────────────────────────
+  // ─── Context action handlers ──────────────────────────────────────
   function handleContextAction(action) {
     let r = contextReservation;
 
@@ -1581,12 +1429,11 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
       });
   }
 
-  // ─── Entry points ──────────────────────────────────────────────────
+  // ─── ENTRY POINTS ──────────────────────────────────────────────────
   newBtn.addEventListener('click', function () {
     renderForm(null, {});
   });
 
-  // ─── SLOT CLICK: only highlight, store in sessionStorage ─────────
   document.querySelectorAll('.cal-day-slot').forEach(function (slot) {
     slot.addEventListener('click', function () {
       const row = this.closest('.cal-row');
@@ -1602,7 +1449,6 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
     });
   });
 
-  // ─── ROOM LABEL CLICK: open new reservation form ──────────────────
   document.querySelectorAll('.cal-label-col[data-room-id]').forEach(function (label) {
     label.addEventListener('click', function (e) {
       const roomId = this.dataset.roomId;
@@ -1627,7 +1473,6 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
     });
   });
 
-  // Click on empty space to deselect slot highlight and bar selection
   document.addEventListener('click', function(e) {
     if (!e.target.closest('.cal-day-slot')) {
       highlightSlot(null);
@@ -1637,7 +1482,7 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
     }
   });
 
-  // ─── DRAG LOGIC – Fixed to preserve width on move ────────────────
+  // ─── DRAG LOGIC ────────────────────────────────────────────────────
   function wireBarInteractions(bar) {
     function getSlotsForTrack(track) {
       return Array.prototype.slice.call(track.querySelectorAll('.cal-day-slot'));
@@ -1683,13 +1528,6 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
       bar.style.width = ((endIdx - startIdx) / total * 100) + '%';
     }
 
-    // Reads the bar's CURRENT state straight from the DOM/dataset, never
-    // from a cached value. This bar can be updated in place — by a drag
-    // commit, a form save, or a context-menu action — without a page
-    // reload (see updateUIFromServer), so resv/origStartIdx/origEndIdx/
-    // duration must never be captured once and reused: that's exactly
-    // what caused a second consecutive drag to compute against pre-edit
-    // data (bars "reverting" or collapsing after a successful save).
     function readCurrentState() {
       const row = bar.closest('.cal-row');
       const track = bar.closest('.cal-row__track');
@@ -1705,11 +1543,6 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
       return { row: row, track: track, resv: resv, draggable: draggable, slots: slots, startIdx: startIdx, endIdx: endIdx, duration: duration, totalDays: totalDays, canMove: canMove };
     }
 
-    // (Re)creates the resize handles and the draggable styling hook based
-    // on a fresh state snapshot. Called once at initial wire time, again
-    // at the start of every drag, and exposed on the element itself so
-    // updateUIFromServer can trigger it after a non-drag edit (status
-    // change, room move via the form, etc.) changes what's draggable.
     function refreshHandles(state) {
       bar.querySelectorAll('.cal-bar__handle').forEach(function (h) { h.remove(); });
       bar.classList.remove('is-draggable');
@@ -1765,12 +1598,8 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
     }
 
     function onPointerDown(e) {
-      // Ignore right-click (button === 2)
       if (e.button === 2) return;
 
-      // Always start from the bar's TRUE current state — not whatever
-      // was true the first time this bar was wired, and not whatever was
-      // true the last time it was dragged.
       const state = readCurrentState();
       refreshHandles(state);
       resv = state.resv;
@@ -1787,7 +1616,6 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
       const handleSide = e.target.classList && e.target.classList.contains('cal-bar__handle--left') ? 'left'
                         : e.target.classList && e.target.classList.contains('cal-bar__handle--right') ? 'right' : null;
 
-      // If not clicking a handle and cannot move, do nothing
       if (!handleSide && !state.canMove) return;
 
       e.preventDefault();
@@ -1853,11 +1681,9 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
         }
       }
 
-      // Get the slot index under the mouse in the current track
       const mouseIdx = getSlotUnderMouse(e.clientX, slots);
 
       if (dragMode === 'move') {
-        // Move: keep duration constant
         let newStart = mouseIdx - offsetDays;
         const maxStart = slots.length - duration;
         newStart = Math.max(0, Math.min(newStart, maxStart));
@@ -1905,7 +1731,6 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
       const newCheckOut = dateAtOffset(finalEnd, slots);
       const newRoomId = currentRow.dataset.roomId;
 
-      // Check for overlap with other bars in the same room
       const siblingBars = Array.prototype.slice.call(currentTrack.querySelectorAll('.cal-bar')).filter(function (b) { return b !== bar; });
       const conflict = siblingBars.some(function (b) {
         const other = JSON.parse(b.dataset.reservation);
@@ -1918,7 +1743,6 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
         return;
       }
 
-      // Block dropping onto a dirty room — it must be cleaned first.
       if (currentRow.dataset.statusKey === 'needs_cleaning') {
         alert('This room is Vacant Dirty. Please mark it as clean before moving a reservation here.');
         revertToOriginal();
@@ -1995,14 +1819,6 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
     bar.addEventListener('pointerdown', onPointerDown);
   }
 
-  // ─── Wire bars ─────────────────────────────────────────────────────
-  // Drag/resize (wireBarInteractions) is still wired per-element, since a
-  // drag gesture genuinely needs to own its own state for its lifetime.
-  // Click-to-select and right-click are NOT wired per-element below —
-  // see the delegated listeners on .cal-grid further down, which is what
-  // makes both of those reliably work for every bar regardless of
-  // whether it existed at page load, was reparented by a drag, or was
-  // created afterward by updateUIFromServer for a brand-new reservation.
   document.querySelectorAll('.cal-bar').forEach(function (bar) {
     try {
       wireBarInteractions(bar);
@@ -2017,15 +1833,7 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
     } catch(e) {}
   });
 
-  // ─── DELEGATED bar click (select) + right-click (context menu) ────
-  // Attached once to the grid container, which exists for the entire
-  // page lifetime, rather than to each bar individually. A listener on
-  // an individual bar only ever covers that one element — any bar
-  // created or replaced afterward (a brand-new reservation, for
-  // instance) would silently have no listener at all unless every single
-  // code path that touches the DOM remembered to re-wire it.
-  // e.target.closest('.cal-bar') instead means this works for any bar
-  // present in the DOM at the moment of the click, full stop.
+  // ─── DELEGATED EVENTS (click & context menu) ──────────────────────
   const calGridEl = document.querySelector('.cal-grid');
   if (calGridEl) {
     calGridEl.addEventListener('click', function (e) {
@@ -2037,7 +1845,7 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
         selectBar(bar);
         contextReservation = resv;
         contextBar = bar;
-      } catch (err) { /* ignore unparsable bar data */ }
+      } catch (err) { /* ignore */ }
     });
 
     calGridEl.addEventListener('contextmenu', function (e) {
@@ -2055,12 +1863,9 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
         return;
       }
 
-      // Right-click on a room's sidebar panel — status changes and room
-      // detail editing, without leaving the Calendar. This menu type
-      // existed in showContextMenu/handleRoomStatusAction already, but
-      // had no event wiring anywhere actually triggering it until now.
+      // Only body rows – exclude the header
       const label = e.target.closest('.cal-label-col[data-room-id]');
-      if (label) {
+      if (label && !label.classList.contains('cal-label-col--header') && label.dataset.roomId) {
         e.preventDefault();
         e.stopPropagation();
         showContextMenu(e.clientX, e.clientY, 'room', { roomId: label.dataset.roomId });
@@ -2068,7 +1873,7 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
     });
   }
 
-  // ─── AUTO‑SCROLL TO UPDATED RESERVATION ON LOAD ──────────────────
+  // ─── RESTORE STATE ──────────────────────────────────────────────────
   function scrollToReservationOnLoad() {
     const hash = window.location.hash;
     if (!hash || !hash.startsWith('#reservation-')) return;
@@ -2110,9 +1915,6 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
     const wrap = document.querySelector('.cal-grid-wrap');
     if (wrap) wrap.addEventListener('scroll', saveScrollPosition, { passive: true });
 
-    // Two rAF frames inside a 250ms timeout: the timeout lets the browser
-    // finish HTML parsing + initial paint; the rAF chain ensures we measure
-    // offsetLeft AFTER a full layout/paint cycle so the values are final.
     setTimeout(function() {
       requestAnimationFrame(function() {
         requestAnimationFrame(function() {
@@ -2132,7 +1934,7 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
     });
   }
 
-  // ─── Today line, Day boundaries, Top scrollbar, Filters ────────────
+  // ─── TODAY LINE, BOUNDARIES, TOP SCROLL, FILTERS ──────────────────
   (function wireTodayLine() {
     const grid = document.querySelector('.cal-grid');
     if (!grid) return;
@@ -2212,7 +2014,7 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
     }
 
     topScroll.addEventListener('scroll', function () {
-      if (syncing || _smoothScrollActive) return; // don't interrupt smooth scroll
+      if (syncing || _smoothScrollActive) return;
       syncing = true;
       wrap.scrollLeft = topScroll.scrollLeft;
       syncing = false;
@@ -2277,12 +2079,7 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
     window.__bbApplyCalFilters = applyFilters;
   })();
 
-  // ─── Live room sync (WebSocket) ────────────────────────────────────
-  // Connects to the ws-server/ process (see ws-server/README.md — this
-  // is a separate Node.js process that must be running for this to do
-  // anything; it's not required for the page to function, just for
-  // changes made in OTHER open tabs to show up here without a reload).
-  // Update WS_PORT below if ws-server/.env sets a non-default WS_PORT.
+  // ─── LIVE ROOM SYNC (WebSocket) ────────────────────────────────────
   (function wireRoomRealtimeSync() {
     const WS_PORT = 8081;
     const WS_URL = (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.hostname + ':' + WS_PORT;
@@ -2306,9 +2103,6 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
       try {
         socket = new WebSocket(WS_URL);
       } catch (err) {
-        // WebSocket constructor itself can throw synchronously for a
-        // malformed URL — not expected here, but this keeps a bad
-        // config from breaking the rest of the page.
         console.warn('[calendar] Room sync WebSocket unavailable:', err.message);
         return;
       }
@@ -2329,36 +2123,14 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
           msg.rooms.forEach(updateRoomSidebar);
         }
         if (msg && msg.type === 'reservations_changed' && Array.isArray(msg.reservations)) {
-          // Partial rows only (id/room_id/room_number/guest name/dates/
-          // status/occupant counts — see ws-server's RESERVATION_FIELDS),
-          // not the full reservation record. updateUIFromServer merges
-          // this onto whatever the bar already has, so an existing bar
-          // keeps its other fields (contact info, payment, notes); a
-          // brand-new bar created from this alone will be missing those
-          // until the page is reloaded — acceptable since the visible
-          // bar (name/dates/status/position) is what matters live, and
-          // mirrors the same scope tradeoff realtime-room-sync.js
-          // already documents for room-only fields.
           msg.reservations.forEach(updateUIFromServer);
         }
       });
 
-      socket.addEventListener('close', function () {
-        scheduleReconnect();
-      });
-
-      // 'error' is always followed by 'close' per the WebSocket spec, so
-      // reconnect scheduling lives in the close handler only — this
-      // just keeps the failure out of the browser's uncaught-error
-      // surface (it's an expected, recoverable condition: the sync
-      // server simply isn't running/reachable yet).
+      socket.addEventListener('close', scheduleReconnect);
       socket.addEventListener('error', function () {});
     }
 
-    // If ws-server isn't deployed at all, this silently fails to
-    // connect and retries with backoff forever in the background — the
-    // rest of the page is fully functional either way (AJAX-driven
-    // updates from this tab's own actions never depended on this).
     connect();
   })();
 

@@ -1,0 +1,22 @@
+{
+    "mtv": {
+        "name": "MTV3",
+        "description": "Mock Logo",
+        "image": "..\/assets\/images\/properties\/mtv_custom.png"
+    },
+    "dormitel": {
+        "name": "ELTI Dormitel",
+        "description": "Budget-friendly stays",
+        "image": "..\/assets\/images\/properties\/dormitel_custom.png"
+    },
+    "annex": {
+        "name": "BB Apartelle",
+        "description": "Comfort & Style",
+        "image": "..\/assets\/images\/properties\/annex_custom.png"
+    },
+    "euroasia_stall": {
+        "name": "Euroasia Stall",
+        "description": "n\/a",
+        "image": "..\/assets\/images\/properties\/euroasia_stall_custom.png"
+    }
+}

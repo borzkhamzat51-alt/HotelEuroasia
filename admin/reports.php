@@ -17,7 +17,7 @@ $branches = [
 $branchKey   = $_GET['branch'] ?? 'mtv';
 if (!isset($branches[$branchKey])) $branchKey = 'mtv';
 $branchLabel = $branches[$branchKey];
-$branch      = $branchKey; // alias used by db functions below
+$branch      = $branchKey;
 
 $rangeStart = new DateTime('first day of this month');
 $rangeEnd   = (clone $rangeStart)->modify('+1 month');
@@ -25,6 +25,9 @@ $rangeLabel = $rangeStart->format('F Y');
 
 $kpis  = db_report_kpis($branch, $rangeStart->format('Y-m-d'), $rangeEnd->format('Y-m-d'));
 $trend = db_report_monthly_trend($branch, 6);
+
+// ─── Get current checked‑in guests (live from DB) ──────────────
+$checkedInCount = db_count_checked_in($branch);
 
 function rpt_money($n)
 {
@@ -46,11 +49,7 @@ function rpt_money_compact($n)
 
 /**
  * Combo bar+line chart: monthly billed revenue as bars (left axis),
- * occupancy rate as a line (right axis, 0-100%). Plain inline SVG —
- * there's no charting library anywhere in this project, and this keeps
- * it that way. Colors are literal hex rather than CSS var() because
- * var() inside an SVG presentation *attribute* (as opposed to a
- * stylesheet rule) is unreliable across browsers.
+ * occupancy rate as a line (right axis, 0-100%). Plain inline SVG.
  */
 function rpt_trend_svg($trend)
 {
@@ -190,6 +189,9 @@ $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
     color: var(--gray-500);
     margin-top: 6px;
 }
+.rpt-kpi-card__sub strong {
+    color: var(--blue-700);
+}
 
 /* ── Trend chart ─────────────────────────────────────────────────── */
 .rpt-section {
@@ -219,6 +221,14 @@ $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
 .rpt-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .rpt-legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
 .rpt-empty { color: var(--gray-500); font-size: 0.85rem; padding: 12px 0; }
+
+/* ─── Checked‑in card special style ────────────────────────────── */
+.rpt-kpi-card--checked-in {
+    border-left: 4px solid #34d399;
+}
+.rpt-kpi-card--checked-in .rpt-kpi-card__value {
+    color: #0f7a4f;
+}
 </style>
 </head>
 <body class="dashboard-body">
@@ -261,11 +271,6 @@ $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
             <p class="rpt-kpi-card__sub">Bookings made this month</p>
         </div>
         <div class="rpt-kpi-card">
-            <p class="rpt-kpi-card__label">Occupancy Rate</p>
-            <div class="rpt-kpi-card__value"><?= rpt_pct($kpis['occupancy_rate']) ?></div>
-            <p class="rpt-kpi-card__sub"><?= number_format($kpis['occupied_nights']) ?> of <?= number_format($kpis['available_nights']) ?> room-nights</p>
-        </div>
-        <div class="rpt-kpi-card">
             <p class="rpt-kpi-card__label">Reservations</p>
             <div class="rpt-kpi-card__value"><?= number_format($kpis['reservation_count']) ?></div>
             <p class="rpt-kpi-card__sub"><?= $kpis['cancelled_count'] ?> cancelled</p>
@@ -275,25 +280,10 @@ $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
             <div class="rpt-kpi-card__value"><?= rpt_money($kpis['outstanding']) ?></div>
             <p class="rpt-kpi-card__sub">Billed, not yet collected</p>
         </div>
-        <div class="rpt-kpi-card">
-            <p class="rpt-kpi-card__label">ADR</p>
-            <div class="rpt-kpi-card__value"><?= rpt_money($kpis['adr']) ?></div>
-            <p class="rpt-kpi-card__sub">Average rate per occupied night</p>
-        </div>
-        <div class="rpt-kpi-card">
-            <p class="rpt-kpi-card__label">RevPAR</p>
-            <div class="rpt-kpi-card__value"><?= rpt_money($kpis['revpar']) ?></div>
-            <p class="rpt-kpi-card__sub">Revenue per available room</p>
-        </div>
-        <div class="rpt-kpi-card">
-            <p class="rpt-kpi-card__label">Avg. Length of Stay</p>
-            <div class="rpt-kpi-card__value"><?= number_format($kpis['avg_los'], 1) ?> nights</div>
-            <p class="rpt-kpi-card__sub">Across completed/active stays</p>
-        </div>
-        <div class="rpt-kpi-card">
-            <p class="rpt-kpi-card__label">Cancellation Rate</p>
-            <div class="rpt-kpi-card__value"><?= rpt_pct($kpis['cancellation_rate']) ?></div>
-            <p class="rpt-kpi-card__sub"><?= $kpis['cancelled_count'] ?> cancelled · <?= rpt_money($kpis['cancelled_amount']) ?> lost</p>
+        <div class="rpt-kpi-card rpt-kpi-card--checked-in">
+            <p class="rpt-kpi-card__label">Currently Checked‑In</p>
+            <div class="rpt-kpi-card__value"><?= number_format($checkedInCount) ?></div>
+            <p class="rpt-kpi-card__sub"><strong><?= htmlspecialchars($branchLabel) ?></strong> · live from reservations</p>
         </div>
     </div>
 

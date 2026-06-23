@@ -15,8 +15,8 @@
   --status-available-bg: #d1fae5;        /* light green */
   --status-reserved: #3b82f6;
   --status-reserved-bg: #dbeafe;         /* light blue */
-  --status-occupied: #f59e0b;
-  --status-occupied-bg: #fef3c7;         /* light amber */
+  --status-occupied: darkgreen;
+  --status-occupied-bg: #d1fae5;         /* light amber */
   --status-needs-cleaning: #fbbf24;
   --status-needs-cleaning-bg: #fef9c3;   /* light yellow */
   --status-maintenance: #ef4444;
