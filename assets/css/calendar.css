@@ -1,7 +1,7 @@
 /* ==========================================================================
-   Bluebookers — Calendar / Reservations grid (Table‑based)
-   Fixed column widths, sticky left columns, sticky header, perfect alignment
-   All functionality preserved – CSS only
+   Bluebookers — Calendar / Reservations grid
+   FIXED DESIGN: Compact header (40px) + Big body (64px rows, 100px days, 44px bars)
+   Perfect grid alignment with sticky columns
    ========================================================================== */
 
 :root {
@@ -16,12 +16,22 @@
   --radius-lg: 18px;
   --radius-xl: 24px;
 
-  /* ── Frozen columns: fixed widths ──────────────────────────────── */
-  --frozen-col-room:     220px;
-  --frozen-col-status:   150px;
-  --frozen-col-roomno:   110px;
-  --frozen-col-category: 120px;
+  /* ── Frozen panel ──────────────────────────────────────────────────
+     Total width: 180 + 130 + 90 + 100 = 500px */
+  --frozen-col-room:     180px;
+  --frozen-col-status:   130px;
+  --frozen-col-roomno:   90px;
+  --frozen-col-category: 100px;
+  --frozen-grid: var(--frozen-col-room) var(--frozen-col-status) var(--frozen-col-roomno) var(--frozen-col-category);
   --frozen-width: calc(var(--frozen-col-room) + var(--frozen-col-status) + var(--frozen-col-roomno) + var(--frozen-col-category));
+
+  /* ── Day slot width ─────────────────────────────────────────────── */
+  --day-width: 100px;
+
+  /* ── Heights ────────────────────────────────────────────────────── */
+  --header-height: 40px;
+  --row-height: 64px;
+  --bar-height: 44px;
 }
 
 /* ── Two-column calendar body ──────────────────────────────────────── */
@@ -113,7 +123,7 @@
   min-width: 0;
 }
 
-/* ── Toolbar and filters (unchanged) ────────────────────────────── */
+/* ── Toolbar ──────────────────────────────────────────────────────── */
 .cal-toolbar {
   display: flex;
   align-items: center;
@@ -157,6 +167,7 @@
 .cal-nav-btn:hover, .cal-today-btn:hover { background: var(--sky-50); border-color: var(--blue-500); }
 .cal-month-label { font-family: 'Playfair Display', serif; font-size: 1.15rem; min-width: 160px; text-align: center; color: var(--ink-900); }
 
+/* ─── Filters ────────────────────────────────────────────────────── */
 .cal-filter-bar {
   display: flex;
   align-items: flex-end;
@@ -211,65 +222,77 @@
   border-radius: 0 0 var(--radius-lg) var(--radius-lg);
   background: var(--white);
 }
-
-/* ─── Table grid ──────────────────────────────────────────────────── */
 .cal-grid {
-  border-collapse: collapse;
-  table-layout: fixed;
-  width: 100%;
   min-width: max-content;
   position: relative;
+  display: flex;
+  flex-direction: column;
 }
 
-/* ─── Header row ──────────────────────────────────────────────────── */
+/* ─── Header row (sticky top) ────────────────────────────────────── */
 .cal-header-row {
+  display: flex;
   position: sticky;
   top: 0;
   z-index: 30;
   background: var(--white);
   border-bottom: 2px solid var(--blue-200);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.05);
 }
 
-/* ─── Sticky left block (header) ──────────────────────────────────── */
+/* ─── Frozen left block – header ──────────────────────────────────
+     Compact: 40px tall, matching date headers */
 .cal-label-col--header {
+  flex-shrink: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
   position: sticky;
   left: 0;
   z-index: 40;
+  background: var(--white);
+  border: 1px solid var(--sky-200);
+  border-right: 1px solid var(--sky-200);
+  border-top: none;
+  border-bottom: 2px solid var(--blue-200);
+  box-sizing: border-box;
+  height: var(--header-height);
+  min-height: var(--header-height);
+  max-height: var(--header-height);
   width: var(--frozen-width);
   min-width: var(--frozen-width);
   max-width: var(--frozen-width);
-  padding: 0;
-  background: var(--white);
-  border-right: 1px solid var(--sky-200);
-  box-sizing: border-box;
-  height: 72px;
-  min-height: 72px;
-  max-height: 72px;
 }
 
-/* ─── Sticky left block (body rows) ───────────────────────────────── */
+/* ─── Frozen left block – body rows ───────────────────────────────
+     Big: 64px tall */
 .cal-label-col {
+  flex-shrink: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
   position: sticky;
   left: 0;
   z-index: 20;
+  background: var(--white);
+  border: 1px solid var(--sky-200);
+  border-right: 1px solid var(--sky-200);
+  border-top: none;
+  border-bottom: none;
+  box-sizing: border-box;
+  height: var(--row-height);
+  min-height: var(--row-height);
+  max-height: var(--row-height);
+  box-shadow: 3px 0 8px -2px rgba(22,50,79,0.08);
   width: var(--frozen-width);
   min-width: var(--frozen-width);
   max-width: var(--frozen-width);
-  padding: 0;
-  background: var(--white);
-  border-right: 1px solid var(--sky-200);
-  box-sizing: border-box;
-  height: 68px;
-  min-height: 68px;
-  max-height: 68px;
-  box-shadow: 3px 0 8px -2px rgba(22,50,79,0.08);
 }
 
-/* ─── The frozen panel grid ───────────────────────────────────────── */
+/* ─── The frozen panel grid ──────────────────────────────────────── */
 .cal-room-row {
   display: grid;
-  grid-template-columns: var(--frozen-col-room) var(--frozen-col-status) var(--frozen-col-roomno) var(--frozen-col-category);
+  grid-template-columns: var(--frozen-grid);
   align-items: center;
   gap: 0;
   width: 100%;
@@ -278,20 +301,20 @@
   line-height: 1.2;
 }
 .cal-room-row--header {
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--blue-700);
   font-weight: 700;
 }
 
-/* ─── All grid cells ──────────────────────────────────────────────── */
+/* ─── All grid cells ───────────────────────────────────────────── */
 .cal-room-row > * {
   display: flex;
   align-items: center;
   justify-content: center;
   height: 100%;
-  padding: 0 12px;
+  padding: 0 10px;
   box-sizing: border-box;
   overflow: hidden;
   white-space: nowrap;
@@ -305,30 +328,32 @@
 /* ─── Individual column alignment ────────────────────────────────── */
 .cal-room-name {
   justify-content: flex-start;
-  padding-left: 12px;
+  padding-left: 10px;
   text-align: left;
+  font-size: 0.82rem;
 }
 .cal-room-number,
 .cal-room-category {
   justify-content: center;
   text-align: center;
+  font-size: 0.82rem;
 }
 .cal-status-pill {
   justify-content: center;
   text-align: center;
 }
 
-/* ─── Status pill ────────────────────────────────────────────────── */
+/* ─── Status pill – bigger ────────────────────────────────────────── */
 .cal-status-pill {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-width: 110px;
-  height: 32px;
-  padding: 0 16px;
+  height: 34px;
+  padding: 0 14px;
   margin: 0 auto;
   border-radius: 999px;
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 700;
   white-space: nowrap;
   box-sizing: border-box;
@@ -340,6 +365,7 @@
   min-width: auto;
   height: auto;
   border: none;
+  font-size: 0.68rem;
 }
 .cal-status-pill--available        { background: #d1fae5; color: #047857; }
 .cal-status-pill--needs_cleaning   { background: #fef9c3; color: #92400e; }
@@ -347,7 +373,7 @@
 .cal-status-pill--reserved         { background: #dbeafe; color: #1d4ed8; }
 .cal-status-pill--maintenance      { background: #fecaca; color: #b91c1c; }
 
-/* ─── Room name, number, category ───────────────────────────────── */
+/* ─── Additional text styles ────────────────────────────────────── */
 .cal-room-name {
   font-weight: 500;
   color: var(--ink-900);
@@ -371,44 +397,55 @@
   border-radius: 999px;
   background: #6c757d;
   color: #fff;
-  font-size: 0.65rem;
+  font-size: 0.62rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   white-space: nowrap;
   margin-left: 4px;
-  height: 24px;
-  line-height: 24px;
+  height: 22px;
+  line-height: 22px;
   position: absolute;
-  right: 6px;
+  right: 4px;
   top: 50%;
   transform: translateY(-50%);
 }
 
-/* ─── Day headers (scrollable) ───────────────────────────────────── */
-.cal-day-header {
-  width: 72px;
-  min-width: 72px;
-  max-width: 72px;
-  height: 72px;
-  padding: 4px 0;
+/* ─── Date headers (scrollable) – COMPACT: 40px ──────────────────── */
+.cal-days-track {
+  display: flex;
+  flex: 1;
   background: var(--white);
-  border-right: 1px solid var(--sky-200);
-  box-sizing: border-box;
-  text-align: center;
-  vertical-align: middle;
 }
-.cal-day-header:last-child { border-right: none; }
+.cal-day-header {
+  width: var(--day-width);
+  min-width: var(--day-width);
+  max-width: var(--day-width);
+  height: var(--header-height);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 0;
+  border: 1px solid var(--sky-200);
+  border-right: none;
+  border-top: none;
+  background: var(--white);
+  box-sizing: border-box;
+}
+.cal-day-header:last-child {
+  border-right: 1px solid var(--sky-200);
+}
 .cal-day-header__num {
-  font-size: 20px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--ink-900);
-  line-height: 1.2;
+  line-height: 1.1;
 }
 .cal-day-header__wd {
-  font-size: 11px;
+  font-size: 9px;
   font-weight: 600;
-  letter-spacing: 1px;
+  letter-spacing: 0.08em;
   color: var(--ink-500);
   text-transform: uppercase;
 }
@@ -416,52 +453,61 @@
 .cal-day-header.is-today .cal-day-header__num { color: var(--blue-600); }
 .cal-day-header.is-weekend { background: rgba(91,118,147,0.05); }
 
-/* ─── Body rows ───────────────────────────────────────────────────── */
+/* ─── Body rows ─────────────────────────────────────────────────────
+     Big: 64px */
 .cal-row {
-  height: 68px;
-  min-height: 68px;
-  max-height: 68px;
-  background: var(--white);
+  display: flex;
   border-bottom: 1px solid var(--sky-200);
+  background: var(--white);
+  height: var(--row-height);
+  min-height: var(--row-height);
+  max-height: var(--row-height);
+  position: relative;
 }
 .cal-row:nth-child(even) { background: rgba(238,245,252,0.5); }
 .cal-row:hover { background: var(--sky-50); }
 
-/* ─── Day cells (scrollable) ────────────────────────────────────── */
+/* ─── Day cells (scrollable) – big: 64px ──────────────────────────── */
+.cal-row__track {
+  display: flex;
+  flex: 1;
+  position: relative;
+  height: var(--row-height);
+}
 .cal-day-slot {
-  width: 72px;
-  min-width: 72px;
-  max-width: 72px;
-  height: 68px;
-  padding: 0;
-  border-right: 1px solid var(--sky-200);
+  width: var(--day-width);
+  min-width: var(--day-width);
+  max-width: var(--day-width);
+  height: var(--row-height);
+  border: 1px solid var(--sky-200);
+  border-right: none;
+  border-top: none;
   cursor: pointer;
   transition: background 120ms;
   box-sizing: border-box;
-  text-align: center;
-  vertical-align: middle;
 }
-.cal-day-slot:last-child { border-right: none; }
+.cal-day-slot:last-child {
+  border-right: 1px solid var(--sky-200);
+}
+.cal-row:last-child .cal-day-slot {
+  border-bottom: 1px solid var(--sky-200);
+}
 .cal-day-slot:hover { background: var(--sky-50); }
 .cal-day-slot.is-today { background: rgba(59,125,216,0.06); }
 .cal-day-slot.is-weekend { background: rgba(91,118,147,0.04); }
 .cal-day-slot.is-weekend:hover { background: var(--sky-50); }
 
-/* ─── Reservation bars (inside each row, positioned absolutely) ───── */
-.cal-row__track {
-  display: none; /* hide the container – we use the row itself as the track */
-}
-
+/* ─── Reservation bars – big: 44px tall, centered ────────────────── */
 .cal-bar {
   position: absolute;
-  top: 11px;
-  height: 46px;
-  border-radius: 3px;
-  padding: 0 10px;
+  top: calc((var(--row-height) - var(--bar-height)) / 2);
+  height: var(--bar-height);
+  border-radius: 4px;
+  padding: 0 12px;
   display: flex;
   align-items: center;
   color: var(--white);
-  font-size: 0.85rem;
+  font-size: 0.88rem;
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -478,7 +524,6 @@
 }
 .cal-bar:hover { filter: brightness(1.08); transform: translateY(-1px); }
 .cal-bar span { -webkit-user-drag: none; user-drag: none; -webkit-user-select: none; user-select: none; pointer-events: none; text-shadow: 0 1px 2px rgba(0,0,0,0.25); position: sticky; left: 8px; }
-
 .cal-bar--reserved    { background: linear-gradient(135deg, #fbbf24, #f08c0a); border-left: 4px solid #c9670a; }
 .cal-bar--checked_in  { background: linear-gradient(135deg, #34d399, #0f7a4f); border-left: 4px solid #0a5e3c; }
 .cal-bar--checked_out { background: linear-gradient(135deg, #94a3b8, #5d6b7d); border-left: 4px solid #46525f; }
@@ -515,7 +560,7 @@
 }
 .cal-top-scroll__spacer { height: 1px; }
 
-/* ─── Modal (unchanged) ───────────────────────────────────────────── */
+/* ─── Modal ───────────────────────────────────────────────────────── */
 .modal-overlay {
   position: fixed;
   inset: 0;

@@ -420,6 +420,36 @@
       creationTrack.appendChild(bar);
     }
 
+    // ── Month-scope guard ─────────────────────────────────────────
+    // A WebSocket broadcast (rooms_changed/reservations_changed) carries
+    // every currently-active reservation across the WHOLE property, not
+    // just ones that fall inside whatever month this particular tab has
+    // open. Without this check, a reservation created/moved into a month
+    // the user isn't viewing would still get positioned here using THIS
+    // month's day slots as the reference frame, producing a bar at a
+    // meaningless (often huge negative or far-off-screen) percentage.
+    // If the stay doesn't overlap the currently displayed month at all,
+    // there's nothing to draw — drop the bar (whether it's the one we
+    // just created above, or a pre-existing bar whose dates just moved
+    // out of view) instead of rendering it somewhere nonsensical. It'll
+    // show up correctly once the user navigates to the right month,
+    // since the page re-renders from the database on every load.
+    const scopeTrack = bar.closest('.cal-row__track');
+    if (scopeTrack) {
+      const scopeSlots = Array.prototype.slice.call(scopeTrack.querySelectorAll('.cal-day-slot'));
+      if (scopeSlots.length > 0) {
+        const monthStart = new Date(scopeSlots[0].dataset.date + 'T00:00:00');
+        const monthEndExclusive = new Date(scopeSlots[scopeSlots.length - 1].dataset.date + 'T00:00:00');
+        monthEndExclusive.setDate(monthEndExclusive.getDate() + 1);
+        const checkInDate = new Date(serverResv.check_in + 'T00:00:00');
+        const checkOutDate = new Date(serverResv.check_out + 'T00:00:00');
+        if (checkOutDate <= monthStart || checkInDate >= monthEndExclusive) {
+          bar.remove();
+          return;
+        }
+      }
+    }
+
     const oldResv = bar.dataset.reservation ? JSON.parse(bar.dataset.reservation) : {};
     Object.assign(oldResv, serverResv);
     bar.dataset.reservation = JSON.stringify(oldResv);

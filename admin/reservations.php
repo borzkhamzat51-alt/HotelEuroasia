@@ -79,6 +79,12 @@ if ($isLodging) {
 }
 
 // ─── Helper functions ──────────────────────────────────────────────
+// NOTE: roomStatusLabel()/roomStatusKey() in the floor-layout pages
+// (layout.php, layout_1st_floor.php, layout_2nd_floor.php) mirror
+// cal_room_status_label()/cal_room_status_key() below EXACTLY, on
+// purpose, so a room's status word/color always matches between the
+// floor map and the calendar. If you change the logic here, update
+// the mirrored copies there too.
 function cal_room_status_label($room) {
     if ($room['room_status'] === 'maintenance') return 'Out of Order';
     if ($room['room_status'] === 'occupied') return 'Checked In';
@@ -235,25 +241,61 @@ $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
             <!-- ── Left legend panel ──────────────────────────────── -->
             <aside class="cal-legend-panel">
                 <p class="cal-legend-panel__heading">Legend</p>
+
                 <div class="cal-legend-group">
                     <p class="cal-legend-group__label">Bookings</p>
-                    <div class="cal-legend-item"><span class="cal-legend-swatch cal-legend-swatch--reserved"></span><span>Reserved</span></div>
-                    <div class="cal-legend-item"><span class="cal-legend-swatch cal-legend-swatch--checked_in"></span><span>Checked In</span></div>
-                    <div class="cal-legend-item"><span class="cal-legend-swatch cal-legend-swatch--checked_out"></span><span>Checked Out</span></div>
-                    <div class="cal-legend-item"><span class="cal-legend-swatch cal-legend-swatch--cancelled"></span><span>Cancelled</span></div>
+                    <div class="cal-legend-item">
+                        <span class="cal-legend-swatch cal-legend-swatch--reserved"></span>
+                        <span>Reserved</span>
+                    </div>
+                    <div class="cal-legend-item">
+                        <span class="cal-legend-swatch cal-legend-swatch--checked_in"></span>
+                        <span>Checked In</span>
+                    </div>
+                    <div class="cal-legend-item">
+                        <span class="cal-legend-swatch cal-legend-swatch--checked_out"></span>
+                        <span>Checked Out</span>
+                    </div>
+                    <div class="cal-legend-item">
+                        <span class="cal-legend-swatch cal-legend-swatch--cancelled"></span>
+                        <span>Cancelled</span>
+                    </div>
                 </div>
+
                 <div class="cal-legend-group">
                     <p class="cal-legend-group__label">Room Status</p>
-                    <div class="cal-legend-item"><span class="cal-legend-pip" style="background:#10b981;"></span><span>Vacant Clean</span></div>
-                    <div class="cal-legend-item"><span class="cal-legend-pip" style="background:#eab308;"></span><span>Vacant Dirty</span></div>
-                    <div class="cal-legend-item"><span class="cal-legend-pip" style="background:#ef4444;"></span><span>Maintenance</span></div>
-                    <div class="cal-legend-item"><span class="cal-legend-pip" style="background:#d97706;"></span><span>Occupied</span></div>
-                    <div class="cal-legend-item"><span class="cal-legend-pip" style="background:#3b82f6;"></span><span>Reserved</span></div>
+                    <div class="cal-legend-item">
+                        <span class="cal-legend-pip" style="background:#10b981;"></span>
+                        <span>Vacant Clean</span>
+                    </div>
+                    <div class="cal-legend-item">
+                        <span class="cal-legend-pip" style="background:#eab308;"></span>
+                        <span>Vacant Dirty</span>
+                    </div>
+                    <div class="cal-legend-item">
+                        <span class="cal-legend-pip" style="background:#ef4444;"></span>
+                        <span>Maintenance</span>
+                    </div>
+                    <div class="cal-legend-item">
+                        <span class="cal-legend-pip" style="background:#d97706;"></span>
+                        <span>Occupied</span>
+                    </div>
+                    <div class="cal-legend-item">
+                        <span class="cal-legend-pip" style="background:#3b82f6;"></span>
+                        <span>Reserved</span>
+                    </div>
                 </div>
+
                 <div class="cal-legend-group">
                     <p class="cal-legend-group__label">Indicators</p>
-                    <div class="cal-legend-item"><span class="cal-legend-today-chip"></span><span>Today</span></div>
-                    <div class="cal-legend-item"><span class="cal-legend-weekend-chip"></span><span>Weekend</span></div>
+                    <div class="cal-legend-item">
+                        <span class="cal-legend-today-chip"></span>
+                        <span>Today</span>
+                    </div>
+                    <div class="cal-legend-item">
+                        <span class="cal-legend-weekend-chip"></span>
+                        <span>Weekend</span>
+                    </div>
                 </div>
             </aside>
 
@@ -261,78 +303,89 @@ $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
             <div class="cal-grid-area">
                 <div class="cal-top-scroll" id="calTopScroll"><div class="cal-top-scroll__spacer" id="calTopScrollSpacer"></div></div>
                 <div class="cal-grid-wrap">
-                    <table class="cal-grid" style="--days: <?= $daysInMonth ?>;">
-                        <thead>
-                            <tr class="cal-header-row">
-                                <!-- Sticky left block (header) -->
-                                <th class="cal-label-col cal-label-col--header" data-room-id="" colspan="4">
-                                    <div class="cal-room-row cal-room-row--header">
-                                        <span class="cal-room-name">Room</span>
-                                        <span class="cal-status-pill cal-status-pill--header">Status</span>
-                                        <span class="cal-room-number">Room No.</span>
-                                        <span class="cal-room-category">Rate(₱)</span>
-                                    </div>
-                                </th>
-                                <!-- Scrollable date headers -->
+                    <div class="cal-grid" style="--days: <?= $daysInMonth ?>;">
+
+                        <!-- ===== HEADER ROW ===== -->
+                        <div class="cal-header-row">
+                            <!-- Sticky left block (header) -->
+                            <div class="cal-label-col cal-label-col--header" data-room-id="">
+                                <div class="cal-room-row cal-room-row--header">
+                                    <span class="cal-room-name">Room</span>
+                                    <span class="cal-status-pill cal-status-pill--header">Status</span>
+                                    <span class="cal-room-number">Room No.</span>
+                                    <span class="cal-room-category">Category</span>
+                                </div>
+                            </div>
+                            <!-- Scrollable date headers -->
+                            <div class="cal-days-track">
                                 <?php foreach ($days as $day): ?>
-                                    <th class="cal-day-header <?= $day['is_today'] ? 'is-today' : '' ?> <?= $day['is_weekend'] ? 'is-weekend' : '' ?>">
+                                    <div class="cal-day-header <?= $day['is_today'] ? 'is-today' : '' ?> <?= $day['is_weekend'] ? 'is-weekend' : '' ?>">
                                         <span class="cal-day-header__num"><?= $day['num'] ?></span>
                                         <span class="cal-day-header__wd"><?= $day['weekday'] ?></span>
-                                    </th>
-                                <?php endforeach; ?>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($rooms as $room): ?>
-                                <?php
-                                    $isMaintenance = ($room['room_status'] === 'maintenance');
-                                    $statusKey = cal_room_status_key($room);
-                                    $statusLabel = cal_room_status_label($room);
-                                    $category = cal_room_category($room['room_type']);
-                                    $hasBookingsThisMonth = !empty($reservationsByRoom[$room['id']]);
-                                ?>
-                                <tr class="cal-row <?= $isMaintenance ? 'maintenance' : '' ?>"
-                                    data-room-id="<?= $room['id'] ?>"
-                                    data-room-type="<?= htmlspecialchars($room['room_type']) ?>"
-                                    data-status-key="<?= htmlspecialchars($statusKey) ?>"
-                                    data-floor="<?= htmlspecialchars(cal_room_floor($room['room_number'])) ?>"
-                                    data-available="<?= $room['room_status'] === 'available' ? '1' : '0' ?>"
-                                    data-has-bookings="<?= $hasBookingsThisMonth ? '1' : '0' ?>">
-                                    <!-- Sticky left block (body) – consolidated into one td with inner grid -->
-                                    <td class="cal-label-col" data-room-id="<?= $room['id'] ?>" data-room-number="<?= htmlspecialchars($room['room_number']) ?>" colspan="4">
-                                        <div class="cal-room-row">
-                                            <span class="cal-room-name"><?= htmlspecialchars($room['room_type']) ?></span>
-                                            <span class="cal-status-pill cal-status-pill--<?= htmlspecialchars($statusKey) ?>">
-                                                <?= htmlspecialchars($statusLabel) ?>
-                                            </span>
-                                            <span class="cal-room-number">RM<?= htmlspecialchars($room['room_number']) ?></span>
-                                            <span class="cal-room-category"><?= htmlspecialchars($category) ?></span>
-                                        </div>
-                                        <?php if ($isMaintenance): ?>
-                                            <span class="maintenance-badge">⚠ Out of Order</span>
-                                        <?php endif; ?>
-                                    </td>
-                                    <!-- Scrollable day cells -->
-                                    <?php foreach ($days as $day): ?>
-                                        <td class="cal-day-slot <?= $day['is_today'] ? 'is-today' : '' ?> <?= $day['is_weekend'] ? 'is-weekend' : '' ?>"
-                                            data-room-id="<?= $room['id'] ?>"
-                                            data-date="<?= $day['date'] ?>"></td>
-                                    <?php endforeach; ?>
-                                    <!-- Reservation bars are positioned absolutely inside the row's track container -->
-                                    <div class="cal-row__track" data-room-id="<?= $room['id'] ?>">
-                                        <?php foreach (($reservationsByRoom[$room['id']] ?? []) as $r): ?>
-                                            <div class="cal-bar cal-bar--<?= $r['status'] ?>"
-                                                 style="left:<?= $r['_left_pct'] ?>%; width:<?= $r['_width_pct'] ?>%;"
-                                                 title="<?= htmlspecialchars($r['guest_full_name'] . ' • ' . $r['check_in'] . ' to ' . $r['check_out'] . ' • ' . $statusLabels[$r['status']]) ?>"
-                                                 data-reservation="<?= htmlspecialchars(json_encode($r), ENT_QUOTES) ?>">
-                                                <span><?= htmlspecialchars($r['guest_full_name']) ?></span>
-                                            </div>
-                                        <?php endforeach; ?>
                                     </div>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+
+                        <!-- ===== BODY ROWS =====
+                             Every value below comes straight from $room, the SAME
+                             array returned by db_list_rooms_by_branch() that the
+                             floor-layout pages (layout.php / layout_1st_floor.php /
+                             layout_2nd_floor.php) use to render their room cards.
+                             room_type, room_number, room_status, cleaning_status,
+                             and id are read here exactly as they are there — so the
+                             calendar can never show a room name/number/status that
+                             disagrees with what the floor map shows. -->
+                        <?php foreach ($rooms as $room): ?>
+                            <?php
+                                $isMaintenance = ($room['room_status'] === 'maintenance');
+                                $statusKey = cal_room_status_key($room);
+                                $statusLabel = cal_room_status_label($room);
+                                $category = cal_room_category($room['room_type']);
+                                $hasBookingsThisMonth = !empty($reservationsByRoom[$room['id']]);
+                            ?>
+                            <div class="cal-row <?= $isMaintenance ? 'maintenance' : '' ?>"
+                                 data-room-id="<?= $room['id'] ?>"
+                                 data-room-type="<?= htmlspecialchars($room['room_type']) ?>"
+                                 data-status-key="<?= htmlspecialchars($statusKey) ?>"
+                                 data-floor="<?= htmlspecialchars(cal_room_floor($room['room_number'])) ?>"
+                                 data-available="<?= $room['room_status'] === 'available' ? '1' : '0' ?>"
+                                 data-has-bookings="<?= $hasBookingsThisMonth ? '1' : '0' ?>">
+
+                                <!-- Sticky left block (body) -->
+                                <div class="cal-label-col" data-room-id="<?= $room['id'] ?>" data-room-number="<?= htmlspecialchars($room['room_number']) ?>">
+                                    <div class="cal-room-row">
+                                        <span class="cal-room-name"><?= htmlspecialchars($room['room_type']) ?></span>
+                                        <span class="cal-status-pill cal-status-pill--<?= htmlspecialchars($statusKey) ?>">
+                                            <?= htmlspecialchars($statusLabel) ?>
+                                        </span>
+                                        <span class="cal-room-number">RM<?= htmlspecialchars($room['room_number']) ?></span>
+                                        <span class="cal-room-category"><?= htmlspecialchars($category) ?></span>
+                                    </div>
+                                    <?php if ($isMaintenance): ?>
+                                        <span class="maintenance-badge">⚠ Out of Order</span>
+                                    <?php endif; ?>
+                                </div>
+
+                                <!-- Scrollable day cells + reservation bars -->
+                                <div class="cal-days-track cal-row__track" data-room-id="<?= $room['id'] ?>">
+                                    <?php foreach ($days as $day): ?>
+                                        <div class="cal-day-slot <?= $day['is_today'] ? 'is-today' : '' ?> <?= $day['is_weekend'] ? 'is-weekend' : '' ?>"
+                                             data-room-id="<?= $room['id'] ?>"
+                                             data-date="<?= $day['date'] ?>"></div>
+                                    <?php endforeach; ?>
+                                    <?php foreach (($reservationsByRoom[$room['id']] ?? []) as $r): ?>
+                                        <div class="cal-bar cal-bar--<?= $r['status'] ?>"
+                                             style="left:<?= $r['_left_pct'] ?>%; width:<?= $r['_width_pct'] ?>%;"
+                                             title="<?= htmlspecialchars($r['guest_full_name'] . ' • ' . $r['check_in'] . ' to ' . $r['check_out'] . ' • ' . $statusLabels[$r['status']]) ?>"
+                                             data-reservation="<?= htmlspecialchars(json_encode($r), ENT_QUOTES) ?>">
+                                            <span><?= htmlspecialchars($r['guest_full_name']) ?></span>
+                                        </div>
+                                    <?php endforeach; ?>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
                 </div>
             </div><!-- /.cal-grid-area -->
 
