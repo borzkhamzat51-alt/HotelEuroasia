@@ -79,12 +79,6 @@ if ($isLodging) {
 }
 
 // ─── Helper functions ──────────────────────────────────────────────
-// NOTE: roomStatusLabel()/roomStatusKey() in the floor-layout pages
-// (layout.php, layout_1st_floor.php, layout_2nd_floor.php) mirror
-// cal_room_status_label()/cal_room_status_key() below EXACTLY, on
-// purpose, so a room's status word/color always matches between the
-// floor map and the calendar. If you change the logic here, update
-// the mirrored copies there too.
 function cal_room_status_label($room) {
     if ($room['room_status'] === 'maintenance') return 'Out of Order';
     if ($room['room_status'] === 'occupied') return 'Checked In';
@@ -149,7 +143,63 @@ $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../assets/css/style.css"><link rel="stylesheet" href="../assets/css/dashboard.css"><link rel="stylesheet" href="../assets/css/calendar.css">
-<style>.cal-page-main { flex:1; padding: clamp(20px,4vw,48px) clamp(16px,5vw,56px); max-width:1400px; margin:0 auto; width:100%; box-sizing:border-box; }</style>
+<style>.cal-page-main { flex:1; padding: clamp(20px,4vw,48px) clamp(16px,5vw,56px); max-width:1400px; margin:0 auto; width:100%; box-sizing:border-box; }
+/* ─── Size slider styles ─────────────────────────────────────────────── */
+.cal-size-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--white);
+  border: 1px solid var(--sky-200);
+  border-radius: 999px;
+  padding: 6px 16px 6px 18px;
+  box-shadow: var(--shadow-card);
+}
+.cal-size-control label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--ink-500);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.cal-size-control input[type="range"] {
+  width: 120px;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--sky-200);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+.cal-size-control input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--blue-500);
+  cursor: pointer;
+  border: 2px solid var(--white);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+.cal-size-control input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--blue-500);
+  cursor: pointer;
+  border: 2px solid var(--white);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+.cal-size-control .size-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--blue-700);
+  min-width: 38px;
+  text-align: center;
+}
+</style>
 </head>
 <body class="dashboard-body">
 <header class="topbar">
@@ -173,6 +223,11 @@ $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
             <a href="?branch=<?= $branch ?>&month=<?= $thisMonth ?>" class="cal-today-btn">Today</a>
             <span class="cal-month-label"><?= $monthLabel ?></span>
             <a href="?branch=<?= $branch ?>&month=<?= $nextMonth ?>" class="cal-nav-btn" aria-label="Next month">&#8250;</a>
+        </div>
+        <div class="cal-size-control">
+            <label for="calSizeSlider">Size</label>
+            <input type="range" id="calSizeSlider" min="60" max="150" value="100" step="5">
+            <span class="size-label" id="calSizeLabel">100%</span>
         </div>
         <?php if ($isLodging && !empty($rooms)): ?>
             <button type="button" class="btn btn--primary" id="newReservationBtn" style="width:auto; padding:10px 20px;">+ New Reservation</button>
@@ -242,60 +297,64 @@ $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
             <aside class="cal-legend-panel">
                 <p class="cal-legend-panel__heading">Legend</p>
 
-                <div class="cal-legend-group">
-                    <p class="cal-legend-group__label">Bookings</p>
-                    <div class="cal-legend-item">
-                        <span class="cal-legend-swatch cal-legend-swatch--reserved"></span>
-                        <span>Reserved</span>
-                    </div>
-                    <div class="cal-legend-item">
-                        <span class="cal-legend-swatch cal-legend-swatch--checked_in"></span>
-                        <span>Checked In</span>
-                    </div>
-                    <div class="cal-legend-item">
-                        <span class="cal-legend-swatch cal-legend-swatch--checked_out"></span>
-                        <span>Checked Out</span>
-                    </div>
-                    <div class="cal-legend-item">
-                        <span class="cal-legend-swatch cal-legend-swatch--cancelled"></span>
-                        <span>Cancelled</span>
-                    </div>
-                </div>
+                <div class="cal-legend-body">
 
-                <div class="cal-legend-group">
-                    <p class="cal-legend-group__label">Room Status</p>
-                    <div class="cal-legend-item">
-                        <span class="cal-legend-pip" style="background:#10b981;"></span>
-                        <span>Vacant Clean</span>
+                    <div class="cal-legend-group">
+                        <p class="cal-legend-group__label">Bookings</p>
+                        <div class="cal-legend-item">
+                            <span class="cal-legend-swatch cal-legend-swatch--reserved"></span>
+                            <span>Reserved</span>
+                        </div>
+                        <div class="cal-legend-item">
+                            <span class="cal-legend-swatch cal-legend-swatch--checked_in"></span>
+                            <span>Checked In</span>
+                        </div>
+                        <div class="cal-legend-item">
+                            <span class="cal-legend-swatch cal-legend-swatch--checked_out"></span>
+                            <span>Checked Out</span>
+                        </div>
+                        <div class="cal-legend-item">
+                            <span class="cal-legend-swatch cal-legend-swatch--cancelled"></span>
+                            <span>Cancelled</span>
+                        </div>
                     </div>
-                    <div class="cal-legend-item">
-                        <span class="cal-legend-pip" style="background:#eab308;"></span>
-                        <span>Vacant Dirty</span>
-                    </div>
-                    <div class="cal-legend-item">
-                        <span class="cal-legend-pip" style="background:#ef4444;"></span>
-                        <span>Maintenance</span>
-                    </div>
-                    <div class="cal-legend-item">
-                        <span class="cal-legend-pip" style="background:#d97706;"></span>
-                        <span>Occupied</span>
-                    </div>
-                    <div class="cal-legend-item">
-                        <span class="cal-legend-pip" style="background:#3b82f6;"></span>
-                        <span>Reserved</span>
-                    </div>
-                </div>
 
-                <div class="cal-legend-group">
-                    <p class="cal-legend-group__label">Indicators</p>
-                    <div class="cal-legend-item">
-                        <span class="cal-legend-today-chip"></span>
-                        <span>Today</span>
+                    <div class="cal-legend-group">
+                        <p class="cal-legend-group__label">Room Status</p>
+                        <div class="cal-legend-item">
+                            <span class="cal-legend-pip" style="background:#10b981; box-shadow:0 0 0 2px rgba(16,185,129,0.25);"></span>
+                            <span>Vacant Clean</span>
+                        </div>
+                        <div class="cal-legend-item">
+                            <span class="cal-legend-pip" style="background:#f59e0b; box-shadow:0 0 0 2px rgba(245,158,11,0.25);"></span>
+                            <span>Vacant Dirty</span>
+                        </div>
+                        <div class="cal-legend-item">
+                            <span class="cal-legend-pip" style="background:#f97316; box-shadow:0 0 0 2px rgba(249,115,22,0.25);"></span>
+                            <span>Occupied</span>
+                        </div>
+                        <div class="cal-legend-item">
+                            <span class="cal-legend-pip" style="background:#3b82f6; box-shadow:0 0 0 2px rgba(59,130,246,0.25);"></span>
+                            <span>Reserved</span>
+                        </div>
+                        <div class="cal-legend-item">
+                            <span class="cal-legend-pip" style="background:#ef4444; box-shadow:0 0 0 2px rgba(239,68,68,0.25);"></span>
+                            <span>Maintenance</span>
+                        </div>
                     </div>
-                    <div class="cal-legend-item">
-                        <span class="cal-legend-weekend-chip"></span>
-                        <span>Weekend</span>
+
+                    <div class="cal-legend-group">
+                        <p class="cal-legend-group__label">Indicators</p>
+                        <div class="cal-legend-item">
+                            <span class="cal-legend-today-chip">T</span>
+                            <span>Today</span>
+                        </div>
+                        <div class="cal-legend-item">
+                            <span class="cal-legend-weekend-chip">W</span>
+                            <span>Weekend</span>
+                        </div>
                     </div>
+
                 </div>
             </aside>
 
@@ -327,15 +386,7 @@ $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
                             </div>
                         </div>
 
-                        <!-- ===== BODY ROWS =====
-                             Every value below comes straight from $room, the SAME
-                             array returned by db_list_rooms_by_branch() that the
-                             floor-layout pages (layout.php / layout_1st_floor.php /
-                             layout_2nd_floor.php) use to render their room cards.
-                             room_type, room_number, room_status, cleaning_status,
-                             and id are read here exactly as they are there — so the
-                             calendar can never show a room name/number/status that
-                             disagrees with what the floor map shows. -->
+                        <!-- ===== BODY ROWS ===== -->
                         <?php foreach ($rooms as $room): ?>
                             <?php
                                 $isMaintenance = ($room['room_status'] === 'maintenance');

@@ -2,15 +2,14 @@
 require_once __DIR__ . '/../config.php';
 bb_require_permission('rooms');
 
-$isAdmin = true;
-
+// ── Hardcoded branch definitions ──────────────────────────────────
 $branches = [
-    'annex'          => 'BB Apartelle',
-    'mtv'            => 'MTV3',
-    'dormitel'       => 'ELTI Dormitel',
-    'aps'            => 'APS',
-    'euroasia_stall' => 'Euroasia Stall',
-    'annex_stall'    => 'Annex Stall',
+    'annex'          => ['name' => 'BB Apartelle',   'tag' => 'Comfort & Style',          'color' => '#2563eb'],
+    'mtv'            => ['name' => 'MTV3',            'tag' => 'City-view Rooms',           'color' => '#0891b2'],
+    'dormitel'       => ['name' => 'ELTI Dormitel',   'tag' => 'Budget-friendly Stays',     'color' => '#7c3aed'],
+    'aps'            => ['name' => 'APS',             'tag' => 'Attendance & Payroll',      'color' => '#0f766e'],
+    'euroasia_stall' => ['name' => 'Euroasia Stall',  'tag' => 'Stall Operations',          'color' => '#b45309'],
+    'annex_stall'    => ['name' => 'Annex Stall',     'tag' => 'Stall Operations',          'color' => '#be185d'],
 ];
 
 $branchKey = $_GET['branch'] ?? '';
@@ -18,7 +17,93 @@ if (!isset($branches[$branchKey])) {
     header('Location: dashboard.php');
     exit;
 }
-$branchName = $branches[$branchKey];
+
+// ── Load custom settings from JSON ──────────────────────────────────
+$settingsFile   = __DIR__ . '/data/property_settings.json';
+$customSettings = file_exists($settingsFile)
+    ? (json_decode(file_get_contents($settingsFile), true) ?: [])
+    : [];
+
+// ── Override with custom values if they exist ─────────────────────
+$b = $branches[$branchKey];
+if (!empty($customSettings[$branchKey])) {
+    $c = $customSettings[$branchKey];
+    if (!empty($c['name']))        $b['name'] = $c['name'];
+    if (!empty($c['description'])) $b['tag']  = $c['description'];
+    // Image is handled separately in the hero (if needed)
+}
+
+$branchName = $b['name'];
+$branchTag  = $b['tag'];
+$branchColor = $b['color'];
+
+$isLodging = in_array($branchKey, ['annex', 'mtv', 'dormitel']);
+
+// Build action cards visible to this user
+$cards = [];
+
+if ($isLodging) {
+    $cards[] = [
+        'href'  => 'layout_1st_floor.php?branch=' . urlencode($branchKey),
+        'icon'  => '<svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="8" height="8" rx="1.5" stroke="currentColor" stroke-width="1.7"/><rect x="13" y="3" width="8" height="8" rx="1.5" stroke="currentColor" stroke-width="1.7"/><rect x="3" y="13" width="8" height="8" rx="1.5" stroke="currentColor" stroke-width="1.7"/><rect x="13" y="13" width="8" height="8" rx="1.5" stroke="currentColor" stroke-width="1.7"/></svg>',
+        'name'  => 'Floor Layout',
+        'desc'  => 'Interactive room map with live status',
+        'badge' => 'Live',
+        'color' => '#2563eb',
+    ];
+    $cards[] = [
+        'href'  => 'reservations.php?branch=' . urlencode($branchKey),
+        'icon'  => '<svg viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="16" rx="2.5" stroke="currentColor" stroke-width="1.7"/><path d="M16 3v4M8 3v4M3 10h18" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="8" cy="15" r="1.1" fill="currentColor"/><circle cx="12" cy="15" r="1.1" fill="currentColor"/><circle cx="16" cy="15" r="1.1" fill="currentColor"/></svg>',
+        'name'  => 'Calendar',
+        'desc'  => 'Reservations, check-ins & availability',
+        'badge' => '',
+        'color' => '#0891b2',
+    ];
+}
+
+if (bb_has_permission('reports')) {
+    $cards[] = [
+        'href'  => 'reports.php?branch=' . urlencode($branchKey),
+        'icon'  => '<svg viewBox="0 0 24 24" fill="none"><path d="M4 20V14M9 20V8M14 20V11M19 20V4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
+        'name'  => 'Reports',
+        'desc'  => 'Occupancy, revenue & performance',
+        'badge' => '',
+        'color' => '#059669',
+    ];
+}
+
+if (bb_has_permission('guests')) {
+    $cards[] = [
+        'href'  => 'guests.php?branch=' . urlencode($branchKey),
+        'icon'  => '<svg viewBox="0 0 24 24" fill="none"><circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="1.7"/><path d="M2 21c0-4 3-7 7-7s7 3 7 7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M19 8v6M22 11h-6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
+        'name'  => 'Guests',
+        'desc'  => 'Guest profiles & stay history',
+        'badge' => '',
+        'color' => '#7c3aed',
+    ];
+}
+
+$cards[] = [
+    'href'  => 'audit.php?branch=' . urlencode($branchKey),
+    'icon'  => '<svg viewBox="0 0 24 24" fill="none"><path d="M9 12h6M9 16h4M6 4h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M9 8h6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
+    'name'  => 'Audit Log',
+    'desc'  => 'Track all actions and changes',
+    'badge' => '',
+    'color' => '#b45309',
+];
+
+if (bb_is_admin()) {
+    $cards[] = [
+        'href'  => 'users.php?branch=' . urlencode($branchKey),
+        'icon'  => '<svg viewBox="0 0 24 24" fill="none"><circle cx="8" cy="7" r="3.5" stroke="currentColor" stroke-width="1.7"/><circle cx="16.5" cy="7" r="3.5" stroke="currentColor" stroke-width="1.7"/><path d="M1.5 20c0-3.5 2.9-6 6.5-6s6.5 2.5 6.5 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M16 14a6.5 6.5 0 0 1 6.5 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
+        'name'  => 'Users & Staff',
+        'desc'  => 'Manage accounts and permissions',
+        'badge' => 'Admin',
+        'color' => '#be185d',
+    ];
+}
+
+$displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -30,83 +115,84 @@ $branchName = $branches[$branchKey];
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,700;1,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../assets/css/property.css">
+<style>
+  :root { --brand: <?= htmlspecialchars($branchColor) ?>; }
+
+  /* ─── Minimal back link ──────────────────────────────────────────── */
+  .prop-back {
+    position: absolute;
+    top: 20px;
+    left: 24px;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: rgba(255,255,255,0.7);
+    text-decoration: none;
+    font-size: 0.85rem;
+    font-weight: 500;
+    font-family: 'Inter', sans-serif;
+    transition: color 200ms, transform 200ms;
+  }
+  .prop-back svg {
+    width: 18px;
+    height: 18px;
+  }
+  .prop-back:hover {
+    color: #fff;
+    transform: translateX(-2px);
+  }
+
+  .prop-hero {
+    position: relative;
+  }
+</style>
 </head>
 <body class="property-body">
 
-<!-- ===================== TOP BAR ===================== -->
-<header class="ptopbar">
-    <a href="<?= bb_role_home() ?>" class="ptopbar__back">
-        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 6l-6 6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        <span>Dashboard</span>
+<!-- ── Hero ────────────────────────────────────────────── -->
+<div class="prop-hero">
+    <!-- Single "Dashboard" link -->
+    <a href="<?= bb_role_home() ?>" class="prop-back">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>
+        Dashboard
     </a>
 
-    <nav class="ptopbar__breadcrumb" aria-label="Breadcrumb">
-        <a href="dashboard.php">Properties</a>
-        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        <span aria-current="page"><?= htmlspecialchars($branchName) ?></span>
-    </nav>
-
-    <a href="../logout.php" class="ptopbar__logout">
-        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 16l4-4-4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 12H9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
-        <span>Log out</span>
-    </a>
-</header>
-
-<?php include __DIR__ . '/includes/property_navbar.php'; ?>
-
-<!-- ===================== MAIN ===================== -->
-<main class="property-main">
-
-    <div class="property-heading" data-animate-item style="--d:0">
-        <p class="property-heading__eyebrow"><?= $isAdmin ? 'Admin tools' : 'Branch overview' ?></p>
-        <h1 class="property-heading__title"><?= htmlspecialchars($branchName) ?></h1>
+    <div class="prop-hero__bg" style="--brand:<?= htmlspecialchars($branchColor) ?>;"></div>
+    <div class="prop-hero__content">
+        <span class="prop-hero__eyebrow"><?= htmlspecialchars($branchTag) ?></span>
+        <h1 class="prop-hero__title"><?= htmlspecialchars($branchName) ?></h1>
+        <p class="prop-hero__sub">Select a tool below to manage this property</p>
     </div>
+</div>
 
-    <div class="action-grid">
-        <a href="layout_1st_floor.php?branch=<?= htmlspecialchars($branchKey) ?>" class="action-card" data-animate-item style="--d:1">
-            <span class="action-card__icon">
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <rect x="4" y="4" width="7" height="7" rx="1.2" stroke="currentColor" stroke-width="1.6"/>
-                    <rect x="13" y="4" width="7" height="7" rx="1.2" stroke="currentColor" stroke-width="1.6"/>
-                    <rect x="4" y="13" width="7" height="7" rx="1.2" stroke="currentColor" stroke-width="1.6"/>
-                    <path d="M15.5 15.5l3.8 3.8M19.5 15.5l-3.8 3.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
-                </svg>
-            </span>
-            <span class="action-card__name">Layout</span>
-            <span class="action-card__desc">View and edit the floor plan</span>
-            <span class="action-card__arrow" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+<!-- ── Tool cards ──────────────────────────────────────── -->
+<main class="prop-main">
+    <div class="prop-grid">
+        <?php foreach ($cards as $i => $card): ?>
+        <a href="<?= htmlspecialchars($card['href']) ?>"
+           class="prop-card"
+           style="--card-color:<?= htmlspecialchars($card['color']) ?>; --d:<?= $i ?>;">
+            <div class="prop-card__icon-wrap">
+                <?= $card['icon'] ?>
+            </div>
+            <?php if ($card['badge']): ?>
+            <span class="prop-card__badge"><?= htmlspecialchars($card['badge']) ?></span>
+            <?php endif; ?>
+            <div class="prop-card__body">
+                <span class="prop-card__name"><?= htmlspecialchars($card['name']) ?></span>
+                <span class="prop-card__desc"><?= htmlspecialchars($card['desc']) ?></span>
+            </div>
+            <span class="prop-card__arrow">
+                <svg viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </span>
         </a>
-
-        <a href="reservations.php?branch=<?= htmlspecialchars($branchKey) ?>" class="action-card" data-animate-item style="--d:2">
-            <span class="action-card__icon">
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <rect x="3.5" y="5.5" width="17" height="15" rx="2" stroke="currentColor" stroke-width="1.6"/>
-                    <path d="M8 3.5v4M16 3.5v4M3.5 10h17" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
-                    <circle cx="8.2" cy="14" r="1" fill="currentColor"/>
-                    <circle cx="12" cy="14" r="1" fill="currentColor"/>
-                    <circle cx="15.8" cy="14" r="1" fill="currentColor"/>
-                </svg>
-            </span>
-            <span class="action-card__name">Calendar</span>
-            <span class="action-card__desc">Manage bookings and availability</span>
-            <span class="action-card__arrow" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </span>
-        </a>
+        <?php endforeach; ?>
     </div>
-
 </main>
 
-<!-- ===================== FOOTER ===================== -->
 <footer class="property-footer">
-    <div class="property-footer__social">
-        <a href="#" aria-label="Instagram"><svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.5"/><circle cx="17.2" cy="6.8" r="1" fill="currentColor"/></svg></a>
-        <a href="#" aria-label="Facebook"><svg viewBox="0 0 24 24" fill="none"><path d="M14 9h2.5V6H14c-1.66 0-3 1.34-3 3v2H9v3h3v6h3v-6h2.2l.3-3H14V9.5c0-.28.22-.5.5-.5H14V9Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg></a>
-        <a href="#" aria-label="WhatsApp"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3a9 9 0 0 0-7.8 13.5L3 21l4.7-1.2A9 9 0 1 0 12 3Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M8.5 9.3c.3-1 1.1-1 1.4-.6l.6 1.1c.2.4.1.7-.1 1-.3.4-.6.6-.3 1.1.5.9 1.5 1.8 2.4 2.2.5.2.7 0 1-.3.3-.3.6-.4 1-.2l1.1.6c.4.3.4 1.1-.6 1.4-1.4.5-3.5-.5-5-2s-2.5-3.6-2-5Z" fill="currentColor"/></svg></a>
-    </div>
-    <p class="property-footer__copy">&copy; <?= date('Y') ?> Bluebookers. All rights reserved.</p>
+    <p class="property-footer__copy">&copy; <?= date('Y') ?> Bluebookers &mdash; <?= htmlspecialchars($branchName) ?>. All rights reserved.</p>
 </footer>
 
 </body>

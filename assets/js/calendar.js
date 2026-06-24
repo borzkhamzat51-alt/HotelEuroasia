@@ -421,19 +421,6 @@
     }
 
     // ── Month-scope guard ─────────────────────────────────────────
-    // A WebSocket broadcast (rooms_changed/reservations_changed) carries
-    // every currently-active reservation across the WHOLE property, not
-    // just ones that fall inside whatever month this particular tab has
-    // open. Without this check, a reservation created/moved into a month
-    // the user isn't viewing would still get positioned here using THIS
-    // month's day slots as the reference frame, producing a bar at a
-    // meaningless (often huge negative or far-off-screen) percentage.
-    // If the stay doesn't overlap the currently displayed month at all,
-    // there's nothing to draw — drop the bar (whether it's the one we
-    // just created above, or a pre-existing bar whose dates just moved
-    // out of view) instead of rendering it somewhere nonsensical. It'll
-    // show up correctly once the user navigates to the right month,
-    // since the page re-renders from the database on every load.
     const scopeTrack = bar.closest('.cal-row__track');
     if (scopeTrack) {
       const scopeSlots = Array.prototype.slice.call(scopeTrack.querySelectorAll('.cal-day-slot'));
@@ -842,14 +829,27 @@
         { label: 'Print Folio', action: 'print_folio' },
       ];
     } else if (type === 'room') {
-      items = [
-        { label: 'Mark Available (Vacant Clean)', action: 'status_available' },
-        { label: 'Mark Vacant Dirty', action: 'status_needs_cleaning' },
-        { divider: true },
-        { label: 'Mark Out of Order / Maintenance', action: 'status_maintenance' },
-        { divider: true },
-        { label: 'Edit Room Details', action: 'edit_room' },
-      ];
+      // Find the row to check the room's current status
+      const roomRow = document.querySelector('.cal-row[data-room-id="' + data.roomId + '"]');
+      const currentStatusKey = roomRow ? roomRow.dataset.statusKey : '';
+      const isOccupied = (currentStatusKey === 'occupied' || currentStatusKey === 'reserved');
+
+      if (isOccupied) {
+        // Room has a guest — only allow editing room details; status changes
+        // must go through Check Out or reservation management, not a manual override.
+        items = [
+          { label: 'Edit Room Details', action: 'edit_room' },
+        ];
+      } else {
+        items = [
+          { label: 'Mark Available (Vacant Clean)', action: 'status_available' },
+          { label: 'Mark Vacant Dirty', action: 'status_needs_cleaning' },
+          { divider: true },
+          { label: 'Mark Out of Order / Maintenance', action: 'status_maintenance' },
+          { divider: true },
+          { label: 'Edit Room Details', action: 'edit_room' },
+        ];
+      }
     }
 
     items.forEach(function(item) {
@@ -2162,6 +2162,34 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
     }
 
     connect();
+  })();
+
+  // ─── SCALING SLIDER ──────────────────────────────────────────────────
+  (function wireScaleSlider() {
+    const slider = document.getElementById('calSizeSlider');
+    const label = document.getElementById('calSizeLabel');
+    if (!slider || !label) return;
+
+    // Load saved value from localStorage
+    const saved = localStorage.getItem('bb_calendar_scale');
+    const initial = saved ? parseInt(saved, 10) : 100;
+    slider.value = initial;
+    label.textContent = initial + '%';
+    document.documentElement.style.setProperty('--scale', initial / 100);
+
+    slider.addEventListener('input', function() {
+      const val = parseInt(this.value, 10);
+      label.textContent = val + '%';
+      const scale = val / 100;
+      document.documentElement.style.setProperty('--scale', scale);
+      localStorage.setItem('bb_calendar_scale', String(val));
+
+      // Re-trigger today line and boundary repositioning after a small delay
+      clearTimeout(window._scaleResizeTimer);
+      window._scaleResizeTimer = setTimeout(function() {
+        window.dispatchEvent(new Event('resize'));
+      }, 100);
+    });
   })();
 
 })();
