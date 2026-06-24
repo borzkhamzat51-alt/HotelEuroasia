@@ -2222,30 +2222,9 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
     connect();
   })();
 
-  // ─── SCALING SLIDER ──────────────────────────────────────────────────
-  (function wireScaleSlider() {
-    const slider = document.getElementById('calSizeSlider');
-    const label = document.getElementById('calSizeLabel');
-    if (!slider || !label) return;
-
-    const saved = localStorage.getItem('bb_calendar_scale');
-    const initial = saved ? parseInt(saved, 10) : 100;
-    slider.value = initial;
-    label.textContent = initial + '%';
-    document.documentElement.style.setProperty('--scale', initial / 100);
-
-    slider.addEventListener('input', function() {
-      const val = parseInt(this.value, 10);
-      label.textContent = val + '%';
-      const scale = val / 100;
-      document.documentElement.style.setProperty('--scale', scale);
-      localStorage.setItem('bb_calendar_scale', String(val));
-
-      clearTimeout(window._scaleResizeTimer);
-      window._scaleResizeTimer = setTimeout(function() {
-        window.dispatchEvent(new Event('resize'));
-      }, 100);
-    });
+  // ─── FIXED SCALE (no slider — calendar always full size) ─────────────
+  (function setFixedScale() {
+    document.documentElement.style.setProperty('--scale', '1.3');
   })();
 
   // ─── LEGEND CLICK FILTERING ──────────────────────────────────────────

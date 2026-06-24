@@ -1,89 +1,103 @@
 /* ==========================================================================
-   Room Layout Page  (rl-*)  — clean two-column architecture
-   All new class names, zero conflict with legacy layout.css rules.
+   Room Layout Page  (rl-*)  — unified toolbar + full-width content
    ========================================================================== */
 
 /* ── Outer page wrapper ──────────────────────────────────── */
-.rl-heading {
-  padding: 24px 28px 16px;
-  text-align: center;
-}
-
 .rl-page {
   display: flex;
-  align-items: flex-start;
-  gap: 20px;
-  padding: 0 28px 48px;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 1500px;
   width: 100%;
+  margin: 0 auto;
+  padding: 24px 24px 48px;
   box-sizing: border-box;
 }
 
-/* ── LEFT: legend card (floating, like calendar legend) ───── */
+/* ── Status key (formerly sidebar) — plain caption, not a nav ───── */
 .rl-sidebar {
-  flex-shrink: 0;
-  width: 172px;
-  position: sticky;
-  top: 72px;
-  align-self: start;
-  background: #fff;
-  border: 1px solid #c5deef;
-  border-radius: 18px;
-  box-shadow: 0 4px 20px rgba(22,50,79,.10);
-  overflow: hidden;
+  width: 100%;
+  order: 2;
+  border-top: 1px solid #dce9f5;
+  padding-top: 14px;
 }
 
-.rl-sidebar__inner { /* no-op wrapper kept for PHP compat */ }
+.rl-main {
+  order: 1;
+}
 
-/* Dark navy header matching calendar */
+.rl-sidebar__inner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  padding: 0;
+}
+
+/* Plain text label, no chip/background — reads as a caption, not a tab */
 .rl-sidebar__head {
-  padding: 11px 14px 10px;
-  background: linear-gradient(135deg, #0f2744 0%, #1a3f6e 100%);
-  font-family: 'Playfair Display', serif;
-  font-size: .88rem;
+  font-family: 'Inter', sans-serif;
+  font-size: .62rem;
   font-weight: 700;
-  color: #fff;
-  letter-spacing: 0;
-  text-transform: none;
-  border-bottom: none;
-  margin-bottom: 0;
-}
-
-/* Group label */
-.rl-legend-group-label {
-  font-size: .56rem;
-  font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: .09em;
-  color: #2563eb;
-  padding: 10px 12px 5px;
-  border-bottom: 1px solid #edf4fa;
-  margin-bottom: 4px;
+  letter-spacing: .08em;
+  color: #8dafc8;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
-/* Each legend item */
+/* ── Legend groups (inline, separated by hairline) ───────── */
+.rl-legend-group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  padding: 0 14px;
+  border-right: 1px solid #dce9f5;
+}
+.rl-legend-group:last-of-type { border-right: none; }
+
+.rl-legend-group__label {
+  font-size: .58rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: #a9c2d8;
+  white-space: nowrap;
+}
+
+/* Each legend item — plain text + swatch, no button chrome */
 .rl-legend-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 5px 12px;
-  font-size: .74rem;
+  gap: 6px;
+  padding: 2px 3px;
+  border-radius: 4px;
+  font-size: .72rem;
   font-weight: 500;
-  color: #2c4a68;
+  color: #4a6075;
   cursor: pointer;
-  transition: background 120ms;
+  transition: color 120ms;
   user-select: none;
-  border-left: none;
+  white-space: nowrap;
 }
-.rl-legend-item:hover   { background: #f0f6fc; }
-.rl-legend-item.is-active { background: #eef5fc; font-weight: 700; color: #16324f; }
-.rl-legend-item.is-dimmed { opacity: .28; }
+.rl-legend-item:hover   { color: #16324f; }
+.rl-legend-item.is-active {
+  color: #16324f;
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-color: #2563eb;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+.rl-legend-item.is-dimmed { opacity: .35; }
 
-/* Bar swatch — mini version of a room card bar */
+/* Swatch for reservation status (gradient + strip) */
 .rl-legend-swatch {
   display: inline-flex;
   align-items: center;
-  width: 28px;
-  height: 13px;
+  width: 22px;
+  height: 11px;
   border-radius: 3px;
   flex-shrink: 0;
   position: relative;
@@ -97,48 +111,80 @@
   width: 4px;
   background: rgba(0,0,0,.25);
 }
-.rl-legend-swatch--available     { background: #10b981; }
-.rl-legend-swatch--needs_cleaning{ background: #f97316; }
-.rl-legend-swatch--occupied      { background: #6b7280; }
-.rl-legend-swatch--reserved      { background: #2563eb; }
-.rl-legend-swatch--maintenance   { background: #ef4444; }
+.rl-legend-swatch--reserved {
+  background: linear-gradient(90deg, #fbbf24, #d97706);
+}
+.rl-legend-swatch--reserved::before   { background: #92400e; }
+.rl-legend-swatch--checked_in {
+  background: linear-gradient(90deg, #34d399, #059669);
+}
+.rl-legend-swatch--checked_in::before { background: #064e3b; }
+.rl-legend-swatch--checked_out {
+  background: linear-gradient(90deg, #94a3b8, #64748b);
+}
+.rl-legend-swatch--checked_out::before { background: #334155; }
+.rl-legend-swatch--cancelled {
+  background: linear-gradient(90deg, #f87171, #dc2626);
+}
+.rl-legend-swatch--cancelled::before  { background: #991b1b; }
 
+/* Pip for room status (solid circle) */
+.rl-legend-pip {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(0,0,0,.18);
+}
+
+/* Vertical hairline divider */
 .rl-legend-divider {
-  height: 1px;
-  background: #edf4fa;
-  margin: 6px 12px;
+  width: 1px;
+  height: 16px;
+  background: #dce9f5;
+  margin: 0 2px;
+  flex-shrink: 0;
 }
 
 .rl-legend-showall {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 7px 12px 10px;
-  font-size: .72rem;
-  font-weight: 700;
+  gap: 5px;
+  margin-left: auto;
+  font-size: .70rem;
+  font-weight: 600;
   color: #2563eb;
   cursor: pointer;
-  transition: background 120ms;
+  transition: color 120ms;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
-.rl-legend-showall:hover { background: #eef5fc; }
+.rl-legend-showall:hover { color: #1d4ed8; text-decoration: underline; }
 
 .rl-sidebar__footer {
-  padding: 7px 12px 10px;
-  border-top: 1px solid #edf4fa;
+  padding-left: 14px;
   font-size: .62rem;
-  color: #8dafc8;
+  color: #a9c2d8;
   font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
-/* ── RIGHT main area ─────────────────────────────────────── */
+/* ── Main content area ───────────────────────────────────── */
 .rl-main {
-  flex: 1;
+  width: 100%;
   min-width: 0;
-  padding: 0;
   box-sizing: border-box;
 }
 
-/* Title */
+/* Title & navigation – centered */
+.rl-heading {
+  margin-bottom: 24px;
+  text-align: center;
+  padding: 0;
+}
+
 .rl-eyebrow {
   font-size: .68rem;
   font-weight: 700;
@@ -146,24 +192,23 @@
   text-transform: uppercase;
   color: #3b7dd8;
   margin: 0 0 4px;
-  text-align: center;
 }
+
 .rl-title {
   font-family: 'Playfair Display', serif;
   font-size: clamp(1.6rem, 2.5vw, 2.2rem);
   font-weight: 700;
   color: #16324f;
-  margin: 0 0 16px;
+  margin: 0 0 12px;
   line-height: 1.15;
-  text-align: center;
 }
 
-/* Floor switch buttons */
+/* Floor switch buttons – centered */
 .rl-floor-switch {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
   justify-content: center;
 }
 .rl-floor-btn {
@@ -213,21 +258,64 @@
 }
 
 /* ── Responsive ──────────────────────────────────────────── */
-@media (max-width: 860px) {
-  .rl-page {
-    grid-template-columns: 1fr;
+@media (max-width: 700px) {
+  .rl-sidebar__inner {
+    padding: 8px 10px;
   }
-  .rl-sidebar {
-    position: static;
-    width: 100%;
-    min-width: 0;
-    min-height: auto;
+  .rl-legend-group {
+    padding: 0 8px;
     border-right: none;
-    border-bottom: 1px solid #e2edf6;
-    padding: 12px 0;
   }
-  .rl-sidebar__head { padding-bottom: 10px; }
-  /* horizontal legend on mobile */
-  .rl-legend-item { padding: 6px 12px; font-size: .74rem; }
-  .rl-main { padding: 20px 16px 40px; }
+  .rl-legend-divider { display: none; }
+  .rl-sidebar__footer { display: none; }
+  .rl-sidebar__head { font-size: .6rem; }
+}
+
+@media (max-width: 600px) {
+  .rl-page {
+    padding: 16px;
+  }
+  .rl-floor-plan {
+    flex-wrap: wrap;
+    padding: 12px;
+  }
+  .ef-zone--parking, .ef-zone--rightside {
+    display: none;
+  }
+  .ef-zone--hallway {
+    display: none;
+  }
+  .ef-room-col {
+    width: 100%;
+  }
+  .room-card {
+    width: 100%;
+    max-width: 320px;
+    margin: 0 auto;
+  }
+}
+
+/* ─── Legacy section headers for all-floors view ─────────── */
+.rl-floor-section {
+  margin-bottom: 36px;
+}
+.rl-floor-section__header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e2edf6;
+}
+.rl-floor-section__title {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #16324f;
+  margin: 0;
+}
+.rl-floor-section__count {
+  font-size: .72rem;
+  font-weight: 600;
+  color: #8dafc8;
 }

@@ -161,36 +161,15 @@ $legendItems = [
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../assets/css/style.css"><link rel="stylesheet" href="../assets/css/dashboard.css"><link rel="stylesheet" href="../assets/css/calendar.css">
-<style>.cal-page-main { flex:1; padding: clamp(20px,4vw,48px) clamp(16px,5vw,56px); max-width:1400px; margin:0 auto; width:100%; box-sizing:border-box; }
-/* ─── Legend panel enhancements ──────────────────────────────────── */
-.cal-legend-panel .cal-legend-item {
-    cursor: pointer;
-    transition: background 0.15s, transform 0.15s;
-    border-radius: 4px;
-    padding: 4px 8px;
-    margin: 0 -8px;
-}
-.cal-legend-item:hover {
-    background: rgba(59,125,216,0.08);
-    transform: translateX(3px);
-}
-.cal-legend-item.active-filter {
-    background: rgba(59,125,216,0.15);
-    box-shadow: inset 0 0 0 2px var(--blue-500);
-}
-.cal-legend-item.disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-}
-.cal-legend-item.disabled:hover {
-    background: transparent;
-    transform: none;
-}
-.cal-legend-swatch {
-    transition: all 0.2s;
-}
-.cal-legend-item.active-filter .cal-legend-swatch {
-    transform: scale(1.1);
+<style>
+.cal-page-main {
+  flex: 1;
+  padding: 0;
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 120px);
 }
 </style>
 </head>
@@ -205,7 +184,7 @@ $legendItems = [
 </header>
 <?php include __DIR__ . '/includes/navbar.php'; ?>
 <main class="cal-page-main">
-    <div class="cal-toolbar">
+    <div class="cal-toolbar" style="padding: clamp(14px,2vw,28px) clamp(16px,3vw,32px) 0;">
         <div class="cal-branch-tabs">
             <?php foreach ($lodgingBranches as $key => $label): ?>
                 <a href="?branch=<?= $key ?>&month=<?= $monthDate->format('Y-m') ?>" class="<?= $key === $branch ? 'is-active' : '' ?>"><?= htmlspecialchars($label) ?></a>
@@ -216,11 +195,6 @@ $legendItems = [
             <a href="?branch=<?= $branch ?>&month=<?= $thisMonth ?>" class="cal-today-btn">Today</a>
             <span class="cal-month-label"><?= $monthLabel ?></span>
             <a href="?branch=<?= $branch ?>&month=<?= $nextMonth ?>" class="cal-nav-btn" aria-label="Next month">&#8250;</a>
-        </div>
-        <div class="cal-size-control">
-            <label for="calSizeSlider">Size</label>
-            <input type="range" id="calSizeSlider" min="60" max="150" value="100" step="5">
-            <span class="size-label" id="calSizeLabel">100%</span>
         </div>
         <?php if ($isLodging && !empty($rooms)): ?>
             <button type="button" class="btn btn--primary" id="newReservationBtn" style="width:auto; padding:10px 20px;">+ New Reservation</button>

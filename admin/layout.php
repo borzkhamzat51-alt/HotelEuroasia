@@ -81,7 +81,7 @@ function rl_card($room) {
     </div>';
 }
 
-// 3rd floor columns — same structure as 2nd floor
+// 3rd floor columns
 $leftRooms   = ['303','302','301'];
 $middleRooms = ['306','305','304'];
 $rightRooms  = ['310','309','308','307'];
@@ -97,11 +97,16 @@ foreach ($rooms as $room) {
 }
 
 $legendItems = [
-    ['key'=>'available',      'label'=>'Vacant Clean', 'color'=>'#10b981'],
-    ['key'=>'needs_cleaning', 'label'=>'Vacant Dirty', 'color'=>'#f97316'],
-    ['key'=>'occupied',       'label'=>'Occupied',     'color'=>'#6b7280'],
-    ['key'=>'reserved',       'label'=>'Reserved',     'color'=>'#2563eb'],
-    ['key'=>'maintenance',    'label'=>'Out of Order', 'color'=>'#ef4444'],
+    // Reservation statuses
+    ['key' => 'reserved',     'label' => 'Reserved',     'type' => 'reservation', 'color' => '#fbbf24'],
+    ['key' => 'checked_in',   'label' => 'Checked In',   'type' => 'reservation', 'color' => '#34d399'],
+    ['key' => 'checked_out',  'label' => 'Checked Out',  'type' => 'reservation', 'color' => '#94a3b8'],
+    ['key' => 'cancelled',    'label' => 'Cancelled',    'type' => 'reservation', 'color' => '#f87171'],
+    // Room statuses
+    ['key' => 'available',      'label' => 'Vacant Clean',  'type' => 'room', 'color' => '#10b981'],
+    ['key' => 'needs_cleaning', 'label' => 'Vacant Dirty',  'type' => 'room', 'color' => '#f97316'],
+    ['key' => 'occupied',       'label' => 'Occupied',      'type' => 'room', 'color' => '#6b7280'],
+    ['key' => 'maintenance',    'label' => 'Out of Order',  'type' => 'room', 'color' => '#ef4444'],
 ];
 
 $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
@@ -142,39 +147,61 @@ $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
 
 <?php include __DIR__ . '/includes/property_navbar.php'; ?>
 
-<!-- ── Page heading ──────────────────────────────────────── -->
-<div class="rl-heading">
-    <p class="rl-eyebrow">Interactive Map</p>
-    <h1 class="rl-title">3rd Floor Layout</h1>
-    <div class="rl-floor-switch">
-        <a href="layout_1st_floor.php?branch=<?= urlencode($branch) ?>" class="rl-floor-btn">1st Floor</a>
-        <a href="layout_2nd_floor.php?branch=<?= urlencode($branch) ?>" class="rl-floor-btn">2nd Floor</a>
-        <a href="layout.php?branch=<?= urlencode($branch) ?>" class="rl-floor-btn is-active">3rd Floor</a>
-    </div>
-</div>
-
-<!-- ══ TWO-COLUMN PAGE ══════════════════════════════════════ -->
+<!-- ── Unified layout shell ──────────────────────────────────────── -->
 <div class="rl-page">
 
-    <!-- ── SIDEBAR ──────────────────────────────────────────── -->
+    <!-- ── SIDEBAR (Legend) ──────────────────────────────────────────── -->
     <aside class="rl-sidebar" id="rlSidebar">
         <div class="rl-sidebar__inner">
-        <div class="rl-sidebar__head">Legend</div>
-        <div class="rl-legend-group-label">Room Status</div>
-        <?php foreach ($legendItems as $item): ?>
-        <div class="rl-legend-item" data-rl-filter="<?= $item['key'] ?>">
-            <span class="rl-legend-swatch rl-legend-swatch--<?= $item['key'] ?>"></span>
-            <span><?= $item['label'] ?></span>
-        </div>
-        <?php endforeach; ?>
-        <div class="rl-legend-divider"></div>
-        <div class="rl-legend-showall" data-rl-filter="all">&#8635; Show All</div>
-        <div class="rl-sidebar__footer" id="rlCount"><?= count($rooms) ?> rooms</div>
+            <div class="rl-sidebar__head">Legend</div>
+
+            <!-- Reservation Status Group -->
+            <div class="rl-legend-group">
+                <div class="rl-legend-group__label">Reservation Status</div>
+                <?php foreach ($legendItems as $item): ?>
+                    <?php if ($item['type'] === 'reservation'): ?>
+                        <div class="rl-legend-item" data-rl-filter="<?= $item['key'] ?>">
+                            <span class="rl-legend-swatch rl-legend-swatch--<?= $item['key'] ?>"></span>
+                            <span><?= $item['label'] ?></span>
+                        </div>
+                    <?php endif; ?>
+                <?php endforeach; ?>
+            </div>
+
+            <!-- Room Status Group -->
+            <div class="rl-legend-group">
+                <div class="rl-legend-group__label">Room Status</div>
+                <?php foreach ($legendItems as $item): ?>
+                    <?php if ($item['type'] === 'room'): ?>
+                        <div class="rl-legend-item" data-rl-filter="<?= $item['key'] ?>">
+                            <span class="rl-legend-pip" style="background:<?= $item['color'] ?>;"></span>
+                            <span><?= $item['label'] ?></span>
+                        </div>
+                    <?php endif; ?>
+                <?php endforeach; ?>
+            </div>
+
+            <div class="rl-legend-divider"></div>
+            <div class="rl-legend-showall" data-rl-filter="all">&#8635; Show All</div>
+            <div class="rl-sidebar__footer" id="rlCount"><?= count($rooms) ?> rooms</div>
         </div>
     </aside>
 
-    <!-- ── MAIN: elegant floor plan ─────────────────────────── -->
+    <!-- ── MAIN CONTENT ──────────────────────────────────────────────── -->
     <main class="rl-main">
+
+        <!-- Title & Floor Navigation -->
+        <div class="rl-heading">
+            <p class="rl-eyebrow">Interactive Map</p>
+            <h1 class="rl-title">3rd Floor Layout</h1>
+            <div class="rl-floor-switch">
+                <a href="layout_1st_floor.php?branch=<?= urlencode($branch) ?>" class="rl-floor-btn">1st Floor</a>
+                <a href="layout_2nd_floor.php?branch=<?= urlencode($branch) ?>" class="rl-floor-btn">2nd Floor</a>
+                <a href="layout.php?branch=<?= urlencode($branch) ?>" class="rl-floor-btn is-active">3rd Floor</a>
+            </div>
+        </div>
+
+        <!-- Floor Plan -->
         <?php if (empty($rooms)): ?>
             <p style="color:#8dafc8;padding:24px 0;">No rooms configured for this floor.</p>
         <?php else: ?>
@@ -200,6 +227,7 @@ $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
             </div>
         </div>
         <?php endif; ?>
+
     </main>
 
 </div><!-- /.rl-page -->

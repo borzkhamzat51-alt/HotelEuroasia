@@ -944,4 +944,3 @@
     window.filterLayoutRooms = filterRooms;
     window.resetLayoutFilter = function() { filterRooms('all'); };
 })();
-
