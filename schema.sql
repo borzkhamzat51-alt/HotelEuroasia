@@ -1,16 +1,5 @@
 -- ============================================================================
 -- Bluebookers — MySQL schema
--- Import this via phpMyAdmin (XAMPP Control Panel -> Admin -> phpMyAdmin ->
--- Import tab) or run it through the mysql CLI:
---   mysql -u root -p < schema.sql
---
--- This DROPS and recreates the "bluebookers" database every time you
--- import it, on purpose — so it always works cleanly whether you're
--- starting fresh or you already have an older version of this table
--- (e.g. one without the `permissions` column, which is what caused a
--- "Unknown column 'permissions'" error before this line was added).
--- There's no real production data here yet, so this is safe. Once you
--- have real data, swap this for a proper migration instead.
 -- ============================================================================
 
 DROP DATABASE IF EXISTS bluebookers;
@@ -27,14 +16,10 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash VARCHAR(255) NOT NULL,
   full_name     VARCHAR(150) NULL,
   role          ENUM('admin', 'staff') NOT NULL DEFAULT 'staff',
-  -- Comma-separated permission keys, e.g. "reports,reservations,guests".
-  -- Ignored entirely for role='admin' — admins always have full access.
   permissions   TEXT NULL,
   created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
--- One seeded admin account so you can log in right away.
--- Username: admin   Password: Admin@123
 INSERT INTO users (username, email, password_hash, full_name, role, permissions)
 VALUES (
   'admin',
@@ -43,14 +28,8 @@ VALUES (
   'Hotel Admin',
   'admin',
   NULL
-)
-ON DUPLICATE KEY UPDATE username = username; -- re-running this file won't error or duplicate
+) ON DUPLICATE KEY UPDATE username = username;
 
--- One seeded demo staff account with PARTIAL access, so you can test
--- permission enforcement immediately: this one can only reach the
--- Dashboard, Reservations, and Guests pages — Reports, Rooms, Billing,
--- and Settings are all hidden/blocked for them.
--- Username: frontdesk   Password: FrontDesk@123
 INSERT INTO users (username, email, password_hash, full_name, role, permissions)
 VALUES (
   'frontdesk',
@@ -59,18 +38,7 @@ VALUES (
   'Front Desk Staff',
   'staff',
   'dashboard,reservations,guests'
-)
-ON DUPLICATE KEY UPDATE username = username;
-
--- There is no self-service signup anywhere in this app on purpose.
--- New accounts are only ever created by an admin, from
--- admin/register-user.php (role=staff, with a permission checklist) or
--- admin/register-admin.php (role=admin, automatic full access).
-
-
--- ============================================================================
--- Calendar / Reservations module
--- ============================================================================
+) ON DUPLICATE KEY UPDATE username = username;
 
 CREATE TABLE IF NOT EXISTS rooms (
   id                 INT AUTO_INCREMENT PRIMARY KEY,
@@ -78,13 +46,8 @@ CREATE TABLE IF NOT EXISTS rooms (
   room_number        VARCHAR(20) NOT NULL,
   room_type          VARCHAR(100) NOT NULL,
   price_per_night    DECIMAL(10,2) NOT NULL DEFAULT 0,
-  -- Day-to-day operational state shown on the floor-plan console. This is
-  -- deliberately separate from reservations.status (which tracks a single
-  -- booking's lifecycle) — a room's physical state (e.g. under maintenance)
-  -- isn't a booking, and trying to store both in one ENUM is what caused
-  -- "Data truncated for column 'status'" errors before this column existed.
   room_status        ENUM('available','occupied','reserved','maintenance') NOT NULL DEFAULT 'available',
-  cleaning_status     VARCHAR(40) NOT NULL DEFAULT 'Clean',
+  cleaning_status    VARCHAR(40) NOT NULL DEFAULT 'Clean',
   maintenance_status VARCHAR(40) NOT NULL DEFAULT 'Cleared',
   last_occupancy     DATE NULL,
   staff_notes        TEXT NULL,
@@ -116,13 +79,10 @@ CREATE TABLE IF NOT EXISTS reservations (
   updated_by        INT NULL,
   created_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  expected_payment_date DATE NULL,
   FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
--- Who created/edited/deleted each reservation, and when. Reservations
--- themselves are never hard-deleted except by an explicit admin action
--- (status='cancelled' is the normal way a booking goes away), so this
--- plus the reservations table together are the "complete history".
 CREATE TABLE IF NOT EXISTS reservation_activity_log (
   id              INT AUTO_INCREMENT PRIMARY KEY,
   reservation_id  INT NOT NULL,
@@ -132,12 +92,6 @@ CREATE TABLE IF NOT EXISTS reservation_activity_log (
   created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
--- Seed rooms — all 26 currently live under one building (the 3 floors
--- already built out in admin/layout*.php), mapped to the 'mtv' branch
--- (MTV3 — the only property with real floor-plan data so far). 'annex'
--- and 'dormitel' have no rooms yet on purpose — the Calendar and
--- floor-plan pages both handle that gracefully (empty state) until
--- those properties get their own layouts.
 INSERT INTO rooms (branch, room_number, room_type, price_per_night) VALUES
 ('mtv', '101', 'Studio w/ Veranda', 9000),
 ('mtv', '102', 'Studio w/ Veranda', 9000),

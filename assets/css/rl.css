@@ -1,0 +1,233 @@
+/* ==========================================================================
+   Room Layout Page  (rl-*)  — clean two-column architecture
+   All new class names, zero conflict with legacy layout.css rules.
+   ========================================================================== */
+
+/* ── Outer page wrapper ──────────────────────────────────── */
+.rl-heading {
+  padding: 24px 28px 16px;
+  text-align: center;
+}
+
+.rl-page {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+  padding: 0 28px 48px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* ── LEFT: legend card (floating, like calendar legend) ───── */
+.rl-sidebar {
+  flex-shrink: 0;
+  width: 172px;
+  position: sticky;
+  top: 72px;
+  align-self: start;
+  background: #fff;
+  border: 1px solid #c5deef;
+  border-radius: 18px;
+  box-shadow: 0 4px 20px rgba(22,50,79,.10);
+  overflow: hidden;
+}
+
+.rl-sidebar__inner { /* no-op wrapper kept for PHP compat */ }
+
+/* Dark navy header matching calendar */
+.rl-sidebar__head {
+  padding: 11px 14px 10px;
+  background: linear-gradient(135deg, #0f2744 0%, #1a3f6e 100%);
+  font-family: 'Playfair Display', serif;
+  font-size: .88rem;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0;
+  text-transform: none;
+  border-bottom: none;
+  margin-bottom: 0;
+}
+
+/* Group label */
+.rl-legend-group-label {
+  font-size: .56rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .09em;
+  color: #2563eb;
+  padding: 10px 12px 5px;
+  border-bottom: 1px solid #edf4fa;
+  margin-bottom: 4px;
+}
+
+/* Each legend item */
+.rl-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  font-size: .74rem;
+  font-weight: 500;
+  color: #2c4a68;
+  cursor: pointer;
+  transition: background 120ms;
+  user-select: none;
+  border-left: none;
+}
+.rl-legend-item:hover   { background: #f0f6fc; }
+.rl-legend-item.is-active { background: #eef5fc; font-weight: 700; color: #16324f; }
+.rl-legend-item.is-dimmed { opacity: .28; }
+
+/* Bar swatch — mini version of a room card bar */
+.rl-legend-swatch {
+  display: inline-flex;
+  align-items: center;
+  width: 28px;
+  height: 13px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 2px 5px rgba(0,0,0,.18);
+}
+.rl-legend-swatch::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 4px;
+  background: rgba(0,0,0,.25);
+}
+.rl-legend-swatch--available     { background: #10b981; }
+.rl-legend-swatch--needs_cleaning{ background: #f97316; }
+.rl-legend-swatch--occupied      { background: #6b7280; }
+.rl-legend-swatch--reserved      { background: #2563eb; }
+.rl-legend-swatch--maintenance   { background: #ef4444; }
+
+.rl-legend-divider {
+  height: 1px;
+  background: #edf4fa;
+  margin: 6px 12px;
+}
+
+.rl-legend-showall {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px 10px;
+  font-size: .72rem;
+  font-weight: 700;
+  color: #2563eb;
+  cursor: pointer;
+  transition: background 120ms;
+}
+.rl-legend-showall:hover { background: #eef5fc; }
+
+.rl-sidebar__footer {
+  padding: 7px 12px 10px;
+  border-top: 1px solid #edf4fa;
+  font-size: .62rem;
+  color: #8dafc8;
+  font-weight: 600;
+}
+
+/* ── RIGHT main area ─────────────────────────────────────── */
+.rl-main {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* Title */
+.rl-eyebrow {
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .10em;
+  text-transform: uppercase;
+  color: #3b7dd8;
+  margin: 0 0 4px;
+  text-align: center;
+}
+.rl-title {
+  font-family: 'Playfair Display', serif;
+  font-size: clamp(1.6rem, 2.5vw, 2.2rem);
+  font-weight: 700;
+  color: #16324f;
+  margin: 0 0 16px;
+  line-height: 1.15;
+  text-align: center;
+}
+
+/* Floor switch buttons */
+.rl-floor-switch {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+  justify-content: center;
+}
+.rl-floor-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 20px;
+  border-radius: 999px;
+  font-family: 'Inter', sans-serif;
+  font-size: .80rem;
+  font-weight: 600;
+  text-decoration: none;
+  border: 1.5px solid #c5deef;
+  background: #fff;
+  color: #2c4a68;
+  cursor: pointer;
+  transition: transform 140ms, box-shadow 140ms, background 140ms, border-color 140ms, color 140ms;
+  box-shadow: 0 1px 4px rgba(22,50,79,.06);
+}
+.rl-floor-btn:hover {
+  background: #eef5fc;
+  border-color: #3b7dd8;
+  color: #16324f;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(37,99,235,.15);
+}
+.rl-floor-btn.is-active {
+  background: #2563eb;
+  border-color: #1d4ed8;
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(37,99,235,.40);
+}
+.rl-floor-btn.is-active:hover {
+  background: #1d4ed8;
+  transform: translateY(-1px);
+}
+
+/* ── Floor plan container ────────────────────────────────── */
+.rl-floor-plan {
+  display: flex;
+  align-items: stretch;
+  gap: 20px;
+  background: #f0f2f5;
+  border-radius: 12px;
+  padding: 20px;
+  overflow-x: auto;
+}
+
+/* ── Responsive ──────────────────────────────────────────── */
+@media (max-width: 860px) {
+  .rl-page {
+    grid-template-columns: 1fr;
+  }
+  .rl-sidebar {
+    position: static;
+    width: 100%;
+    min-width: 0;
+    min-height: auto;
+    border-right: none;
+    border-bottom: 1px solid #e2edf6;
+    padding: 12px 0;
+  }
+  .rl-sidebar__head { padding-bottom: 10px; }
+  /* horizontal legend on mobile */
+  .rl-legend-item { padding: 6px 12px; font-size: .74rem; }
+  .rl-main { padding: 20px 16px 40px; }
+}

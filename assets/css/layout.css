@@ -10,19 +10,21 @@
   --corp-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
   --corp-shadow-hover: 0 12px 40px -8px rgba(0, 0, 0, 0.12);
   
-  /* Status Colors – Corporate */
-  --status-available: #10b981;
-  --status-available-bg: #d1fae5;        /* light green */
-  --status-reserved: #3b82f6;
-  --status-reserved-bg: #dbeafe;         /* light blue */
-  --status-occupied: darkgreen;
-  --status-occupied-bg: #d1fae5;         /* light amber */
-  --status-needs-cleaning: #fbbf24;
-  --status-needs-cleaning-bg: #fef9c3;   /* light yellow */
-  --status-maintenance: #ef4444;
-  --status-maintenance-bg: #fecaca;      /* light red */
-  --status-blocked: #6b7280;
-  --status-blocked-bg: #f3f4f6;
+  /* ── Status Colors — fixed standard ─────────────────────────── */
+  --status-available:           #10b981;  /* Vacant Clean  → Green      */
+  --status-available-bg:        #d1fae5;
+  --status-reserved:            #2563eb;  /* Reserved      → Blue       */
+  --status-reserved-bg:         #dbeafe;
+  --status-occupied:            #6b7280;  /* Occupied      → Gray       */
+  --status-occupied-bg:         #f3f4f6;
+  --status-needs-cleaning:      #f97316;  /* Vacant Dirty  → Orange     */
+  --status-needs-cleaning-bg:   #ffedd5;
+  --status-maintenance:         #ef4444;  /* Out of Order  → Red        */
+  --status-maintenance-bg:      #fee2e2;
+  --status-maintenance-dark:    #374151;  /* Maintenance   → Dark Gray  */
+  --status-maintenance-dark-bg: #e5e7eb;
+  --status-blocked:             #6b7280;
+  --status-blocked-bg:          #f3f4f6;
   
   --text-primary: #1a2332;
   --text-secondary: #4b5563;
@@ -141,61 +143,53 @@
 }
 
 /* ─── Status Backgrounds & Border Colors ──────────────────────────── */
+
+/* Vacant Clean — Green */
 .room-card.status-available {
   background-color: var(--status-available-bg);
   border-left-color: var(--status-available);
 }
-.room-card.status-available .status-badge {
-  color: var(--status-available);
-}
-.room-card.status-available .room-card__status-indicator {
-  background: var(--status-available);
-}
+.room-card.status-available .status-badge         { color: var(--status-available); }
+.room-card.status-available .room-card__status-indicator { background: var(--status-available); }
+.room-card.status-available .rc-title             { color: #065f46; }
 
-.room-card.status-reserved {
-  background-color: var(--status-reserved-bg);
-  border-left-color: var(--status-reserved);
-}
-.room-card.status-reserved .status-badge {
-  color: var(--status-reserved);
-}
-.room-card.status-reserved .room-card__status-indicator {
-  background: var(--status-reserved);
-}
-
-.room-card.status-occupied {
-  background-color: var(--status-occupied-bg);
-  border-left-color: var(--status-occupied);
-}
-.room-card.status-occupied .status-badge {
-  color: var(--status-occupied);
-}
-.room-card.status-occupied .room-card__status-indicator {
-  background: var(--status-occupied);
-}
-
+/* Vacant Dirty — Orange */
 .room-card.status-available.room-card--dirty {
   background-color: var(--status-needs-cleaning-bg);
   border-left-color: var(--status-needs-cleaning);
 }
-.room-card.status-available.room-card--dirty .status-badge {
-  color: var(--status-needs-cleaning);
-}
-.room-card.status-available.room-card--dirty .room-card__status-indicator {
-  background: var(--status-needs-cleaning);
-}
+.room-card.status-available.room-card--dirty .status-badge         { color: var(--status-needs-cleaning); }
+.room-card.status-available.room-card--dirty .room-card__status-indicator { background: var(--status-needs-cleaning); }
+.room-card.status-available.room-card--dirty .rc-title             { color: #9a3412; }
 
+/* Reserved — Blue #2563EB */
+.room-card.status-reserved {
+  background-color: var(--status-reserved-bg);
+  border-left-color: var(--status-reserved);
+}
+.room-card.status-reserved .status-badge         { color: var(--status-reserved); }
+.room-card.status-reserved .room-card__status-indicator { background: var(--status-reserved); }
+.room-card.status-reserved .rc-title             { color: #1e40af; }
+
+/* Occupied — Gray */
+.room-card.status-occupied {
+  background-color: var(--status-occupied-bg);
+  border-left-color: var(--status-occupied);
+}
+.room-card.status-occupied .status-badge         { color: var(--status-occupied); }
+.room-card.status-occupied .room-card__status-indicator { background: var(--status-occupied); }
+.room-card.status-occupied .rc-title             { color: #374151; }
+
+/* Out of Order — Red */
 .room-card.status-maintenance {
   background-color: var(--status-maintenance-bg);
   border-left-color: var(--status-maintenance);
-  opacity: 0.85;
+  opacity: 0.90;
 }
-.room-card.status-maintenance .status-badge {
-  color: var(--status-maintenance);
-}
-.room-card.status-maintenance .room-card__status-indicator {
-  background: var(--status-maintenance);
-}
+.room-card.status-maintenance .status-badge         { color: var(--status-maintenance); }
+.room-card.status-maintenance .room-card__status-indicator { background: var(--status-maintenance); }
+.room-card.status-maintenance .rc-title             { color: #991b1b; }
+
 
 /* ─── Staggered load ───────────────────────────────────────────────── */
 .ef-room-col:nth-child(2) .room-card:nth-child(1) { animation-delay: 60ms; }
@@ -778,3 +772,219 @@
 .pms-status-btn.status-reserved.active { background: var(--status-reserved); color: #ffffff; }
 .pms-status-btn.status-maintenance { border-color: var(--status-maintenance); color: var(--status-maintenance); }
 .pms-status-btn.status-maintenance.active { background: var(--status-maintenance); color: #ffffff; }
+/* ==========================================================================
+   SIDE LEGEND SIDEBAR — two-column layout wrapper
+   ========================================================================== */
+
+/* ── Page wrapper: sidebar + content ────────────────────── */
+.layout-page-wrap {
+  display: grid;
+  grid-template-columns: 155px 1fr;
+  gap: 20px;
+  align-items: start;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: clamp(20px,4vw,40px) clamp(16px,4vw,48px);
+  box-sizing: border-box;
+}
+
+/* ── Legend sidebar — compact, matching calendar legend ─────── */
+.legend-sidebar {
+  position: sticky;
+  top: 80px;
+  background: #fff;
+  border: 1px solid #e2edf6;
+  border-radius: 16px;
+  box-shadow: 0 2px 12px rgba(22,50,79,.07);
+  overflow: hidden;
+  height: fit-content;
+}
+
+.legend-sidebar__head {
+  padding: 10px 12px 9px;
+  background: linear-gradient(135deg, #0f2744 0%, #1a3f6e 100%);
+  font-size: .62rem;
+  font-weight: 800;
+  letter-spacing: .10em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,.80);
+}
+
+.legend-sidebar__body {
+  padding: 10px 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.legend-sidebar__divider {
+  height: 1px;
+  background: #edf4fa;
+  margin: 6px 0;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 7px;
+  border-radius: 8px;
+  font-size: .72rem;
+  font-weight: 500;
+  color: #2c4a68;
+  cursor: pointer;
+  transition: background 140ms, color 140ms;
+  user-select: none;
+}
+.legend-item:hover { background: #eef5fc; }
+.legend-item.is-active { background: #eef5fc; font-weight: 700; color: #16324f; }
+.legend-item.is-dimmed { opacity: .35; }
+
+.legend-item__dot {
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(0,0,0,.18);
+  transition: transform 160ms;
+}
+.legend-item:hover .legend-item__dot { transform: scale(1.3); }
+
+.legend-item--showall {
+  font-size: .67rem;
+  font-weight: 700;
+  color: #3b7dd8;
+  letter-spacing: .01em;
+}
+.legend-item--showall:hover { background: #eef5fc; color: #2563eb; }
+
+.legend-sidebar__footer {
+  padding: 7px 10px 10px;
+  border-top: 1px solid #edf4fa;
+  font-size: .62rem;
+  color: #8dafc8;
+  font-weight: 600;
+}
+
+/* ── Right content area ──────────────────────────────────── */
+.floor-content {
+  min-width: 0;
+}
+
+.floor-content .property-heading {
+  text-align: left;
+  margin-bottom: 24px;
+}
+
+.floor-content .floor-switch {
+  justify-content: flex-start;
+}
+
+/* ── Mobile: collapse sidebar ────────────────────────────── */
+@media (max-width: 900px) {
+  .layout-page-wrap {
+    grid-template-columns: 1fr;
+    padding: 16px;
+  }
+
+  .legend-sidebar {
+    position: static;
+  }
+
+  .legend-sidebar__body {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 5px;
+    padding: 8px 10px 10px;
+  }
+
+  .legend-item {
+    padding: 4px 9px;
+    font-size: .70rem;
+    border: 1px solid #e2edf6;
+  }
+
+  .legend-sidebar__divider { display: none; }
+  .legend-sidebar__footer  { display: none; }
+}
+
+/* ==========================================================================
+   FLOOR SWITCH BUTTONS — high specificity to beat base .btn rules
+   ========================================================================== */
+.floor-switch {
+  display: flex !important;
+  gap: 8px !important;
+  flex-wrap: wrap;
+  margin-top: 18px;
+  margin-bottom: 4px;
+  align-items: center;
+}
+
+.floor-switch a.btn,
+.floor-switch button.btn,
+.floor-switch .btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 7px 20px !important;
+  border-radius: 999px !important;
+  font-family: 'Inter', sans-serif !important;
+  font-size: .80rem !important;
+  font-weight: 600 !important;
+  text-decoration: none !important;
+  cursor: pointer !important;
+  border: 1.5px solid #c5deef !important;
+  background: #fff !important;
+  color: #2c4a68 !important;
+  line-height: 1 !important;
+  box-shadow: 0 1px 4px rgba(22,50,79,.06) !important;
+  min-width: 0 !important;
+  width: auto !important;
+  height: auto !important;
+  letter-spacing: 0 !important;
+  transition: transform 160ms, box-shadow 160ms, background 160ms, border-color 160ms, color 160ms !important;
+}
+.floor-switch a.btn:hover,
+.floor-switch button.btn:hover,
+.floor-switch .btn:hover {
+  background: #eef5fc !important;
+  border-color: #3b7dd8 !important;
+  color: #16324f !important;
+  transform: translateY(-2px) !important;
+  box-shadow: 0 6px 16px -4px rgba(37,99,235,.18) !important;
+}
+.floor-switch a.btn.btn--active,
+.floor-switch button.btn.btn--active,
+.floor-switch .btn--active {
+  background: #2563eb !important;
+  border-color: #1d4ed8 !important;
+  color: #fff !important;
+  box-shadow: 0 4px 14px -4px rgba(37,99,235,.45) !important;
+}
+.floor-switch a.btn.btn--active:hover,
+.floor-switch button.btn.btn--active:hover,
+.floor-switch .btn--active:hover {
+  background: #1d4ed8 !important;
+  transform: translateY(-2px) !important;
+  box-shadow: 0 8px 20px -6px rgba(37,99,235,.50) !important;
+}
+
+/* ==========================================================================
+   GUEST NAME BADGE
+   ========================================================================== */
+.rc-guest {
+  display: inline-block;
+  font-size: .72rem;
+  font-weight: 700;
+  color: #1e40af;
+  background: rgba(37,99,235,.10);
+  border: 1px solid rgba(37,99,235,.20);
+  padding: 2px 10px;
+  border-radius: 999px;
+  margin-top: 5px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.room-card.status-available .rc-guest { display: none; }
+.rc-guest:empty { display: none; }

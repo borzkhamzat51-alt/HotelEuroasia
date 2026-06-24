@@ -44,11 +44,6 @@ if (!bb_has_permission('reservations')) {
 }
 
 // --- GET: fetch a room's active reservation (full row + room_number) ---
-// Layout's room cards only carry a reduced field set in their data-*
-// attributes (no reservation id, address, valid ID, payment fields,
-// etc.) — this is what lets the Layout-side reservation menu (check
-// in/out, cancel, edit, move, etc.) work with complete, current data
-// instead of needing to inline the entire reservation onto every card.
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['action'] ?? '') === 'get_active_reservation') {
     $roomId = (int) ($_GET['room_id'] ?? 0);
     if (!$roomId) {
@@ -149,29 +144,18 @@ try {
         'payment_method' => $_POST['payment_method'] ?: null,
         'notes' => trim($_POST['notes'] ?? ''),
         'special_requests' => trim($_POST['special_requests'] ?? ''),
+        'expected_payment_date' => $_POST['expected_payment_date'] ?? null,
         'user_id' => $_SESSION['user_id'],
     ];
 
     // --- For updates, fill in any field truly missing from the request
-    // (key absent from $_POST entirely) using the existing saved value.
-    //
-    // IMPORTANT: this checks isset($_POST[$key]), not the resolved $data
-    // value. An earlier version of this merge checked things like
-    // `$value === 0` / `$value === ''` to decide whether to fall back —
-    // but that can't tell "user explicitly cleared this to 0/empty" apart
-    // from "field wasn't sent at all", so it was silently reverting
-    // legitimate zero-value edits (num_children, security_deposit,
-    // amount_paid, room_rate, total_amount all have valid all-zero
-    // states) back to whatever was already saved. isset() on the raw
-    // POST avoids that: a field that was actually submitted, even as 0
-    // or "", is respected; only a field genuinely absent falls back.
     if ($action === 'update') {
         $existing = db_find_reservation($reservationId);
         if (!$existing) {
             respond(['success' => false, 'message' => 'Reservation not found.']);
         }
         foreach ($data as $key => $value) {
-            if ($key === 'user_id') continue; // always the current session user, never merged from the old row
+            if ($key === 'user_id') continue;
             if (!isset($_POST[$key]) && isset($existing[$key]) && $existing[$key] !== '' && $existing[$key] !== null) {
                 $data[$key] = $existing[$key];
             }
@@ -188,6 +172,7 @@ try {
     elseif ($checkOutDate <= $checkInDate) $errors['check_out'] = 'Check‑out must be after check‑in.';
     if (!in_array($data['status'], ['reserved','checked_in','checked_out','cancelled'])) $errors['status'] = 'Invalid status.';
     if ($data['payment_method'] !== null && !in_array($data['payment_method'], ['cash','gcash','bank_transfer','card'])) $errors['payment_method'] = 'Invalid payment method.';
+    if ($data['expected_payment_date'] && !strtotime($data['expected_payment_date'])) $errors['expected_payment_date'] = 'Invalid expected payment date.';
 
     if ($data['status'] !== 'cancelled' && db_room_has_conflict($data['room_id'], $data['check_in'], $data['check_out'], $reservationId)) {
         respond(['success' => false, 'message' => 'That room is already booked for an overlapping date range.']);
@@ -219,13 +204,7 @@ try {
     syncRoomStatusFromReservation($data['room_id'], $oldStatus, $data['status']);
     if ($oldRoomId != $data['room_id']) syncRoomStatusFromReservation($oldRoomId);
 
-    // Fetch the updated reservation to return
     $updated = enrichWithRoomNumber(db_find_reservation($reservationId));
-    // Both rooms need a sidebar refresh when this was a room move — the
-    // destination room just gained an occupant/booking, and the original
-    // room may have just become free. When the room didn't change, this
-    // is simply the one room, still worth refreshing (e.g. a status
-    // change like check-in/check-out affects this same room's panel).
     $affectedRoomIds = array_unique([$data['room_id'], $oldRoomId]);
     $affectedRooms = [];
     foreach ($affectedRoomIds as $rid) {

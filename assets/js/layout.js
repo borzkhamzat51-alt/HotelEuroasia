@@ -68,7 +68,7 @@
     if (e.key === 'Escape' && !overlay.hidden) closeModal();
   });
 
-  // --- Form rendering (unchanged) ----------------------------------
+  // --- Form rendering ------------------------------------------------
   function roomOptions(selectedRoomId) {
     return cfg.rooms.map(function (r) {
       const sel = String(r.id) === String(selectedRoomId) ? 'selected' : '';
@@ -120,6 +120,17 @@
     html += field('Number of Children', 'num_children', resv.num_children || 0, 'number', errors);
     html += '</div>';
 
+    // ---- Duration and Expected Payment Date ----
+    html += '<div class="resv-duration">';
+    html += '<label>Stay Duration</label>';
+    html += '<div class="resv-duration__display" id="stayDurationDisplay">0 Days / 0 Nights</div>';
+    html += '</div>';
+
+    html += '<div class="field">';
+    html += '<label for="expected_payment_date">Expected Payment Date</label>';
+    html += '<input type="date" id="expected_payment_date" name="expected_payment_date" value="' + (resv.expected_payment_date || '') + '">';
+    html += '</div>';
+
     html += '<h3>Payment Information</h3><div class="resv-grid">';
     html += field('Room Rate', 'room_rate', resv.room_rate || 0, 'number', errors);
     html += field('Security Deposit', 'security_deposit', resv.security_deposit || 0, 'number', errors);
@@ -154,8 +165,8 @@
     content.innerHTML = html;
 
     wireBalance();
+    wireDateCalculations();
     wireFormSubmit(isEdit, resv.id);
-    wireAutoCheckout();
 
     document.getElementById('resvCancelBtn').addEventListener('click', closeModal);
     if (isEdit && cfg.canDelete) {
@@ -189,26 +200,37 @@
     recalc();
   }
 
-  function wireAutoCheckout() {
+  function wireDateCalculations() {
     const form = document.getElementById('resvForm');
-    const checkIn = form.check_in;
-    const checkOut = form.check_out;
-    if (!checkIn || !checkOut) return;
-    const isEdit = !!form.querySelector('input[name="id"]');
-    if (isEdit) return;
+    const checkIn = form.querySelector('[name="check_in"]');
+    const checkOut = form.querySelector('[name="check_out"]');
+    const expectedPayment = form.querySelector('[name="expected_payment_date"]');
+    const durationDisplay = document.getElementById('stayDurationDisplay');
 
-    function setCheckout30Days() {
-      const dateVal = checkIn.value;
-      if (!dateVal) return;
-      const d = new Date(dateVal);
-      d.setDate(d.getDate() + 30);
-      const year = d.getFullYear();
-      const month = String(d.getMonth() + 1).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
-      checkOut.value = year + '-' + month + '-' + day;
+    function updateDurationAndPayment() {
+      const inVal = checkIn.value;
+      const outVal = checkOut.value;
+      if (inVal && outVal) {
+        const start = new Date(inVal + 'T00:00:00');
+        const end = new Date(outVal + 'T00:00:00');
+        const nights = Math.round((end - start) / 86400000);
+        const days = nights + 1;
+        durationDisplay.textContent = days + ' Days / ' + nights + ' Nights';
+
+        if (!expectedPayment.dataset.userEdited) {
+          expectedPayment.value = outVal;
+        }
+      } else {
+        durationDisplay.textContent = '0 Days / 0 Nights';
+      }
     }
-    if (checkIn.value) setCheckout30Days();
-    checkIn.addEventListener('change', setCheckout30Days);
+
+    checkIn.addEventListener('input', updateDurationAndPayment);
+    checkOut.addEventListener('input', updateDurationAndPayment);
+    expectedPayment.addEventListener('input', function() {
+      this.dataset.userEdited = 'true';
+    });
+    updateDurationAndPayment();
   }
 
   function wireFormSubmit(isEdit, id) {
@@ -223,6 +245,10 @@
         const fd = new FormData(form);
         fd.append('action', isEdit ? 'update' : 'create');
         fd.append('csrf_token', cfg.csrfToken);
+        if (!fd.has('expected_payment_date')) {
+          const ep = form.querySelector('[name="expected_payment_date"]');
+          if (ep) fd.append('expected_payment_date', ep.value);
+        }
         fetch('/process_reservation.php', { method: 'POST', body: fd })
           .then(function (r) { return r.json(); })
           .then(function (res) {
@@ -323,8 +349,7 @@
     });
   });
 
-  // ─── DRAG LOGIC (Fixed) ──────────────────────────────────────────
-  // Now uses mutable originalRow/originalTrack and updates its own state.
+  // ─── DRAG LOGIC ──────────────────────────────────────────────────
   function wireBarInteractions(bar) {
     let originalRow = bar.closest('.cal-row');
     let originalTrack = bar.closest('.cal-row__track');
@@ -570,11 +595,11 @@
           return;
         }
 
-        // Build updated reservation object
         const updatedResv = Object.assign({}, resv, {
           check_in: newCheckIn,
           check_out: newCheckOut,
-          room_id: parseInt(newRoomId)
+          room_id: parseInt(newRoomId),
+          expected_payment_date: newCheckOut,
         });
 
         const fd = new FormData();
@@ -600,6 +625,7 @@
         fd.append('payment_method', resv.payment_method || '');
         fd.append('notes', resv.notes || '');
         fd.append('special_requests', resv.special_requests || '');
+        fd.append('expected_payment_date', newCheckOut);
 
         fetch('/process_reservation.php', { method: 'POST', body: fd })
           .then(function (r) {
@@ -609,23 +635,18 @@
           })
           .then(function (res) {
             if (res.success) {
-              // ── Update the source of truth ──────────────────────────
               Object.assign(resv, updatedResv);
               bar.dataset.reservation = JSON.stringify(resv);
               bar.dataset.checkIn = newCheckIn;
               bar.dataset.checkOut = newCheckOut;
               bar.dataset.roomId = newRoomId;
 
-              // ── Make the new location the new "original" ────────────
               originalRow = currentRow;
               originalTrack = currentTrack;
               origStartIdx = liveStartIdx;
               origEndIdx = liveEndIdx;
 
-              // ── Re-apply the position (it's already correct, but this locks it in) ──
               applyPosition(origStartIdx, origEndIdx, currentTrack);
-
-              // ── Reload to fetch fresh server data ─────────────────────
               window.location.reload();
             } else {
               alert('Server error: ' + (res.message || 'Unknown error.'));
@@ -799,4 +820,128 @@
     applyFilters();
   })();
 
+  // ─── FLOOR NAVIGATION ──────────────────────────────────────────────
+(function wireFloorNav() {
+    const navBtns = document.querySelectorAll('.layout-floor-nav__btn');
+    const sections = document.querySelectorAll('.layout-floor-section');
+
+    function scrollToFloor(floor) {
+        if (floor === 'all') {
+            // Smooth scroll to top of room area
+            const area = document.querySelector('.layout-room-area');
+            if (area) area.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            return;
+        }
+        const target = document.getElementById('floor-' + floor);
+        if (target) {
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }
+
+    navBtns.forEach(btn => {
+        btn.addEventListener('click', function() {
+            const floor = this.dataset.floor;
+            // Update active state
+            navBtns.forEach(b => b.classList.remove('is-active'));
+            this.classList.add('is-active');
+            // Scroll
+            scrollToFloor(floor);
+            // Also filter rooms to that floor if not 'all'
+            if (floor !== 'all') {
+                sections.forEach(section => {
+                    section.style.display = (section.dataset.floor === floor) ? '' : 'none';
+                });
+            } else {
+                sections.forEach(section => section.style.display = '');
+            }
+        });
+    });
+
+    // If there's a floor param in URL, activate it
+    const hash = window.location.hash;
+    if (hash && hash.startsWith('#floor-')) {
+        const floor = hash.replace('#floor-', '');
+        const btn = document.querySelector(`.layout-floor-nav__btn[data-floor="${floor}"]`);
+        if (btn) btn.click();
+    }
 })();
+
+// ─── LEGEND FILTERING ───────────────────────────────────────────────
+(function wireLegendFilter() {
+    const legendItems = document.querySelectorAll('.layout-legend-panel__item');
+    const cards = document.querySelectorAll('.room-card');
+    let activeFilter = null;
+
+    function clearHighlights() {
+        legendItems.forEach(el => el.classList.remove('active-filter'));
+    }
+
+    function filterRooms(status) {
+        if (status === 'all') {
+            cards.forEach(c => c.style.display = '');
+            clearHighlights();
+            activeFilter = null;
+            // Re-apply floor filter if any (we'll re-trigger floor nav)
+            const activeFloorBtn = document.querySelector('.layout-floor-nav__btn.is-active');
+            if (activeFloorBtn && activeFloorBtn.dataset.floor !== 'all') {
+                const floor = activeFloorBtn.dataset.floor;
+                document.querySelectorAll('.layout-floor-section').forEach(section => {
+                    section.style.display = (section.dataset.floor === floor) ? '' : 'none';
+                });
+            }
+            return;
+        }
+
+        let showClass = '';
+        let extra = null;
+        switch (status) {
+            case 'available':
+                showClass = 'status-available';
+                extra = (card) => !card.classList.contains('room-card--dirty');
+                break;
+            case 'dirty':
+                showClass = 'status-available';
+                extra = (card) => card.classList.contains('room-card--dirty');
+                break;
+            case 'occupied':
+                showClass = 'status-occupied';
+                break;
+            case 'reserved':
+                showClass = 'status-reserved';
+                break;
+            case 'maintenance':
+                showClass = 'status-maintenance';
+                break;
+            default: return;
+        }
+
+        cards.forEach(card => {
+            const hasClass = card.classList.contains(showClass);
+            let show = hasClass;
+            if (extra) show = show && extra(card);
+            card.style.display = show ? '' : 'none';
+        });
+
+        clearHighlights();
+        const target = document.querySelector(`.layout-legend-panel__item[data-status="${status}"]`);
+        if (target) target.classList.add('active-filter');
+        activeFilter = { status };
+    }
+
+    legendItems.forEach(item => {
+        item.addEventListener('click', function() {
+            const status = this.dataset.status;
+            if (!status) return;
+            if (activeFilter && activeFilter.status === status) {
+                filterRooms('all');
+                return;
+            }
+            filterRooms(status);
+        });
+    });
+
+    // Expose to global for sync
+    window.filterLayoutRooms = filterRooms;
+    window.resetLayoutFilter = function() { filterRooms('all'); };
+})();
+

@@ -3,6 +3,8 @@
  * Fixed drag: moving a bar preserves its duration (width) exactly.
  * Sidebar now shows: Room Name → Status → Room Number → Room Code → Category.
  * Fixed room context menu – header excluded, roomId parsed as int.
+ * Added live stay duration and expected payment date.
+ * Added legend filtering – click legend items to filter calendar.
  */
 (function () {
   'use strict';
@@ -230,6 +232,17 @@
     html += field('Number of Children', 'num_children', resv.num_children || 0, 'number', errors);
     html += '</div>';
 
+    // ---- Duration and Expected Payment Date ----
+    html += '<div class="resv-duration">';
+    html += '<label>Stay Duration</label>';
+    html += '<div class="resv-duration__display" id="stayDurationDisplay">0 Days / 0 Nights</div>';
+    html += '</div>';
+
+    html += '<div class="field">';
+    html += '<label for="expected_payment_date">Expected Payment Date</label>';
+    html += '<input type="date" id="expected_payment_date" name="expected_payment_date" value="' + (resv.expected_payment_date || '') + '">';
+    html += '</div>';
+
     html += '<h3>Payment Information</h3><div class="resv-grid">';
     html += field('Room Rate', 'room_rate', resv.room_rate || 0, 'number', errors);
     html += field('Security Deposit', 'security_deposit', resv.security_deposit || 0, 'number', errors);
@@ -264,6 +277,7 @@
     content.innerHTML = html;
 
     wireBalance();
+    wireDateCalculations();
     wireFormSubmit(isEdit, resv.id);
 
     document.getElementById('resvCancelBtn').addEventListener('click', closeModal);
@@ -298,6 +312,40 @@
     recalc();
   }
 
+  // ---- Duration and Payment Date update ----
+  function wireDateCalculations() {
+    const form = document.getElementById('resvForm');
+    const checkIn = form.querySelector('[name="check_in"]');
+    const checkOut = form.querySelector('[name="check_out"]');
+    const expectedPayment = form.querySelector('[name="expected_payment_date"]');
+    const durationDisplay = document.getElementById('stayDurationDisplay');
+
+    function updateDurationAndPayment() {
+      const inVal = checkIn.value;
+      const outVal = checkOut.value;
+      if (inVal && outVal) {
+        const start = new Date(inVal + 'T00:00:00');
+        const end = new Date(outVal + 'T00:00:00');
+        const nights = Math.round((end - start) / 86400000);
+        const days = nights + 1;
+        durationDisplay.textContent = days + ' Days / ' + nights + ' Nights';
+
+        if (!expectedPayment.dataset.userEdited) {
+          expectedPayment.value = outVal;
+        }
+      } else {
+        durationDisplay.textContent = '0 Days / 0 Nights';
+      }
+    }
+
+    checkIn.addEventListener('input', updateDurationAndPayment);
+    checkOut.addEventListener('input', updateDurationAndPayment);
+    expectedPayment.addEventListener('input', function() {
+      this.dataset.userEdited = 'true';
+    });
+    updateDurationAndPayment();
+  }
+
   function wireFormSubmit(isEdit, id) {
     const form = document.getElementById('resvForm');
     const roomSel = form.querySelector('[name="room_id"]');
@@ -328,6 +376,10 @@
         const fd = new FormData(form);
         fd.append('action', isEdit ? 'update' : 'create');
         fd.append('csrf_token', cfg.csrfToken);
+        if (!fd.has('expected_payment_date')) {
+          const ep = form.querySelector('[name="expected_payment_date"]');
+          if (ep) fd.append('expected_payment_date', ep.value);
+        }
         fetch('/process_reservation.php', { method: 'POST', body: fd })
           .then(function (r) { return r.json(); })
           .then(function (res) {
@@ -456,10 +508,19 @@
       iconSpan.outerHTML = BAR_ICONS[serverResv.status];
     }
 
+    // Determine if overdue
+    const todayStr = new Date().toISOString().split('T')[0];
+    const balance = (parseFloat(serverResv.total_amount) || 0) - (parseFloat(serverResv.amount_paid) || 0);
+    const isOverdue = (balance > 0 && serverResv.check_out < todayStr && serverResv.status !== 'cancelled');
+
     bar.className = bar.className.split(' ').filter(function(c) {
       return !c.startsWith('cal-bar--');
     }).join(' ');
-    bar.classList.add('cal-bar--' + serverResv.status);
+    if (isOverdue) {
+      bar.classList.add('cal-bar--overdue');
+    } else {
+      bar.classList.add('cal-bar--' + serverResv.status);
+    }
     bar.classList.remove('cal-bar--just-updated');
     void bar.offsetWidth;
     bar.classList.add('cal-bar--just-updated');
@@ -485,7 +546,7 @@
         const totalDays = slots.length;
         bar.style.left = (startOffset / totalDays * 100) + '%';
         bar.style.width = (duration / totalDays * 100) + '%';
-        bar.title = serverResv.guest_full_name + ' • ' + serverResv.check_in + ' to ' + serverResv.check_out + ' • ' + (cfg.statusLabels[serverResv.status] || serverResv.status);
+        bar.title = serverResv.guest_full_name + ' • ' + serverResv.check_in + ' to ' + serverResv.check_out + ' • ' + (cfg.statusLabels[serverResv.status] || serverResv.status) + (isOverdue ? ' • OVERDUE' : '');
       }
     }
 
@@ -814,8 +875,6 @@
         { label: 'Early Check-Out', action: 'early_checkout' },
         { divider: true },
         { label: 'Room Move', action: 'move' },
-        { label: 'Upgrade Room', action: 'upgrade' },
-        { label: 'Downgrade Room', action: 'downgrade' },
         { divider: true },
         { label: 'Adjust Room Rate', action: 'rate' },
         { divider: true },
@@ -829,14 +888,11 @@
         { label: 'Print Folio', action: 'print_folio' },
       ];
     } else if (type === 'room') {
-      // Find the row to check the room's current status
       const roomRow = document.querySelector('.cal-row[data-room-id="' + data.roomId + '"]');
       const currentStatusKey = roomRow ? roomRow.dataset.statusKey : '';
       const isOccupied = (currentStatusKey === 'occupied' || currentStatusKey === 'reserved');
 
       if (isOccupied) {
-        // Room has a guest — only allow editing room details; status changes
-        // must go through Check Out or reservation management, not a manual override.
         items = [
           { label: 'Edit Room Details', action: 'edit_room' },
         ];
@@ -1106,9 +1162,7 @@
         break;
       }
 
-      case 'move':
-      case 'upgrade':
-      case 'downgrade': {
+      case 'move': {
         if (!cfg.rooms || cfg.rooms.length === 0) {
           alert('No rooms available to move to.');
           return;
@@ -1146,7 +1200,7 @@
             'valid_id_type', 'valid_id_number', 'check_in', 'check_out',
             'num_adults', 'num_children', 'status',
             'room_rate', 'security_deposit', 'total_amount', 'amount_paid',
-            'payment_method', 'notes', 'special_requests'
+            'payment_method', 'notes', 'special_requests', 'expected_payment_date'
           ];
           fields.forEach(function(key) {
             fd.append(key, r[key] !== undefined && r[key] !== null ? r[key] : '');
@@ -1432,8 +1486,9 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
     fd.append('csrf_token', cfg.csrfToken);
     fd.append('check_in', checkIn);
     fd.append('check_out', checkOut);
+    fd.append('expected_payment_date', checkOut);
     Object.keys(r).forEach(function(key) {
-      if (key !== 'check_in' && key !== 'check_out' && key !== 'id') {
+      if (key !== 'check_in' && key !== 'check_out' && key !== 'id' && key !== 'expected_payment_date') {
         fd.append(key, r[key] !== undefined && r[key] !== null ? r[key] : '');
       }
     });
@@ -1818,6 +1873,7 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
         fd.append('payment_method', resv.payment_method || '');
         fd.append('notes', resv.notes || '');
         fd.append('special_requests', resv.special_requests || '');
+        fd.append('expected_payment_date', newCheckOut);
 
         console.log('[DRAG] Sending update:', Object.fromEntries(fd));
 
@@ -2102,6 +2158,8 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
         availSel.value = '';
         occSel.value = '';
         applyFilters();
+        // Also reset legend filter if active
+        if (window.resetLegendFilter) window.resetLegendFilter();
       });
     }
 
@@ -2170,7 +2228,6 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
     const label = document.getElementById('calSizeLabel');
     if (!slider || !label) return;
 
-    // Load saved value from localStorage
     const saved = localStorage.getItem('bb_calendar_scale');
     const initial = saved ? parseInt(saved, 10) : 100;
     slider.value = initial;
@@ -2184,12 +2241,107 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
       document.documentElement.style.setProperty('--scale', scale);
       localStorage.setItem('bb_calendar_scale', String(val));
 
-      // Re-trigger today line and boundary repositioning after a small delay
       clearTimeout(window._scaleResizeTimer);
       window._scaleResizeTimer = setTimeout(function() {
         window.dispatchEvent(new Event('resize'));
       }, 100);
     });
+  })();
+
+  // ─── LEGEND CLICK FILTERING ──────────────────────────────────────────
+  (function wireLegendFilter() {
+    const legendItems = document.querySelectorAll('.cal-legend-item:not(.disabled)');
+    let activeFilter = null; // { key, type }
+
+    function clearLegendHighlights() {
+      legendItems.forEach(el => el.classList.remove('active-filter'));
+    }
+
+    function applyFilter(key, type) {
+      // Clear any existing filter
+      clearLegendHighlights();
+      // Highlight the clicked item
+      const target = document.querySelector(`.cal-legend-item[data-filter-key="${key}"][data-filter-type="${type}"]`);
+      if (target) target.classList.add('active-filter');
+
+      // Now filter the grid
+      const bars = document.querySelectorAll('.cal-bar');
+      const rows = document.querySelectorAll('.cal-row[data-room-id]');
+
+      if (type === 'reservation') {
+        // Show only bars with matching status (or overdue if key === 'overdue')
+        bars.forEach(bar => {
+          let resv;
+          try { resv = JSON.parse(bar.dataset.reservation); } catch(e) { return; }
+          let show = false;
+          if (key === 'overdue') {
+            const balance = (parseFloat(resv.total_amount) || 0) - (parseFloat(resv.amount_paid) || 0);
+            const today = new Date().toISOString().split('T')[0];
+            show = (balance > 0 && resv.check_out < today && resv.status !== 'cancelled');
+          } else {
+            show = (resv.status === key);
+          }
+          bar.style.display = show ? '' : 'none';
+        });
+        // Hide rows that have no visible bars
+        rows.forEach(row => {
+          const track = row.querySelector('.cal-row__track');
+          const barsInRow = track ? track.querySelectorAll('.cal-bar') : [];
+          const visible = Array.from(barsInRow).some(bar => bar.style.display !== 'none');
+          row.style.display = visible ? '' : 'none';
+        });
+      } else if (type === 'room') {
+        // Filter by room status
+        rows.forEach(row => {
+          const statusKey = row.dataset.statusKey;
+          const show = (statusKey === key);
+          row.style.display = show ? '' : 'none';
+        });
+        // Also reset bar visibility (show all bars in visible rows)
+        bars.forEach(bar => {
+          const row = bar.closest('.cal-row');
+          if (row && row.style.display !== 'none') {
+            bar.style.display = '';
+          } else {
+            bar.style.display = 'none';
+          }
+        });
+      }
+    }
+
+    function resetFilter() {
+      clearLegendHighlights();
+      activeFilter = null;
+      // Show all bars and rows
+      document.querySelectorAll('.cal-bar').forEach(bar => bar.style.display = '');
+      document.querySelectorAll('.cal-row[data-room-id]').forEach(row => row.style.display = '');
+      // Also re-apply any existing filters from the filter bar (dropdowns)
+      if (window.__bbApplyCalFilters) {
+        window.__bbApplyCalFilters();
+      }
+    }
+
+    legendItems.forEach(item => {
+      item.addEventListener('click', function(e) {
+        const key = this.dataset.filterKey;
+        const type = this.dataset.filterType;
+        if (!key) return;
+
+        // Toggle off if already active
+        if (activeFilter && activeFilter.key === key && activeFilter.type === type) {
+          resetFilter();
+          activeFilter = null;
+          return;
+        }
+
+        activeFilter = { key, type };
+        applyFilter(key, type);
+      });
+    });
+
+    // Reset legend filter when reset button is clicked (already handled in wireFilters)
+    // Expose reset function globally
+    window.resetLegendFilter = resetFilter;
   })();
 
 })();

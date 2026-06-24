@@ -50,10 +50,6 @@ function db_email_taken($email, $excludeId = null)
     return (bool) $stmt->fetchColumn();
 }
 
-/**
- * Creates a staff account with a specific permission set. Never used
- * to create an admin — see db_create_admin() for that.
- */
 function db_create_staff($username, $email, $passwordHash, $fullName, $permissionsCsv)
 {
     $stmt = bb_db()->prepare(
@@ -63,10 +59,6 @@ function db_create_staff($username, $email, $passwordHash, $fullName, $permissio
     return (int) bb_db()->lastInsertId();
 }
 
-/**
- * Creates an admin account. Permissions column stays NULL — admins
- * don't need one, bb_has_permission() always returns true for them.
- */
 function db_create_admin($username, $email, $passwordHash, $fullName)
 {
     $stmt = bb_db()->prepare(
@@ -120,10 +112,6 @@ function db_find_room($id)
     return $room ?: null;
 }
 
-/**
- * All non-cancelled reservations for the given room ids that overlap
- * [$rangeStart, $rangeEnd] (inclusive), for rendering the calendar grid.
- */
 function db_list_reservations_in_range($roomIds, $rangeStart, $rangeEnd)
 {
     if (empty($roomIds)) {
@@ -149,11 +137,6 @@ function db_find_reservation($id)
     return $r ?: null;
 }
 
-/**
- * True if [$checkIn, $checkOut) overlaps an existing non-cancelled
- * reservation on this room. Checkout day itself doesn't count as
- * occupied (same-day turnover is allowed), matching normal hotel rules.
- */
 function db_room_has_conflict($roomId, $checkIn, $checkOut, $excludeReservationId = null)
 {
     $sql = "SELECT 1 FROM reservations
@@ -170,10 +153,8 @@ function db_room_has_conflict($roomId, $checkIn, $checkOut, $excludeReservationI
     return (bool) $stmt->fetchColumn();
 }
 
-// ─── UPDATED: db_create_reservation with required field checks and defaults ───
 function db_create_reservation($data)
 {
-    // Provide safe defaults for all optional columns
     $defaults = [
         'contact_number'   => '',
         'email'            => '',
@@ -188,15 +169,14 @@ function db_create_reservation($data)
         'payment_method'   => null,
         'notes'            => '',
         'special_requests' => '',
+        'expected_payment_date' => null,
     ];
-    // Required fields – will throw exception if missing
     $required = ['room_id', 'guest_full_name', 'check_in', 'check_out', 'num_adults', 'status', 'user_id'];
     foreach ($required as $field) {
         if (!array_key_exists($field, $data) || $data[$field] === null || $data[$field] === '') {
             throw new Exception("Missing required field: $field");
         }
     }
-    // Apply defaults
     foreach ($defaults as $key => $default) {
         if (!array_key_exists($key, $data) || $data[$key] === null) {
             $data[$key] = $default;
@@ -208,8 +188,8 @@ function db_create_reservation($data)
             (room_id, guest_full_name, contact_number, email, address, valid_id_type, valid_id_number,
              check_in, check_out, num_adults, num_children, status,
              room_rate, security_deposit, total_amount, amount_paid, payment_method,
-             notes, special_requests, created_by, updated_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+             notes, special_requests, created_by, updated_by, expected_payment_date)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     );
     $stmt->execute([
         $data['room_id'], $data['guest_full_name'], $data['contact_number'], $data['email'], $data['address'],
@@ -217,11 +197,11 @@ function db_create_reservation($data)
         $data['num_adults'], $data['num_children'], $data['status'],
         $data['room_rate'], $data['security_deposit'], $data['total_amount'], $data['amount_paid'], $data['payment_method'],
         $data['notes'], $data['special_requests'], $data['user_id'], $data['user_id'],
+        $data['expected_payment_date'],
     ]);
     return (int) bb_db()->lastInsertId();
 }
 
-// ─── UPDATED: db_update_reservation with required field checks and defaults ───
 function db_update_reservation($id, $data)
 {
     $required = ['room_id', 'user_id'];
@@ -231,9 +211,6 @@ function db_update_reservation($id, $data)
         }
     }
 
-    // Merge onto the existing row so partial updates (e.g. just flipping
-    // status on check-in/check-out) don't blank out the rest of the
-    // reservation's data or null out NOT NULL columns like check_in.
     $existing = db_find_reservation($id);
     if (!$existing) {
         throw new Exception("Reservation $id not found");
@@ -242,7 +219,7 @@ function db_update_reservation($id, $data)
         'guest_full_name', 'contact_number', 'email', 'address', 'valid_id_type', 'valid_id_number',
         'check_in', 'check_out', 'num_adults', 'num_children', 'status',
         'room_rate', 'security_deposit', 'total_amount', 'amount_paid', 'payment_method',
-        'notes', 'special_requests',
+        'notes', 'special_requests', 'expected_payment_date',
     ];
     foreach ($mergeableFields as $field) {
         if (!array_key_exists($field, $data) || $data[$field] === null) {
@@ -256,7 +233,7 @@ function db_update_reservation($id, $data)
             valid_id_type = ?, valid_id_number = ?, check_in = ?, check_out = ?,
             num_adults = ?, num_children = ?, status = ?,
             room_rate = ?, security_deposit = ?, total_amount = ?, amount_paid = ?, payment_method = ?,
-            notes = ?, special_requests = ?, updated_by = ?
+            notes = ?, special_requests = ?, updated_by = ?, expected_payment_date = ?
          WHERE id = ?'
     );
     $stmt->execute([
@@ -264,7 +241,8 @@ function db_update_reservation($id, $data)
         $data['valid_id_type'], $data['valid_id_number'], $data['check_in'], $data['check_out'],
         $data['num_adults'], $data['num_children'], $data['status'],
         $data['room_rate'], $data['security_deposit'], $data['total_amount'], $data['amount_paid'], $data['payment_method'],
-        $data['notes'], $data['special_requests'], $data['user_id'], $id,
+        $data['notes'], $data['special_requests'], $data['user_id'],
+        $data['expected_payment_date'], $id,
     ]);
 }
 
@@ -302,24 +280,12 @@ function db_find_active_reservation_for_room($roomId)
     return $stmt->fetch() ?: null;
 }
 
-/**
- * The floor-plan console's headline badge state: available / occupied /
- * reserved / maintenance. Lives on the room itself, separate from any
- * one reservation's lifecycle status.
- */
 function db_set_room_status($roomId, $status)
 {
     $stmt = bb_db()->prepare('UPDATE rooms SET room_status = ? WHERE id = ?');
     $stmt->execute([$status, $roomId]);
 }
 
-/**
- * Updates only the fields that are passed as non-null — callers like
- * "check out" only want to bump last_occupancy without touching
- * cleaning/maintenance/notes, and passing null for those previously
- * meant "wipe this field," which silently erased real data on every
- * partial update. null now means "leave it alone."
- */
 function db_update_room_meta($roomId, $cleaning, $maintenance, $lastOccupancy, $notes)
 {
     $fields = [];
@@ -336,14 +302,6 @@ function db_update_room_meta($roomId, $cleaning, $maintenance, $lastOccupancy, $
     $stmt->execute($params);
 }
 
-/**
- * True if another room in the same branch already has this room number
- * (excludes $excludeRoomId so a room checking against its own current
- * number doesn't flag itself). Mirrors the schema's
- * UNIQUE KEY branch_room (branch, room_number) constraint at the
- * application layer, so a violation surfaces as a normal validation
- * message instead of an uncaught PDO exception.
- */
 function db_room_number_taken($branch, $roomNumber, $excludeRoomId = null)
 {
     $sql = 'SELECT 1 FROM rooms WHERE branch = ? AND room_number = ?';
@@ -358,14 +316,6 @@ function db_room_number_taken($branch, $roomNumber, $excludeRoomId = null)
     return (bool) $stmt->fetchColumn();
 }
 
-/**
- * Updates a room's core identity fields — number, type, nightly price.
- * None of the existing room-update functions touch these (db_set_room_status
- * is day-to-day operational state, db_update_room_meta is cleaning/
- * maintenance/notes); previously the only way to set them was direct
- * DB/seed access, with no admin-facing edit path from either Layout or
- * Calendar.
- */
 function db_update_room_details($roomId, $roomNumber, $roomType, $pricePerNight)
 {
     $stmt = bb_db()->prepare('UPDATE rooms SET room_number = ?, room_type = ?, price_per_night = ? WHERE id = ?');
@@ -376,16 +326,6 @@ function db_update_room_details($roomId, $roomNumber, $roomType, $pricePerNight)
  * Audit Log
  * ========================================================================= */
 
-/**
- * Write one audit entry. Safe to call anywhere — silently swallows DB
- * errors so a logging failure never crashes the actual operation.
- *
- * @param string      $action       Dot-namespaced action key e.g. 'reservation.create'
- * @param string|null $targetType   e.g. 'reservation', 'user', 'room'
- * @param int|null    $targetId     PK of the affected row
- * @param string|null $targetLabel  Human-readable label (guest name, room no., etc.)
- * @param string|null $details      Extra context (plain text or JSON string)
- */
 function db_audit_log($action, $targetType = null, $targetId = null, $targetLabel = null, $details = null)
 {
     try {
@@ -402,26 +342,15 @@ function db_audit_log($action, $targetType = null, $targetId = null, $targetLabe
         );
         $stmt->execute([$userId, $username, $fullName, $role, $action, $targetType, $targetId, $targetLabel, $details, $ip]);
     } catch (Exception $e) {
-        // Never let audit logging crash the main operation
         error_log('audit_log error: ' . $e->getMessage());
     }
 }
 
-/**
- * Fetch audit log entries with optional filters.
- * Returns newest-first by default.
- * When 'branch' is supplied, restricts to entries whose target room
- * (directly for room actions, via the reservation for reservation actions)
- * belongs to that branch — so each property sees only its own activity.
- */
 function db_list_audit_log($filters = [])
 {
     $where  = ['1=1'];
     $params = [];
 
-    // Branch filter: join rooms/reservations to find branch-specific entries.
-    // Auth, user, and profile actions are system-wide and excluded from a
-    // branch-filtered view since they're not tied to any specific property.
     $joinClause = '';
     if (!empty($filters['branch'])) {
         $joinClause = "
@@ -528,33 +457,10 @@ function db_list_audit_users()
 
 /* ============================================================================
  * Reports & Analytics
- *
- * Every figure here is derived straight from reservations + rooms — there's
- * no separate payments/invoices table, so "revenue" reads total_amount and
- * "collected" reads amount_paid on the reservation itself.
- *
- * Two different ways of counting are used on purpose:
- *   - "Booked in period"  -> r.check_in falls inside [start, end). This is
- *     how Revenue, Collected, Reservations and Cancellations are counted —
- *     it answers "what did the bookings arriving this period add up to".
- *   - "Occupied in period" -> the stay's [check_in, check_out) date range
- *     overlaps [start, end), restricted to status IN ('checked_in',
- *     'checked_out') since only those represent nights a room was actually
- *     slept in. This is how Occupancy/ADR/RevPAR are counted, and a stay
- *     that crosses a period boundary only contributes the nights that fall
- *     inside that period (via LEAST/GREATEST + DATEDIFF).
- *
- * $branch is one of 'annex' | 'mtv' | 'dormitel' | 'all' (all three lodging
- * branches combined). $rangeStart/$rangeEnd are 'YYYY-MM-DD' strings, end
- * exclusive — same half-open convention as db_list_reservations_in_range().
  * ========================================================================= */
 
 const BB_LODGING_BRANCHES = ['annex', 'mtv', 'dormitel'];
 
-/**
- * WHERE-clause fragment + params for filtering rooms/reservations (joined
- * to rooms as alias `ro`) down to one branch or all lodging branches.
- */
 function db_report_branch_filter($branch)
 {
     if ($branch === 'all' || $branch === null || $branch === '') {
@@ -572,18 +478,10 @@ function db_report_room_count($branch)
     return (int) $stmt->fetchColumn();
 }
 
-/**
- * Headline KPI block for one branch (or 'all') over [rangeStart, rangeEnd).
- * Returns booked-in-period totals (revenue/collected/reservations/
- * cancellations) and occupied-in-period totals (nights/ADR/occupancy/RevPAR)
- * in a single flat array, plus the room count and day count used to derive
- * the rates — so the view layer never has to re-derive anything.
- */
 function db_report_kpis($branch, $rangeStart, $rangeEnd)
 {
     [$where, $params] = db_report_branch_filter($branch);
 
-    // ── Occupied-in-period: actual stays only (checked_in / checked_out) ──
     $sqlOccupied = "
         SELECT
             COALESCE(SUM(DATEDIFF(LEAST(r.check_out, ?), GREATEST(r.check_in, ?))), 0) AS occupied_nights,
@@ -600,7 +498,6 @@ function db_report_kpis($branch, $rangeStart, $rangeEnd)
     $stmt->execute(array_merge([$rangeEnd, $rangeStart, $rangeEnd, $rangeStart], $params, [$rangeEnd, $rangeStart]));
     $occ = $stmt->fetch();
 
-    // ── Booked-in-period: revenue/collected/reservation & cancellation counts ──
     $sqlBooked = "
         SELECT
             COUNT(*) AS total_count,
@@ -648,14 +545,6 @@ function db_report_kpis($branch, $rangeStart, $rangeEnd)
     ];
 }
 
-/**
- * One row per month for the trailing $monthsBack months (oldest first,
- * current month last) — booked revenue + occupied-nights occupancy, ready
- * for the trend chart. Each month is computed with the same logic as
- * db_report_kpis(), just looped — simple and easy to follow rather than a
- * single clever recursive query, since this only ever runs a handful of
- * times per page load.
- */
 function db_report_monthly_trend($branch, $monthsBack = 6)
 {
     $rows = [];
@@ -683,11 +572,6 @@ function db_report_monthly_trend($branch, $monthsBack = 6)
     return $rows;
 }
 
-/**
- * Reservation counts + billed revenue grouped by lifecycle status, for the
- * status-mix chart. Booked-in-period (check_in based), same convention as
- * db_report_kpis().
- */
 function db_report_status_breakdown($branch, $rangeStart, $rangeEnd)
 {
     [$where, $params] = db_report_branch_filter($branch);
@@ -707,11 +591,6 @@ function db_report_status_breakdown($branch, $rangeStart, $rangeEnd)
     return $out;
 }
 
-/**
- * How guests are paying — grouped by payment_method among non-cancelled
- * bookings in period that have actually recorded a method (a reservation
- * with no payment yet has payment_method = NULL and is excluded).
- */
 function db_report_payment_breakdown($branch, $rangeStart, $rangeEnd)
 {
     [$where, $params] = db_report_branch_filter($branch);
@@ -730,18 +609,11 @@ function db_report_payment_breakdown($branch, $rangeStart, $rangeEnd)
     return $stmt->fetchAll();
 }
 
-/**
- * Per room-type performance: how many rooms of that type exist, how many
- * nights they sold (occupied-in-period), the resulting occupancy % and
- * ADR for that type specifically, and total room revenue.
- */
 function db_report_room_type_performance($branch, $rangeStart, $rangeEnd)
 {
     [$where, $params] = db_report_branch_filter($branch);
     $days = max(1, (int) (new DateTime($rangeStart))->diff(new DateTime($rangeEnd))->days);
 
-    // Room counts per type (independent of bookings — a type with zero
-    // bookings this period should still show up with 0s, not disappear).
     $sqlTypes = "SELECT ro.room_type, COUNT(*) AS room_count FROM rooms ro WHERE $where GROUP BY ro.room_type";
     $stmt = bb_db()->prepare($sqlTypes);
     $stmt->execute($params);
@@ -793,10 +665,6 @@ function db_report_room_type_performance($branch, $rangeStart, $rangeEnd)
     return $types;
 }
 
-/**
- * Top individual rooms by room revenue (occupied-in-period), for the
- * "best performers" leaderboard.
- */
 function db_report_top_rooms($branch, $rangeStart, $rangeEnd, $limit = 8)
 {
     [$where, $params] = db_report_branch_filter($branch);
@@ -821,12 +689,6 @@ function db_report_top_rooms($branch, $rangeStart, $rangeEnd, $limit = 8)
     return $stmt->fetchAll();
 }
 
-/**
- * Side-by-side summary for every lodging branch, regardless of which
- * branch tab is currently selected — used by the "All Lodging" view to
- * compare properties. Branches with zero rooms (no layout built yet)
- * still appear with all-zero figures rather than being omitted.
- */
 function db_report_branch_comparison($rangeStart, $rangeEnd)
 {
     $rows = [];
@@ -837,12 +699,6 @@ function db_report_branch_comparison($rangeStart, $rangeEnd)
     return $rows;
 }
 
-/**
- * Current accounts-receivable snapshot — every non-cancelled reservation
- * with a positive balance, regardless of date, ordered by largest balance
- * first. This is intentionally NOT period-filtered: an unpaid balance
- * from three months ago is still owed today.
- */
 function db_report_outstanding_balances($branch, $limit = 15)
 {
     [$where, $params] = db_report_branch_filter($branch);
@@ -865,11 +721,6 @@ function db_report_outstanding_balances($branch, $limit = 15)
     return $stmt->fetchAll();
 }
 
-/**
- * Earliest check_in on record for this branch (or all lodging branches),
- * used as the start bound for the "All Time" report range. Null if there
- * are no reservations yet.
- */
 function db_report_earliest_checkin($branch)
 {
     [$where, $params] = db_report_branch_filter($branch);
@@ -880,11 +731,6 @@ function db_report_earliest_checkin($branch)
     return $val ?: null;
 }
 
-/**
- * Total of every positive balance across non-cancelled reservations for
- * this branch, regardless of date — the headline number the outstanding
- * balances table is summarizing.
- */
 function db_report_total_outstanding($branch)
 {
     [$where, $params] = db_report_branch_filter($branch);
@@ -898,10 +744,7 @@ function db_report_total_outstanding($branch)
     $stmt->execute($params);
     return (float) $stmt->fetchColumn();
 }
-/**
- * Count active checked‑in reservations for a given branch.
- * Returns 0 if no rooms exist for that branch.
- */
+
 function db_count_checked_in($branch)
 {
     if ($branch === 'all' || $branch === null || $branch === '') {

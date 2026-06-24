@@ -136,6 +136,24 @@ sort($floorOptions);
 $statusLabels = ['reserved' => 'Reserved', 'checked_in' => 'Checked In', 'checked_out' => 'Checked Out', 'cancelled' => 'Cancelled'];
 $paymentLabels = ['cash' => 'Cash', 'gcash' => 'GCash', 'bank_transfer' => 'Bank Transfer', 'card' => 'Credit/Debit Card'];
 $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
+
+// ─── Legend data ────────────────────────────────────────────────────
+// This will be used by JavaScript to build the interactive legend.
+$legendItems = [
+    ['key' => 'reserved', 'label' => 'Reserved', 'color' => '#fbbf24', 'type' => 'reservation'],
+    ['key' => 'checked_in', 'label' => 'Checked-In', 'color' => '#34d399', 'type' => 'reservation'],
+    ['key' => 'checked_out', 'label' => 'Checked-Out', 'color' => '#94a3b8', 'type' => 'reservation'],
+    ['key' => 'cancelled', 'label' => 'Cancelled', 'color' => '#f87171', 'type' => 'reservation'],
+    ['key' => 'available', 'label' => 'Vacant Clean', 'color' => '#10b981', 'type' => 'room'],
+    ['key' => 'needs_cleaning', 'label' => 'Vacant Dirty', 'color' => '#f59e0b', 'type' => 'room'],
+    ['key' => 'occupied', 'label' => 'Occupied', 'color' => '#f97316', 'type' => 'room'],
+    ['key' => 'maintenance', 'label' => 'Out of Order', 'color' => '#ef4444', 'type' => 'room'],
+    ['key' => 'overdue', 'label' => 'Overdue Payment', 'color' => '#dc2626', 'type' => 'reservation'],
+    // Placeholder for future extensions
+    ['key' => 'vip', 'label' => 'VIP Guest', 'color' => '#fbbf24', 'type' => 'reservation', 'disabled' => true],
+    ['key' => 'house_use', 'label' => 'House Use', 'color' => '#8b5cf6', 'type' => 'reservation', 'disabled' => true],
+    ['key' => 'complimentary', 'label' => 'Complimentary', 'color' => '#06b6d4', 'type' => 'reservation', 'disabled' => true],
+];
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -144,60 +162,35 @@ $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../assets/css/style.css"><link rel="stylesheet" href="../assets/css/dashboard.css"><link rel="stylesheet" href="../assets/css/calendar.css">
 <style>.cal-page-main { flex:1; padding: clamp(20px,4vw,48px) clamp(16px,5vw,56px); max-width:1400px; margin:0 auto; width:100%; box-sizing:border-box; }
-/* ─── Size slider styles ─────────────────────────────────────────────── */
-.cal-size-control {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: var(--white);
-  border: 1px solid var(--sky-200);
-  border-radius: 999px;
-  padding: 6px 16px 6px 18px;
-  box-shadow: var(--shadow-card);
+/* ─── Legend panel enhancements ──────────────────────────────────── */
+.cal-legend-panel .cal-legend-item {
+    cursor: pointer;
+    transition: background 0.15s, transform 0.15s;
+    border-radius: 4px;
+    padding: 4px 8px;
+    margin: 0 -8px;
 }
-.cal-size-control label {
-  font-size: 0.7rem;
-  font-weight: 600;
-  color: var(--ink-500);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+.cal-legend-item:hover {
+    background: rgba(59,125,216,0.08);
+    transform: translateX(3px);
 }
-.cal-size-control input[type="range"] {
-  width: 120px;
-  height: 4px;
-  -webkit-appearance: none;
-  appearance: none;
-  background: var(--sky-200);
-  border-radius: 2px;
-  outline: none;
-  cursor: pointer;
+.cal-legend-item.active-filter {
+    background: rgba(59,125,216,0.15);
+    box-shadow: inset 0 0 0 2px var(--blue-500);
 }
-.cal-size-control input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--blue-500);
-  cursor: pointer;
-  border: 2px solid var(--white);
-  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+.cal-legend-item.disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
 }
-.cal-size-control input[type="range"]::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--blue-500);
-  cursor: pointer;
-  border: 2px solid var(--white);
-  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+.cal-legend-item.disabled:hover {
+    background: transparent;
+    transform: none;
 }
-.cal-size-control .size-label {
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: var(--blue-700);
-  min-width: 38px;
-  text-align: center;
+.cal-legend-swatch {
+    transition: all 0.2s;
+}
+.cal-legend-item.active-filter .cal-legend-swatch {
+    transform: scale(1.1);
 }
 </style>
 </head>
@@ -294,53 +287,33 @@ $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
         <div class="cal-body">
 
             <!-- ── Left legend panel ──────────────────────────────── -->
-            <aside class="cal-legend-panel">
+            <aside class="cal-legend-panel" id="legendPanel">
                 <p class="cal-legend-panel__heading">Legend</p>
 
                 <div class="cal-legend-body">
 
                     <div class="cal-legend-group">
-                        <p class="cal-legend-group__label">Bookings</p>
-                        <div class="cal-legend-item">
-                            <span class="cal-legend-swatch cal-legend-swatch--reserved"></span>
-                            <span>Reserved</span>
-                        </div>
-                        <div class="cal-legend-item">
-                            <span class="cal-legend-swatch cal-legend-swatch--checked_in"></span>
-                            <span>Checked In</span>
-                        </div>
-                        <div class="cal-legend-item">
-                            <span class="cal-legend-swatch cal-legend-swatch--checked_out"></span>
-                            <span>Checked Out</span>
-                        </div>
-                        <div class="cal-legend-item">
-                            <span class="cal-legend-swatch cal-legend-swatch--cancelled"></span>
-                            <span>Cancelled</span>
-                        </div>
+                        <p class="cal-legend-group__label">Reservation Status</p>
+                        <?php foreach ($legendItems as $item): ?>
+                            <?php if ($item['type'] === 'reservation'): ?>
+                                <div class="cal-legend-item <?= isset($item['disabled']) && $item['disabled'] ? 'disabled' : '' ?>" data-filter-key="<?= $item['key'] ?>" data-filter-type="reservation">
+                                    <span class="cal-legend-swatch cal-legend-swatch--<?= $item['key'] ?>" style="background:<?= $item['color'] ?>;"></span>
+                                    <span><?= $item['label'] ?></span>
+                                </div>
+                            <?php endif; ?>
+                        <?php endforeach; ?>
                     </div>
 
                     <div class="cal-legend-group">
                         <p class="cal-legend-group__label">Room Status</p>
-                        <div class="cal-legend-item">
-                            <span class="cal-legend-pip" style="background:#10b981; box-shadow:0 0 0 2px rgba(16,185,129,0.25);"></span>
-                            <span>Vacant Clean</span>
-                        </div>
-                        <div class="cal-legend-item">
-                            <span class="cal-legend-pip" style="background:#f59e0b; box-shadow:0 0 0 2px rgba(245,158,11,0.25);"></span>
-                            <span>Vacant Dirty</span>
-                        </div>
-                        <div class="cal-legend-item">
-                            <span class="cal-legend-pip" style="background:#f97316; box-shadow:0 0 0 2px rgba(249,115,22,0.25);"></span>
-                            <span>Occupied</span>
-                        </div>
-                        <div class="cal-legend-item">
-                            <span class="cal-legend-pip" style="background:#3b82f6; box-shadow:0 0 0 2px rgba(59,130,246,0.25);"></span>
-                            <span>Reserved</span>
-                        </div>
-                        <div class="cal-legend-item">
-                            <span class="cal-legend-pip" style="background:#ef4444; box-shadow:0 0 0 2px rgba(239,68,68,0.25);"></span>
-                            <span>Maintenance</span>
-                        </div>
+                        <?php foreach ($legendItems as $item): ?>
+                            <?php if ($item['type'] === 'room'): ?>
+                                <div class="cal-legend-item" data-filter-key="<?= $item['key'] ?>" data-filter-type="room">
+                                    <span class="cal-legend-pip" style="background:<?= $item['color'] ?>;"></span>
+                                    <span><?= $item['label'] ?></span>
+                                </div>
+                            <?php endif; ?>
+                        <?php endforeach; ?>
                     </div>
 
                     <div class="cal-legend-group">
@@ -426,9 +399,15 @@ $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
                                              data-date="<?= $day['date'] ?>"></div>
                                     <?php endforeach; ?>
                                     <?php foreach (($reservationsByRoom[$room['id']] ?? []) as $r): ?>
-                                        <div class="cal-bar cal-bar--<?= $r['status'] ?>"
+                                        <?php
+                                        // Determine if overdue
+                                        $balance = (float)$r['total_amount'] - (float)$r['amount_paid'];
+                                        $isOverdue = ($balance > 0 && strtotime($r['check_out']) < strtotime($todayStr) && $r['status'] !== 'cancelled');
+                                        $barClass = $isOverdue ? 'cal-bar--overdue' : 'cal-bar--' . $r['status'];
+                                        ?>
+                                        <div class="cal-bar <?= $barClass ?>"
                                              style="left:<?= $r['_left_pct'] ?>%; width:<?= $r['_width_pct'] ?>%;"
-                                             title="<?= htmlspecialchars($r['guest_full_name'] . ' • ' . $r['check_in'] . ' to ' . $r['check_out'] . ' • ' . $statusLabels[$r['status']]) ?>"
+                                             title="<?= htmlspecialchars($r['guest_full_name'] . ' • ' . $r['check_in'] . ' to ' . $r['check_out'] . ' • ' . $statusLabels[$r['status']] . ($isOverdue ? ' • OVERDUE' : '')) ?>"
                                              data-reservation="<?= htmlspecialchars(json_encode($r), ENT_QUOTES) ?>">
                                             <span><?= htmlspecialchars($r['guest_full_name']) ?></span>
                                         </div>
@@ -446,7 +425,7 @@ $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
 <div id="reservationModal" class="modal-overlay" hidden>
   <div class="modal modal--wide"><button class="modal__close" id="reservationModalClose">&times;</button><div id="reservationModalContent" class="modal__content"></div></div>
 </div>
-<script>window.BB_CALENDAR = { branch: <?= json_encode($branch) ?>, branchLabel: <?= json_encode($branchName) ?>, rooms: <?= json_encode($rooms) ?>, statusLabels: <?= json_encode($statusLabels) ?>, paymentLabels: <?= json_encode($paymentLabels) ?>, canDelete: <?= bb_is_admin() ? 'true' : 'false' ?>, csrfToken: <?= json_encode($_SESSION['csrf_token'] ?? '') ?> };</script>
+<script>window.BB_CALENDAR = { branch: <?= json_encode($branch) ?>, branchLabel: <?= json_encode($branchName) ?>, rooms: <?= json_encode($rooms) ?>, statusLabels: <?= json_encode($statusLabels) ?>, paymentLabels: <?= json_encode($paymentLabels) ?>, canDelete: <?= bb_is_admin() ? 'true' : 'false' ?>, csrfToken: <?= json_encode($_SESSION['csrf_token'] ?? '') ?>, legendItems: <?= json_encode($legendItems) ?> };</script>
 <script src="../assets/js/dashboard.js" defer></script>
 <script src="../assets/js/calendar.js" defer></script>
 </body>

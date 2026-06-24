@@ -58,22 +58,10 @@
   const WS_PORT = 8081;
   const WS_URL = (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.hostname + ':' + WS_PORT;
 
-  // Mirrors reservations.php's $statusLabels / $paymentLabels exactly.
-  // Small, static maps — simpler to duplicate here than to thread
-  // through PHP onto three separate floor pages.
   const STATUS_LABELS = { reserved: 'Reserved', checked_in: 'Checked In', checked_out: 'Checked Out', cancelled: 'Cancelled' };
   const PAYMENT_LABELS = { cash: 'Cash', gcash: 'GCash', bank_transfer: 'Bank Transfer', card: 'Credit/Debit Card' };
   const LAYOUT_ROOMS = window.BB_LAYOUT_ROOMS || [];
 
-  // ─── Shared modal styling ───────────────────────────────────────────
-  // Every modal below uses these classes instead of bare <label>/<input>
-  // markup or one-off inline styles. Built on the same CSS custom
-  // properties style.css already defines and already loads on these
-  // pages (--blue-*, --gray-*, --font-serif/sans, --radius-*,
-  // --shadow-card) — same look as the rest of the site, not a
-  // separately-invented style. Injected once, guarded so re-running
-  // this script (shouldn't normally happen, but costs nothing to guard)
-  // doesn't duplicate the block.
   function injectModalStyles() {
     if (document.getElementById('bbModalStyles')) return;
     const style = document.createElement('style');
@@ -119,15 +107,14 @@
       .bb-context-menu li.bb-divider { height:1px; background:var(--gray-300); margin:5px 8px; }
       .rc-guest { font-weight:600; font-size:0.9rem; color:var(--blue-700); margin-top:4px; min-height:0; }
       .rc-guest:empty { display:none; }
+      /* Duration display */
+      .bb-duration { background:var(--sky-50); border-radius:var(--radius-sm); padding:8px 12px; margin:8px 0 12px; font-size:0.9rem; border:1px solid var(--sky-200); }
+      .bb-duration__display { font-weight:700; color:var(--blue-700); font-size:1rem; margin-top:4px; }
     `;
     document.head.appendChild(style);
   }
   injectModalStyles();
 
-  // Mirrors layout.php's roomStatusLabel()/roomStatusKey() (which in turn
-  // mirror reservations.php's cal_room_status_label()/cal_room_status_key()
-  // exactly) — same status wording everywhere in the app, not a separately
-  // invented set of labels.
   function roomStatusLabel(status, isDirty) {
     if (status === 'maintenance') return 'Out of Order';
     if (status === 'occupied') return 'Checked In';
@@ -141,7 +128,6 @@
   }
 
   function formatDateDisplay(checkIn, checkOut, status, isDirty) {
-    // Show dates when a reservation exists.
     if (checkIn && checkOut) {
       const fmt = function (d) {
         const dt = new Date(d + 'T00:00:00');
@@ -149,8 +135,6 @@
       };
       return fmt(checkIn) + ' - ' + fmt(checkOut);
     }
-    // Vacant rooms get a text indicator (Vacant Clean / Vacant Dirty).
-    // Occupied, reserved, maintenance show nothing — color coding only.
     if (status === 'available') return isDirty ? 'Vacant Dirty' : 'Vacant Clean';
     return '';
   }
@@ -158,7 +142,7 @@
   function updateRoomCard(room) {
     if (!room || !room.id) return;
     const card = document.querySelector('.room-card[data-room-id="' + room.id + '"]');
-    if (!card) return; // room isn't on this floor's page — nothing to do
+    if (!card) return;
 
     const isDirty = room.cleaning_status !== 'Clean';
 
@@ -190,18 +174,11 @@
 
     const datesEl = card.querySelector('.rc-dates');
     if (datesEl) {
-      // For available/maintenance rooms, formatDateDisplay returns the
-      // vacancy text (Vacant Clean/Dirty) or blank — always safe to write.
-      // For occupied/reserved rooms, DON'T overwrite the date range that
-      // was set at page-load or by updateRoomCardReservation; the room
-      // poll payload doesn't carry reservation dates.
       if (room.room_status === 'available' || room.room_status === 'maintenance') {
         datesEl.textContent = formatDateDisplay(null, null, room.room_status, isDirty);
       }
     }
 
-    // When a room becomes available, always clear the guest name so a
-    // stale name from a previous occupancy never shows on a vacant card.
     if (room.room_status === 'available' || room.room_status === 'maintenance') {
       const guestEl = card.querySelector('.rc-guest');
       if (guestEl) guestEl.textContent = '';
@@ -210,24 +187,11 @@
     card.setAttribute('title', 'RM' + room.room_number);
   }
 
-  // ─── Guest name / date-range live sync (reservations_changed) ─────
-  // Closes the scope gap documented at the top of this file: room-level
-  // fields sync live via updateRoomCard() above, but guest name and
-  // stay dates belong to the reservation, not the room, so they need
-  // their own update path fed by the WS server's separate reservation
-  // poll. Active reservations (reserved/checked_in) populate the card;
-  // anything else (checked_out/cancelled) clears it back to whatever
-  // updateRoomCard() would already be showing for an available room —
-  // belt-and-suspenders in case the two broadcasts arrive out of order.
   function updateRoomCardReservation(resv) {
     if (!resv || !resv.room_id) return;
     const card = document.querySelector('.room-card[data-room-id="' + resv.room_id + '"]');
-    if (!card) return; // room isn't on this floor's page
+    if (!card) return;
 
-    // Only display the guest name when the room is physically held or occupied.
-    // A reservation with status='reserved' can exist for a room that is still
-    // room_status='available' (future booking, guest hasn't arrived yet).
-    // In that case, the card should stay in its vacant state with no name.
     const cardStatus = card.dataset.status;
     const isActive = (resv.status === 'reserved' || resv.status === 'checked_in')
                   && cardStatus !== 'available';
@@ -254,8 +218,6 @@
     }
   }
 
-  // ─── Confirm dialog (ported from calendar.js — fully self-contained,
-  // no dependency on any pre-existing modal markup) ──────────────────
   function showConfirmDialog(message, title) {
     title = title || 'Confirm Changes';
     return new Promise(function (resolve) {
@@ -294,10 +256,6 @@
     });
   }
 
-  // ─── Fetch a room's active reservation fresh from the server ──────
-  // Every reservation action funnels through this first, so it always
-  // operates on current data rather than whatever was in the page's
-  // initial HTML or a stale room card.
   function fetchActiveReservation(roomId) {
     return fetch('/process_reservation.php?action=get_active_reservation&room_id=' + roomId)
       .then(function (r) { return r.json(); })
@@ -307,8 +265,7 @@
       });
   }
 
-  // ─── Reservation form helpers (ported from calendar.js's renderForm
-  // and its supporting functions) ────────────────────────────────────
+  // ─── Reservation form helpers ──────────────────────────────────────
   function field(label, name, value, type, errors, required) {
     value = value === undefined || value === null ? '' : value;
     return '<div class="bb-field"><label for="' + name + '">' + label + (required ? ' *' : '') + '</label>' +
@@ -335,14 +292,12 @@
   }
 
   function isDirtyLayoutRoom(roomId) {
-    // Primary: check the live card DOM — always up to date.
     const card = document.querySelector('.room-card[data-room-id="' + roomId + '"]');
     if (card) {
       return card.dataset.status === 'available' && card.dataset.cleaning !== 'Clean';
     }
-    // Fallback: use LAYOUT_ROOMS data if the card isn't on this floor.
     const room = LAYOUT_ROOMS.find(function (r) { return String(r.id) === String(roomId); });
-    if (!room || room.cleaning_status === undefined) return false; // unknown — allow
+    if (!room || room.cleaning_status === undefined) return false;
     return room.room_status === 'available' && room.cleaning_status !== 'Clean';
   }
 
@@ -352,11 +307,7 @@
     return obj;
   }
 
-  // ─── Reservation form modal (create or edit) ───────────────────────
-  // Self-contained: builds and tears down its own overlay each time,
-  // rather than reusing a single persistent container the way
-  // calendar.js's #reservationModal does — Layout's pages have no such
-  // container in their markup.
+  // ─── Reservation form modal ────────────────────────────────────────
   function renderReservationForm(resv, prefillRoomId, errors) {
     resv = resv || {};
     const isEdit = !!resv.id;
@@ -391,6 +342,17 @@
     html += field('Check-out Date', 'check_out', resv.check_out, 'date', errors, true);
     html += field('Number of Adults', 'num_adults', resv.num_adults || 1, 'number', errors);
     html += field('Number of Children', 'num_children', resv.num_children || 0, 'number', errors);
+    html += '</div>';
+
+    // ── Duration and Expected Payment Date ──
+    html += '<div class="bb-duration">';
+    html += '<label>Stay Duration</label>';
+    html += '<div class="bb-duration__display" id="bbStayDurationDisplay">0 Days / 0 Nights</div>';
+    html += '</div>';
+
+    html += '<div class="bb-field">';
+    html += '<label for="bb_expected_payment_date">Expected Payment Date</label>';
+    html += '<input type="date" id="bb_expected_payment_date" name="expected_payment_date" value="' + (resv.expected_payment_date || '') + '">';
     html += '</div>';
 
     html += '<h3>Payment Information</h3><div class="bb-grid">';
@@ -433,12 +395,44 @@
     form.amount_paid.addEventListener('input', recalcBalance);
     recalcBalance();
 
+    // ── Wire duration and expected payment date ──
+    function wireBbDateCalculations() {
+      const checkIn = form.querySelector('[name="check_in"]');
+      const checkOut = form.querySelector('[name="check_out"]');
+      const expectedPayment = form.querySelector('[name="expected_payment_date"]');
+      const durationDisplay = document.getElementById('bbStayDurationDisplay');
+
+      function updateDurationAndPayment() {
+        const inVal = checkIn.value;
+        const outVal = checkOut.value;
+        if (inVal && outVal) {
+          const start = new Date(inVal + 'T00:00:00');
+          const end = new Date(outVal + 'T00:00:00');
+          const nights = Math.round((end - start) / 86400000);
+          const days = nights + 1;
+          durationDisplay.textContent = days + ' Days / ' + nights + ' Nights';
+
+          if (!expectedPayment.dataset.userEdited) {
+            expectedPayment.value = outVal;
+          }
+        } else {
+          durationDisplay.textContent = '0 Days / 0 Nights';
+        }
+      }
+
+      checkIn.addEventListener('input', updateDurationAndPayment);
+      checkOut.addEventListener('input', updateDurationAndPayment);
+      expectedPayment.addEventListener('input', function() {
+        this.dataset.userEdited = 'true';
+      });
+      updateDurationAndPayment();
+    }
+    wireBbDateCalculations();
+
     function closeFormModal() { modal.remove(); }
     document.getElementById('bbResvCancelBtn').addEventListener('click', closeFormModal);
     modal.addEventListener('click', function (e) { if (e.target === modal) closeFormModal(); });
 
-    // Dirty-room guard on room dropdown — warn immediately when a dirty
-    // room is selected, reset dropdown so the user must choose a clean room.
     const roomSel = form.querySelector('[name="room_id"]');
     if (roomSel) {
       roomSel.addEventListener('change', function () {
@@ -451,7 +445,6 @@
 
     form.addEventListener('submit', function (e) {
       e.preventDefault();
-      // Block new reservations on dirty rooms (editing an existing one is OK)
       if (!isEdit && roomSel && isDirtyLayoutRoom(roomSel.value)) {
         alert('This room is Vacant Dirty. Please mark it as clean before creating a reservation.');
         return;
@@ -461,19 +454,21 @@
         if (!confirmed) return;
         const fd = new FormData(form);
         fd.append('action', isEdit ? 'update' : 'create');
+        if (!fd.has('expected_payment_date')) {
+          const ep = form.querySelector('[name="expected_payment_date"]');
+          if (ep) fd.append('expected_payment_date', ep.value);
+        }
         fetch('/process_reservation.php', { method: 'POST', body: fd })
           .then(function (r) { return r.json(); })
           .then(function (res) {
             if (res.success) {
               if (Array.isArray(res.rooms)) res.rooms.forEach(updateRoomCard);
-              // Immediately update guest name/dates on the card — don't wait
-              // for the WS broadcast. Build a minimal reservation object from
-              // the form's data so updateRoomCardReservation has what it needs.
               const formData = formToObject(new FormData(form));
               const resvStatus = formData.status || (isEdit ? (resv.status || 'reserved') : 'reserved');
               updateRoomCardReservation(Object.assign({}, formData, {
                 room_id: formData.room_id || roomId,
                 status: resvStatus,
+                expected_payment_date: formData.expected_payment_date || formData.check_out || null,
               }));
               closeFormModal();
             } else {
@@ -489,7 +484,7 @@
     });
   }
 
-  // ─── Edit Room Details (number / type / price) ─────────────────────
+  // ─── Edit Room Details ────────────────────────────────────────────
   function openEditRoomModal(card) {
     const roomId = card.dataset.roomId;
     const currentNumber = card.dataset.roomNumber || '';
@@ -539,10 +534,6 @@
       fd.append('room_number', number);
       fd.append('room_type', type);
       fd.append('price_per_night', price);
-      // No CSRF field — process_room_action.php doesn't check one on any
-      // action currently (confirmed by reading it), and Layout has no
-      // token exposed to JS the way reservations.php's window.BB_CALENDAR
-      // does, so there's nothing to send even if it did.
 
       fetch('/process_room_action.php', { method: 'POST', body: fd })
         .then(function (r) { return r.json(); })
@@ -563,13 +554,7 @@
     });
   }
 
-  // ─── Reservation actions (check in/out, cancel, extend, etc.) ─────
-  // Each of these mirrors a case in calendar.js's handleContextAction,
-  // operating on a freshly-fetched reservation rather than one carried
-  // in page state.
-  // Maps a reservation status to the room_status value the server will set
-  // after syncing — used for the immediate client-side card color update
-  // below so the card doesn't wait for the WS poll or data.rooms.
+  // ─── Reservation actions ──────────────────────────────────────────
   const RESV_TO_ROOM_STATUS = {
     reserved: 'reserved',
     checked_in: 'occupied',
@@ -581,8 +566,6 @@
     const card = document.querySelector('.room-card[data-room-id="' + roomId + '"]');
     if (!card) return;
     const roomStatus = RESV_TO_ROOM_STATUS[resvStatus] || 'available';
-    // For checkout: mark dirty immediately — the server will set cleaning_status
-    // to Pending, but we can apply the visual change right now.
     const willBeDirty = resvStatus === 'checked_out';
 
     card.className = card.className
@@ -596,7 +579,6 @@
     card.dataset.status = roomStatus;
     if (willBeDirty) card.dataset.cleaning = 'Pending';
 
-    // Also update the date/vacancy text line immediately
     const datesEl = card.querySelector('.rc-dates');
     if (datesEl && roomStatus === 'available') {
       datesEl.textContent = willBeDirty ? 'Vacant Dirty' : 'Vacant Clean';
@@ -612,23 +594,15 @@
       if (key !== 'status' && key !== 'id') fd.append(key, r[key] !== undefined && r[key] !== null ? r[key] : '');
     });
 
-    // Apply the card color change immediately — don't wait for the server
-    // response or WS broadcast. If the server rejects the change, the
-    // card state may be stale until the next WS poll; that's fine since
-    // the alert() below will tell the user something went wrong.
     applyRoomCardStatus(r.room_id, newStatus);
 
     fetch('/process_reservation.php', { method: 'POST', body: fd })
       .then(function (res) { return res.json(); })
       .then(function (data) {
         if (data.success) {
-          // Also apply any server-reconciled room data (e.g. exact
-          // cleaning_status value, maintenance_status) that we don't
-          // know client-side.
           if (Array.isArray(data.rooms)) data.rooms.forEach(updateRoomCard);
           updateRoomCardReservation(Object.assign({}, r, { status: newStatus }));
         } else {
-          // Revert the optimistic color update on failure.
           applyRoomCardStatus(r.room_id, r.status);
           alert('Error: ' + (data.message || 'Could not update reservation.'));
         }
@@ -646,16 +620,18 @@
     fd.append('id', r.id);
     fd.append('check_in', checkIn);
     fd.append('check_out', checkOut);
+    fd.append('expected_payment_date', checkOut);
     Object.keys(r).forEach(function (key) {
-      if (key !== 'check_in' && key !== 'check_out' && key !== 'id') fd.append(key, r[key] !== undefined && r[key] !== null ? r[key] : '');
+      if (key !== 'check_in' && key !== 'check_out' && key !== 'id' && key !== 'expected_payment_date') {
+        fd.append(key, r[key] !== undefined && r[key] !== null ? r[key] : '');
+      }
     });
     fetch('/process_reservation.php', { method: 'POST', body: fd })
       .then(function (res) { return res.json(); })
       .then(function (data) {
         if (data.success) {
           if (Array.isArray(data.rooms)) data.rooms.forEach(updateRoomCard);
-          // Immediately reflect the new dates on the card.
-          updateRoomCardReservation(Object.assign({}, r, { check_in: checkIn, check_out: checkOut }));
+          updateRoomCardReservation(Object.assign({}, r, { check_in: checkIn, check_out: checkOut, expected_payment_date: checkOut }));
         } else {
           alert('Error: ' + (data.message || 'Could not update dates.'));
         }
@@ -690,10 +666,6 @@
     modal.addEventListener('click', function (e) { if (e.target === modal) modal.remove(); });
   }
 
-  // Uses process_room_action.php's existing get_history action (keyed
-  // by room_id, covering every reservation that's ever occupied this
-  // room) rather than a per-reservation log — Layout has no equivalent
-  // of calendar.js's pre-loaded r._activity, so this fetches fresh.
   function showReservationHistory(roomId) {
     fetch('/process_room_action.php?action=get_history&room_id=' + roomId)
       .then(function (r) { return r.json(); })
@@ -797,9 +769,6 @@
   function openMoveRoomModal(r) {
     if (!LAYOUT_ROOMS.length) { alert('No rooms available to move to.'); return; }
 
-    // Build options — use isDirtyLayoutRoom() which reads the live card
-    // DOM so the dirty check is always accurate regardless of what fields
-    // are in LAYOUT_ROOMS.
     const moveOptions = LAYOUT_ROOMS
       .filter(function (room) { return String(room.id) !== String(r.room_id); })
       .map(function (room) {
@@ -838,8 +807,15 @@
       fd.append('action', 'update');
       fd.append('id', r.id);
       fd.append('room_id', newRoomId);
-      Object.keys(r).forEach(function (key) {
-        if (key !== 'room_id' && key !== 'id') fd.append(key, r[key] !== undefined && r[key] !== null ? r[key] : '');
+      const fields = [
+        'guest_full_name', 'contact_number', 'email', 'address',
+        'valid_id_type', 'valid_id_number', 'check_in', 'check_out',
+        'num_adults', 'num_children', 'status',
+        'room_rate', 'security_deposit', 'total_amount', 'amount_paid',
+        'payment_method', 'notes', 'special_requests', 'expected_payment_date'
+      ];
+      fields.forEach(function (key) {
+        fd.append(key, r[key] !== undefined && r[key] !== null ? r[key] : '');
       });
       fetch('/process_reservation.php', { method: 'POST', body: fd })
         .then(function (res) { return res.json(); })
@@ -999,7 +975,6 @@
           fd.append('action', 'update_status');
           fd.append('room_id', roomId);
           fd.append('new_status', newStatus);
-          // Optimistic update
           card.classList.remove('room-card--dirty');
           if (newStatus === 'needs_cleaning') card.classList.add('room-card--dirty');
           card.dataset.cleaning = newStatus === 'needs_cleaning' ? 'Pending' : 'Clean';
@@ -1011,7 +986,6 @@
               let data;
               try { data = JSON.parse(text); } catch (e) {
                 console.error('[layout] mark clean/dirty: server returned non-JSON:', text.slice(0, 400));
-                // Revert optimistic update if we can't confirm success
                 card.dataset.cleaning = newStatus === 'needs_cleaning' ? 'Clean' : 'Pending';
                 card.classList.toggle('room-card--dirty', newStatus !== 'needs_cleaning');
                 if (datesEl) datesEl.textContent = newStatus === 'needs_cleaning' ? 'Vacant Clean' : 'Vacant Dirty';
@@ -1038,8 +1012,6 @@
     document.body.appendChild(menu);
     activeMenu = menu;
 
-    // Position at the cursor, then clamp on-screen — same pattern as
-    // Calendar's context menu.
     const menuWidth = menu.offsetWidth || 220;
     const menuHeight = menu.offsetHeight || 100;
     let left = x, top = y;
@@ -1052,15 +1024,11 @@
     menu.style.top = top + 'px';
   }
 
-  // Capture phase (true) so this fires BEFORE layout.js's bubbling-phase
-  // listeners reach the card — prevents layout.js from also trying to
-  // build its own menu/modal for the same right-click and crashing on
-  // elements that don't exist yet.
   document.addEventListener('contextmenu', function (e) {
     const card = e.target.closest('.room-card[data-room-id]');
     if (!card) return;
     e.preventDefault();
-    e.stopPropagation(); // stop layout.js's listeners from also firing
+    e.stopPropagation();
     showRoomMenu(e.clientX, e.clientY, card);
   }, true);
 
@@ -1112,4 +1080,97 @@
   }
 
   connect();
+
+  (function wireLayoutLegend() {
+    const legendItems = document.querySelectorAll('#layoutLegend .layout-legend__item');
+    let activeFilter = null; // { status: 'available'|'dirty'|'occupied'|'reserved'|'maintenance'|'all' }
+
+    function clearLegendHighlights() {
+        legendItems.forEach(el => el.classList.remove('active-filter'));
+    }
+
+    function filterRooms(status) {
+        const cards = document.querySelectorAll('.room-card');
+        if (status === 'all') {
+            cards.forEach(card => card.style.display = '');
+            clearLegendHighlights();
+            activeFilter = null;
+            return;
+        }
+
+        // Map status to card classes
+        let showClass = '';
+        let extraCondition = null;
+        switch (status) {
+            case 'available':
+                showClass = 'status-available';
+                extraCondition = (card) => !card.classList.contains('room-card--dirty');
+                break;
+            case 'dirty':
+                showClass = 'status-available';
+                extraCondition = (card) => card.classList.contains('room-card--dirty');
+                break;
+            case 'occupied':
+                showClass = 'status-occupied';
+                break;
+            case 'reserved':
+                showClass = 'status-reserved';
+                break;
+            case 'maintenance':
+                showClass = 'status-maintenance';
+                break;
+            default:
+                return;
+        }
+
+        cards.forEach(card => {
+            const hasClass = card.classList.contains(showClass);
+            let show = hasClass;
+            if (extraCondition) {
+                show = show && extraCondition(card);
+            }
+            card.style.display = show ? '' : 'none';
+        });
+
+        // Highlight the active legend item
+        clearLegendHighlights();
+        const target = document.querySelector(`#layoutLegend .layout-legend__item[data-status="${status}"]`);
+        if (target) target.classList.add('active-filter');
+        activeFilter = { status };
+    }
+
+    // Add click listeners
+    legendItems.forEach(item => {
+        item.addEventListener('click', function(e) {
+            const status = this.dataset.status;
+            if (!status) return;
+
+            // If already active, reset to show all
+            if (activeFilter && activeFilter.status === status) {
+                filterRooms('all');
+                return;
+            }
+
+            filterRooms(status);
+        });
+    });
+
+    // Expose reset function globally (used by other parts if needed)
+    window.resetLayoutLegend = function() { filterRooms('all'); };
+
+    // Also, when a room card is updated (via WebSocket), we might want to re-apply filter
+    // if active. We'll override the updateRoomCard to re-filter after update.
+    const originalUpdateRoomCard = window.updateRoomCard;
+    if (originalUpdateRoomCard) {
+        window.updateRoomCard = function(room) {
+            originalUpdateRoomCard(room);
+            // If a filter is active, re-apply it to maintain filtering
+            if (activeFilter) {
+                filterRooms(activeFilter.status);
+            }
+        };
+    }
+
+})();
+
 })();
