@@ -62,6 +62,225 @@
   const PAYMENT_LABELS = { cash: 'Cash', gcash: 'GCash', bank_transfer: 'Bank Transfer', card: 'Credit/Debit Card' };
   const LAYOUT_ROOMS = window.BB_LAYOUT_ROOMS || [];
 
+  // --- Helper: determine card status from room and reservation ---
+  function determineCardStatus(room, reservation) {
+    if (room.room_status === 'maintenance') {
+      return { status: 'maintenance', statusKey: 'maintenance', label: 'Out of Order' };
+    }
+    if (reservation) {
+      if (reservation.status === 'checked_in') {
+        return { status: 'occupied', statusKey: 'occupied', label: 'Occupied' };
+      } else {
+        // reserved (future or today)
+        return { status: 'reserved', statusKey: 'reserved', label: 'Reserved' };
+      }
+    }
+    // No reservation
+    const isDirty = (room.cleaning_status !== 'Clean');
+    return {
+      status: 'available',
+      statusKey: isDirty ? 'needs_cleaning' : 'available',
+      label: isDirty ? 'Vacant Dirty' : 'Vacant Clean'
+    };
+  }
+
+  // --- Expose updateRoomCard (room-level changes) ---
+  window.updateRoomCard = function(room) {
+    if (!room || !room.id) return;
+    const card = document.querySelector('.room-card[data-room-id="' + room.id + '"]');
+    if (!card) return;
+
+    const isDirty = room.cleaning_status !== 'Clean';
+    // Update data attributes
+    card.dataset.cleaning = room.cleaning_status;
+    if (room.room_number !== undefined) card.dataset.roomNumber = room.room_number;
+    if (room.room_type !== undefined) card.dataset.typeMain = room.room_type;
+    if (room.price_per_night !== undefined) card.dataset.price = room.price_per_night;
+
+    // Update room number display
+    const numEl = card.querySelector('.rc-room-num');
+    if (numEl && room.room_number !== undefined) numEl.textContent = 'ROOM ' + room.room_number;
+
+    // Update room type
+    const typeEl = card.querySelector('.rc-room-type');
+    if (typeEl && room.room_type !== undefined) typeEl.textContent = room.room_type;
+
+    // Update rate (if no reservation, use room price)
+    const rateEl = card.querySelector('.rc-rate');
+    if (rateEl) {
+      const currentResId = card.dataset.reservationId;
+      if (!currentResId || currentResId === '') {
+        // No reservation – use room price
+        if (room.price_per_night && parseFloat(room.price_per_night) > 0) {
+          rateEl.textContent = 'Rate: ₱' + Number(room.price_per_night).toLocaleString() + '/month';
+          rateEl.style.display = '';
+        } else {
+          rateEl.style.display = 'none';
+        }
+      }
+    }
+
+    // Update status if no reservation – but if there is a reservation, the status will be set by updateRoomCardReservation.
+    // We'll check if there is a reservation id on the card; if not, update status now.
+    const resId = card.dataset.reservationId;
+    if (!resId || resId === '') {
+      const statusInfo = determineCardStatus(room, null);
+      // Update classes
+      card.className = card.className
+        .split(' ')
+        .filter(function (c) { return c.indexOf('status-') !== 0 && c !== 'room-card--dirty'; })
+        .join(' ');
+      card.classList.add('status-' + statusInfo.status);
+      if (statusInfo.status === 'available' && isDirty) card.classList.add('room-card--dirty');
+      card.dataset.status = statusInfo.status;
+      card.dataset.statusKey = statusInfo.statusKey;
+      // Update dates area to show vacant status
+      const datesEl = card.querySelector('.rc-dates');
+      if (datesEl) datesEl.textContent = statusInfo.label;
+      // Clear guest name
+      const guestEl = card.querySelector('.rc-guest-name');
+      if (guestEl) {
+        guestEl.textContent = 'No Guest Assigned';
+        guestEl.className = 'rc-guest-name rc-guest-name--empty';
+        guestEl.title = '';
+      }
+      card.dataset.guestName = '';
+      card.dataset.checkIn = '';
+      card.dataset.checkOut = '';
+    }
+  };
+
+  // --- Expose updateRoomCardReservation (reservation changes) ---
+  window.updateRoomCardReservation = function(resv) {
+    if (!resv || !resv.room_id) return;
+    const card = document.querySelector('.room-card[data-room-id="' + resv.room_id + '"]');
+    if (!card) return;
+
+    // We need the room object to check maintenance/dirty status.
+    const roomId = resv.room_id;
+    const room = LAYOUT_ROOMS.find(function(r) { return String(r.id) === String(roomId); }) || {};
+
+    const isActive = (resv.status === 'reserved' || resv.status === 'checked_in');
+    const statusInfo = determineCardStatus(room, isActive ? resv : null);
+
+    // Update card classes
+    card.className = card.className
+      .split(' ')
+      .filter(function (c) { return c.indexOf('status-') !== 0 && c !== 'room-card--dirty'; })
+      .join(' ');
+    card.classList.add('status-' + statusInfo.status);
+    const isDirty = (room.cleaning_status !== 'Clean');
+    if (statusInfo.status === 'available' && isDirty) card.classList.add('room-card--dirty');
+
+    // Update data attributes
+    card.dataset.status = statusInfo.status;
+    card.dataset.statusKey = statusInfo.statusKey;
+
+    if (!isActive) {
+      // ── CHECKOUT / CANCEL: immediately wipe all guest & reservation data ──
+      // When status is checked_out or cancelled, isActive=false. We must clear
+      // every guest/reservation field from the card right now — do NOT use the
+      // old resv values (name, dates, rate) because those belong to the guest
+      // who just left. Leaving them in place is what caused the card to keep
+      // showing "Justin Miranda / Jun 26 – Jul 26" after checkout.
+      card.dataset.guestName      = '';
+      card.dataset.checkIn        = '';
+      card.dataset.checkOut       = '';
+      card.dataset.reservationId  = '';
+      card.dataset.price          = room.price_per_night || '';
+      card.dataset.cleaning       = room.cleaning_status || 'Pending';
+
+      const guestEl2 = card.querySelector('.rc-guest-name');
+      if (guestEl2) {
+        guestEl2.textContent = 'No Guest Assigned';
+        guestEl2.className   = 'rc-guest-name rc-guest-name--empty';
+        guestEl2.title       = '';
+      }
+      const datesEl2 = card.querySelector('.rc-dates');
+      if (datesEl2) datesEl2.textContent = statusInfo.label; // 'Vacant Dirty' or 'Vacant Clean'
+      const durationEl2 = card.querySelector('.rc-duration');
+      if (durationEl2) durationEl2.style.display = 'none';
+      const rateEl2 = card.querySelector('.rc-rate');
+      if (rateEl2) {
+        const fallbackRate = room.price_per_night || 0;
+        if (fallbackRate > 0) {
+          rateEl2.textContent = 'Rate: ₱' + Number(fallbackRate).toLocaleString() + '/month';
+          rateEl2.style.display = '';
+        } else {
+          rateEl2.style.display = 'none';
+        }
+      }
+      return;
+    }
+
+    // ── ACTIVE reservation (reserved / checked_in) ────────────────────────
+    card.dataset.guestName = resv.guest_full_name || '';
+    card.dataset.checkIn = resv.check_in || '';
+    card.dataset.checkOut = resv.check_out || '';
+    card.dataset.price = resv.room_rate || room.price_per_night || '';
+    card.dataset.reservationId = resv.id || '';
+
+    // Update guest name
+    const guestEl = card.querySelector('.rc-guest-name');
+    if (guestEl) {
+      const name = resv.guest_full_name || '';
+      guestEl.textContent = name || 'No Guest Assigned';
+      guestEl.className = name ? 'rc-guest-name' : 'rc-guest-name rc-guest-name--empty';
+      guestEl.title = name;
+    }
+
+    // Update dates
+    const datesEl = card.querySelector('.rc-dates');
+    if (datesEl) {
+      if (resv.check_in && resv.check_out) {
+        const ci = new Date(resv.check_in + 'T00:00:00');
+        const co = new Date(resv.check_out + 'T00:00:00');
+        const fmt = { month: 'short', day: '2-digit' };
+        const fmtY = { month: 'short', day: '2-digit', year: 'numeric' };
+        datesEl.textContent = ci.toLocaleDateString('en-US', fmt) + ' - ' + co.toLocaleDateString('en-US', fmtY);
+      } else {
+        datesEl.textContent = statusInfo.label;
+      }
+    }
+
+    // Update rate
+    const rateEl = card.querySelector('.rc-rate');
+    if (rateEl) {
+      const rate = resv.room_rate || room.price_per_night || 0;
+      if (rate > 0) {
+        rateEl.textContent = 'Rate: ₱' + Number(rate).toLocaleString() + '/month';
+        rateEl.style.display = '';
+      } else {
+        rateEl.style.display = 'none';
+      }
+    }
+
+    // Update duration
+    const durationEl = card.querySelector('.rc-duration');
+    if (durationEl) {
+      if (resv.check_in && resv.check_out) {
+        const start = new Date(resv.check_in + 'T00:00:00');
+        const end = new Date(resv.check_out + 'T00:00:00');
+        const diff = end - start;
+        if (diff > 0) {
+          const totalDays = diff / 86400000;
+          const months = Math.floor(totalDays / 30.44);
+          const days = Math.round(totalDays - months * 30.44);
+          let parts = [];
+          if (months > 0) parts.push(months + ' Month' + (months !== 1 ? 's' : ''));
+          if (days > 0)   parts.push(days + ' Day' + (days !== 1 ? 's' : ''));
+          durationEl.textContent = parts.join(' ');
+          durationEl.style.display = '';
+        } else {
+          durationEl.style.display = 'none';
+        }
+      } else {
+        durationEl.style.display = 'none';
+      }
+    }
+  };
+
+  // --- UI helpers ---
   function injectModalStyles() {
     if (document.getElementById('bbModalStyles')) return;
     const style = document.createElement('style');
@@ -107,7 +326,6 @@
       .bb-context-menu li.bb-divider { height:1px; background:var(--gray-300); margin:5px 8px; }
       .rc-guest { font-weight:600; font-size:0.9rem; color:var(--blue-700); margin-top:4px; min-height:0; }
       .rc-guest:empty { display:none; }
-      /* Duration display */
       .bb-duration { background:var(--sky-50); border-radius:var(--radius-sm); padding:8px 12px; margin:8px 0 12px; font-size:0.9rem; border:1px solid var(--sky-200); }
       .bb-duration__display { font-weight:700; color:var(--blue-700); font-size:1rem; margin-top:4px; }
     `;
@@ -115,155 +333,7 @@
   }
   injectModalStyles();
 
-  function roomStatusLabel(status, isDirty) {
-    if (status === 'maintenance') return 'Out of Order';
-    if (status === 'occupied') return 'Checked In';
-    if (status === 'reserved') return 'Reserved';
-    return isDirty ? 'Vacant Dirty' : 'Vacant Clean';
-  }
-
-  function roomStatusKey(status, isDirty) {
-    if (status === 'available' && isDirty) return 'needs_cleaning';
-    return status;
-  }
-
-  function formatDateDisplay(checkIn, checkOut, status, isDirty) {
-    if (checkIn && checkOut) {
-      const fmt = function (d) {
-        const dt = new Date(d + 'T00:00:00');
-        return dt.toLocaleDateString('en-US', { month: 'short', day: '2-digit' });
-      };
-      return fmt(checkIn) + ' - ' + fmt(checkOut);
-    }
-    if (status === 'available') return isDirty ? 'Vacant Dirty' : 'Vacant Clean';
-    return '';
-  }
-
-  // ── Status label helper ──────────────────────────────────
-  function rlStatusLabel(status, isDirty) {
-    if (status === 'available' && isDirty) return 'Vacant Dirty';
-    if (status === 'available') return 'Vacant Clean';
-    if (status === 'occupied')  return 'Occupied';
-    if (status === 'reserved')  return 'Reserved';
-    if (status === 'maintenance') return 'Out of Order';
-    return status.replace(/_/g, ' ').replace(/\b\w/g, function(c) { return c.toUpperCase(); });
-  }
-
-  function updateRoomCard(room) {
-    if (!room || !room.id) return;
-    const card = document.querySelector('.room-card[data-room-id="' + room.id + '"]');
-    if (!card) return;
-
-    const isDirty   = room.cleaning_status !== 'Clean';
-    const statusKey = (room.room_status === 'available' && isDirty) ? 'needs_cleaning' : room.room_status;
-
-    // Update classes
-    card.className = card.className
-      .split(' ')
-      .filter(function (c) { return c.indexOf('status-') !== 0 && c !== 'room-card--dirty'; })
-      .join(' ');
-    card.classList.add('status-' + room.room_status);
-    if (room.room_status === 'available' && isDirty) card.classList.add('room-card--dirty');
-
-    // Update data attributes
-    card.dataset.status      = room.room_status;
-    card.dataset.statusKey   = statusKey;
-    card.dataset.typeMain    = room.room_type;
-    card.dataset.price       = room.price_per_night;
-    card.dataset.roomNumber  = room.room_number;
-    card.dataset.cleaning    = room.cleaning_status;
-    if (room.maintenance_status !== undefined) card.dataset.maintenance   = room.maintenance_status;
-    if (room.last_occupancy     !== undefined && room.last_occupancy !== null) card.dataset.lastOccupancy = room.last_occupancy;
-
-    // Status badge
-    const badgeEl = card.querySelector('.rc-status-badge');
-    if (badgeEl) {
-      badgeEl.className   = 'rc-status-badge rc-badge--' + statusKey;
-      badgeEl.textContent = rlStatusLabel(room.room_status, isDirty);
-    }
-
-    // Room type (bottom)
-    const typeEl = card.querySelector('.rc-room-type');
-    if (typeEl) typeEl.textContent = room.room_type || '';
-
-    // Rate
-    const rateEl = card.querySelector('.rc-rate');
-    if (rateEl) {
-      if (room.price_per_night && parseFloat(room.price_per_night) > 0) {
-        rateEl.textContent  = 'Rate: ₱' + Number(room.price_per_night).toLocaleString() + '/month';
-        rateEl.style.display = '';
-      } else {
-        rateEl.style.display = 'none';
-      }
-    }
-
-    // Room number
-    const numEl = card.querySelector('.rc-room-num');
-    if (numEl) numEl.textContent = 'ROOM ' + room.room_number;
-
-    // Clear guest / dates when room is vacant or maintenance
-    if (room.room_status === 'available' || room.room_status === 'maintenance') {
-      const datesEl = card.querySelector('.rc-dates');
-      if (datesEl) datesEl.textContent = '';
-      const guestEl = card.querySelector('.rc-guest-name');
-      if (guestEl) {
-        guestEl.textContent = 'No Guest Assigned';
-        guestEl.className   = 'rc-guest-name rc-guest-name--empty';
-        guestEl.title       = '';
-      }
-      card.dataset.guestName = '';
-      card.dataset.checkIn   = '';
-      card.dataset.checkOut  = '';
-    }
-  }
-
-  function updateRoomCardReservation(resv) {
-    if (!resv || !resv.room_id) return;
-    const card = document.querySelector('.room-card[data-room-id="' + resv.room_id + '"]');
-    if (!card) return;
-
-    const cardStatus = card.dataset.status;
-    const isActive   = (resv.status === 'reserved' || resv.status === 'checked_in')
-                    && cardStatus !== 'available';
-
-    const guestEl  = card.querySelector('.rc-guest-name');
-    const datesEl  = card.querySelector('.rc-dates');
-
-    if (isActive) {
-      const name = resv.guest_full_name || '';
-      if (guestEl) {
-        guestEl.textContent = name || 'No Guest Assigned';
-        guestEl.className   = name ? 'rc-guest-name' : 'rc-guest-name rc-guest-name--empty';
-        guestEl.title       = name;
-      }
-      card.dataset.guestName = name;
-      card.dataset.checkIn   = resv.check_in  || '';
-      card.dataset.checkOut  = resv.check_out || '';
-      if (resv.num_adults !== undefined) card.dataset.pax = resv.num_adults;
-
-      // Dates: "Jun 01 - Jun 05, 2026"
-      if (datesEl && resv.check_in && resv.check_out) {
-        const ci = new Date(resv.check_in  + 'T00:00:00');
-        const co = new Date(resv.check_out + 'T00:00:00');
-        const fmt = { month: 'short', day: '2-digit' };
-        const fmtY = { month: 'short', day: '2-digit', year: 'numeric' };
-        datesEl.textContent = ci.toLocaleDateString('en-US', fmt)
-                            + ' - '
-                            + co.toLocaleDateString('en-US', fmtY);
-      }
-    } else {
-      if (guestEl) {
-        guestEl.textContent = 'No Guest Assigned';
-        guestEl.className   = 'rc-guest-name rc-guest-name--empty';
-        guestEl.title       = '';
-      }
-      card.dataset.guestName = '';
-      card.dataset.checkIn   = '';
-      card.dataset.checkOut  = '';
-      if (datesEl) datesEl.textContent = '';
-    }
-  }
-
+  // ── Reservation form helpers ──────────────────────────────────────
   function showConfirmDialog(message, title) {
     title = title || 'Confirm Changes';
     return new Promise(function (resolve) {
@@ -311,7 +381,6 @@
       });
   }
 
-  // ─── Reservation form helpers ──────────────────────────────────────
   function field(label, name, value, type, errors, required) {
     value = value === undefined || value === null ? '' : value;
     return '<div class="bb-field"><label for="' + name + '">' + label + (required ? ' *' : '') + '</label>' +
@@ -327,15 +396,6 @@
     return Object.keys(map).map(function (key) {
       const sel = key === selected ? 'selected' : '';
       return '<option value="' + key + '" ' + sel + '>' + map[key] + '</option>';
-    }).join('');
-  }
-
-  // roomOptions is no longer used in the form (replaced with hidden input)
-  function roomOptions(selectedRoomId) {
-    // Kept only for backward compatibility if called elsewhere, but not used in the modal.
-    return LAYOUT_ROOMS.map(function (r) {
-      const sel = String(r.id) === String(selectedRoomId) ? 'selected' : '';
-      return '<option value="' + r.id + '" ' + sel + '>RM' + r.room_number + ' — ' + r.room_type + ' (₱' + Number(r.price_per_night).toLocaleString() + '/month)</option>';
     }).join('');
   }
 
@@ -384,9 +444,7 @@
     html += '</div>';
 
     html += '<h3>Booking Information</h3><div class="bb-grid">';
-    // ─── Room selector removed – hidden input only ──────────────
     html += '<input type="hidden" name="room_id" value="' + roomId + '">';
-    // Status dropdown (no room selection)
     html += '<div class="bb-field"><label for="status">Booking Status</label><select id="status" name="status">' + optionList(STATUS_LABELS, resv.status || 'reserved') + '</select></div>';
     html += field('Check-in Date', 'check_in', resv.check_in, 'date', errors, true);
     html += field('Check-out Date', 'check_out', resv.check_out, 'date', errors, true);
@@ -394,7 +452,16 @@
     html += field('Number of Children', 'num_children', resv.num_children || 0, 'number', errors);
     html += '</div>';
 
-    // ── Duration and Expected Payment Date ──
+    // Quick Stay Duration
+    html += '<div class="bb-field" style="grid-column:1/-1;">';
+    html += '<label>Quick Stay Duration</label>';
+    html += '<div id="bbDurationBtns" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;">';
+    [1,2,3,4,6,12].forEach(function(m) {
+      html += '<button type="button" class="bb-dur-btn" data-months="' + m + '" style="padding:7px 16px;border-radius:999px;border:1.5px solid var(--sky-200,#c5deef);background:var(--white,#fff);color:var(--ink-700,#2c4a68);font-family:Inter,sans-serif;font-size:0.8rem;font-weight:600;cursor:pointer;">' + (m === 1 ? '1 Month' : m + ' Months') + '</button>';
+    });
+    html += '</div></div>';
+
+    // Duration display and Expected Payment Date
     html += '<div class="bb-duration">';
     html += '<label>Stay Duration</label>';
     html += '<div class="bb-duration__display" id="bbStayDurationDisplay">0 Days / 0 Nights</div>';
@@ -406,7 +473,7 @@
     html += '</div>';
 
     html += '<h3>Payment Information</h3><div class="bb-grid">';
-    html += field('Room Rate', 'room_rate', resv.room_rate || 0, 'number', errors);
+    html += field('Monthly Rate', 'room_rate', resv.room_rate || 0, 'number', errors);
     html += field('Security Deposit', 'security_deposit', resv.security_deposit || 0, 'number', errors);
     html += field('Total Amount', 'total_amount', resv.total_amount || 0, 'number', errors);
     html += field('Amount Paid', 'amount_paid', resv.amount_paid || 0, 'number', errors);
@@ -445,12 +512,17 @@
     form.amount_paid.addEventListener('input', recalcBalance);
     recalcBalance();
 
-    // ── Wire duration and expected payment date ──
+    // ── Wire Quick Stay Duration buttons ──────────────────────────────────
     function wireBbDateCalculations() {
       const checkIn = form.querySelector('[name="check_in"]');
       const checkOut = form.querySelector('[name="check_out"]');
       const expectedPayment = form.querySelector('[name="expected_payment_date"]');
       const durationDisplay = document.getElementById('bbStayDurationDisplay');
+      let selectedMonths = null;
+
+      function formatLocalDate(d) {
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+      }
 
       function updateDurationAndPayment() {
         const inVal = checkIn.value;
@@ -461,7 +533,6 @@
           const nights = Math.round((end - start) / 86400000);
           const days = nights + 1;
           durationDisplay.textContent = days + ' Days / ' + nights + ' Nights';
-
           if (!expectedPayment.dataset.userEdited) {
             expectedPayment.value = outVal;
           }
@@ -470,24 +541,88 @@
         }
       }
 
-      checkIn.addEventListener('input', updateDurationAndPayment);
-      checkOut.addEventListener('input', updateDurationAndPayment);
-      expectedPayment.addEventListener('input', function() {
-        this.dataset.userEdited = 'true';
+      function applyDuration(months) {
+        if (!checkIn.value) { alert('Please select a check-in date first.'); return; }
+        const start = new Date(checkIn.value + 'T00:00:00');
+        const end = new Date(start);
+        end.setMonth(end.getMonth() + months);
+        const outVal = formatLocalDate(end);
+        checkOut.value = outVal;
+        if (!expectedPayment.dataset.userEdited) expectedPayment.value = outVal;
+        updateDurationAndPayment();
+        selectedMonths = months;
+        form.querySelectorAll('.bb-dur-btn').forEach(function(b) { b.classList.remove('is-active'); b.style.background=''; b.style.color=''; b.style.borderColor=''; });
+        const activeBtn = form.querySelector('.bb-dur-btn[data-months="' + months + '"]');
+        if (activeBtn) { activeBtn.style.background='var(--blue-500,#3b7dd8)'; activeBtn.style.color='#fff'; activeBtn.style.borderColor='var(--blue-500,#3b7dd8)'; }
+      }
+
+      form.querySelectorAll('.bb-dur-btn').forEach(function(btn) {
+        btn.addEventListener('click', function(e) {
+          e.preventDefault();
+          applyDuration(parseInt(this.dataset.months, 10));
+        });
       });
+
+      checkIn.addEventListener('input', function() {
+        if (selectedMonths !== null) applyDuration(selectedMonths);
+        updateDurationAndPayment();
+      });
+      checkOut.addEventListener('input', function() {
+        selectedMonths = null;
+        form.querySelectorAll('.bb-dur-btn').forEach(function(b) { b.style.background=''; b.style.color=''; b.style.borderColor=''; });
+        updateDurationAndPayment();
+      });
+      expectedPayment.addEventListener('input', function() { this.dataset.userEdited = 'true'; });
       updateDurationAndPayment();
     }
     wireBbDateCalculations();
+
+    // ── Financial Summary for edit mode ─────────────────────────────────
+    if (isEdit && resv.id) {
+      fetch('/process_reservation.php?action=get_reservation_for_payment&id=' + resv.id)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (!data.success) return;
+          const payments = data.months || [];
+          const totalPaid = payments.reduce(function(s, p) { return s + parseFloat(p.amount || 0); }, 0);
+          const outstanding = data.outstanding_balance ?? 0;
+          const status = data.payment_status ?? '—';
+          const monthlyRate = parseFloat(resv.room_rate || 0);
+          function months(ci, co) {
+            if (!ci || !co) return 0;
+            var s = new Date(ci+'T00:00:00'), e = new Date(co+'T00:00:00');
+            var y = e.getFullYear()-s.getFullYear(), m = e.getMonth()-s.getMonth(), d = e.getDate()-s.getDate();
+            var mo = y*12+m; if(d>0)mo++; return Math.max(1, mo);
+          }
+          const mo = months(resv.check_in, resv.check_out);
+          const totalRental = monthlyRate * mo;
+          const statusColors = {'Fully Paid':'background:#d4f7e7;color:#1a7a46','Overdue':'background:#fde8e8;color:#b91c1c','Partially Paid':'background:#fef3c7;color:#92400e','Unpaid':'background:#f3f4f6;color:#6b7280'};
+          const sc = statusColors[status] || 'background:#f3f4f6;color:#6b7280';
+
+          var panel = document.createElement('div');
+          panel.style.cssText = 'margin:14px 0 6px;border:1px solid var(--sky-200,#c5deef);border-radius:10px;background:var(--sky-50,#eef5fc);overflow:hidden;';
+          panel.innerHTML =
+            '<div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--blue-500,#3b7dd8);padding:9px 14px 7px;border-bottom:1px solid var(--sky-200,#c5deef);">Financial Summary</div>' +
+            '<div style="display:grid;grid-template-columns:1fr 1fr;">' +
+            '<div style="padding:8px 14px;border-bottom:1px solid var(--sky-100,#dceaf8);border-right:1px solid var(--sky-100,#dceaf8);"><div style="font-size:0.7rem;color:var(--ink-500,#5b7693);font-weight:600;text-transform:uppercase;">Monthly Rate</div><div style="font-weight:700;margin-top:2px;">₱' + monthlyRate.toLocaleString() + '/mo</div></div>' +
+            '<div style="padding:8px 14px;border-bottom:1px solid var(--sky-100,#dceaf8);"><div style="font-size:0.7rem;color:var(--ink-500,#5b7693);font-weight:600;text-transform:uppercase;">Rental Duration</div><div style="font-weight:700;margin-top:2px;">' + mo + ' Month' + (mo!==1?'s':'') + '</div></div>' +
+            '<div style="padding:8px 14px;border-bottom:1px solid var(--sky-100,#dceaf8);border-right:1px solid var(--sky-100,#dceaf8);"><div style="font-size:0.7rem;color:var(--ink-500,#5b7693);font-weight:600;text-transform:uppercase;">Total Rental</div><div style="font-weight:700;margin-top:2px;">₱' + totalRental.toLocaleString() + '</div></div>' +
+            '<div style="padding:8px 14px;border-bottom:1px solid var(--sky-100,#dceaf8);"><div style="font-size:0.7rem;color:var(--ink-500,#5b7693);font-weight:600;text-transform:uppercase;">Amount Paid</div><div style="font-weight:700;color:#1a7a46;margin-top:2px;">₱' + totalPaid.toLocaleString() + '</div></div>' +
+            '<div style="padding:8px 14px;border-right:1px solid var(--sky-100,#dceaf8);"><div style="font-size:0.7rem;color:var(--ink-500,#5b7693);font-weight:600;text-transform:uppercase;">Outstanding Balance</div><div style="font-weight:700;color:' + (outstanding>0?'#b91c1c':'#1a7a46') + ';margin-top:2px;">' + (outstanding>0?'₱'+outstanding.toLocaleString():'✓ Fully Paid') + '</div></div>' +
+            '<div style="padding:8px 14px;"><div style="font-size:0.7rem;color:var(--ink-500,#5b7693);font-weight:600;text-transform:uppercase;">Payment Status</div><div style="margin-top:4px;"><span style="font-size:0.72rem;font-weight:700;padding:2px 8px;border-radius:999px;' + sc + ';">' + status + '</span></div></div>' +
+            '</div>';
+          var actionsEl = inner.querySelector('.bb-actions');
+          if (actionsEl) inner.insertBefore(panel, actionsEl);
+        })
+        .catch(function() { /* silent fail */ });
+    }
 
     function closeFormModal() { modal.remove(); }
     document.getElementById('bbResvCancelBtn').addEventListener('click', closeFormModal);
     modal.addEventListener('click', function (e) { if (e.target === modal) closeFormModal(); });
 
-    // ─── Removed the room selector change handler because the dropdown no longer exists ──
-
     form.addEventListener('submit', function (e) {
       e.preventDefault();
-      // Dirty check still applies to the hidden room ID
       if (!isEdit && isDirtyLayoutRoom(roomId)) {
         alert('This room is Vacant Dirty. Please mark it as clean before creating a reservation.');
         return;
@@ -505,15 +640,16 @@
           .then(function (r) { return r.json(); })
           .then(function (res) {
             if (res.success) {
-              if (Array.isArray(res.rooms)) res.rooms.forEach(updateRoomCard);
+              if (Array.isArray(res.rooms)) res.rooms.forEach(window.updateRoomCard);
               const formData = formToObject(new FormData(form));
               const resvStatus = formData.status || (isEdit ? (resv.status || 'reserved') : 'reserved');
-              updateRoomCardReservation(Object.assign({}, formData, {
+              window.updateRoomCardReservation(Object.assign({}, formData, {
                 room_id: formData.room_id || roomId,
                 status: resvStatus,
                 expected_payment_date: formData.expected_payment_date || formData.check_out || null,
               }));
               closeFormModal();
+              if (window.triggerLayoutPoll) window.triggerLayoutPoll();
             } else {
               const resvData = isEdit ? Object.assign({ id: resv.id }, formToObject(fd)) : formToObject(fd);
               renderReservationForm(resvData, roomId, Object.assign({ _general: res.message }, res.errors || {}));
@@ -582,7 +718,7 @@
         .then(function (r) { return r.json(); })
         .then(function (data) {
           if (data.success) {
-            if (data.room) updateRoomCard(data.room);
+            if (data.room) window.updateRoomCard(data.room);
             modal.remove();
           } else {
             errorEl.textContent = data.message || 'Could not save room details.';
@@ -622,9 +758,28 @@
     card.dataset.status = roomStatus;
     if (willBeDirty) card.dataset.cleaning = 'Pending';
 
-    const datesEl = card.querySelector('.rc-dates');
-    if (datesEl && roomStatus === 'available') {
-      datesEl.textContent = willBeDirty ? 'Vacant Dirty' : 'Vacant Clean';
+    const isNowVacant = (roomStatus === 'available');
+    if (isNowVacant) {
+      // Optimistically clear guest/reservation info so the card looks vacant
+      // immediately (before the server response arrives). If the server call
+      // fails, updateReservationStatusFor restores the old status via a second
+      // applyRoomCardStatus call, and the guest data stays in data-* attrs
+      // on the card for that restore — we only clear the visible DOM here.
+      card.dataset.guestName     = '';
+      card.dataset.checkIn       = '';
+      card.dataset.checkOut      = '';
+      card.dataset.reservationId = '';
+
+      const guestEl = card.querySelector('.rc-guest-name');
+      if (guestEl) {
+        guestEl.textContent = 'No Guest Assigned';
+        guestEl.className   = 'rc-guest-name rc-guest-name--empty';
+        guestEl.title       = '';
+      }
+      const datesEl = card.querySelector('.rc-dates');
+      if (datesEl) datesEl.textContent = willBeDirty ? 'Vacant Dirty' : 'Vacant Clean';
+      const durationEl = card.querySelector('.rc-duration');
+      if (durationEl) durationEl.style.display = 'none';
     }
   }
 
@@ -643,8 +798,9 @@
       .then(function (res) { return res.json(); })
       .then(function (data) {
         if (data.success) {
-          if (Array.isArray(data.rooms)) data.rooms.forEach(updateRoomCard);
-          updateRoomCardReservation(Object.assign({}, r, { status: newStatus }));
+          if (Array.isArray(data.rooms)) data.rooms.forEach(window.updateRoomCard);
+          window.updateRoomCardReservation(Object.assign({}, r, { status: newStatus }));
+          if (window.triggerLayoutPoll) window.triggerLayoutPoll();
         } else {
           applyRoomCardStatus(r.room_id, r.status);
           alert('Error: ' + (data.message || 'Could not update reservation.'));
@@ -673,8 +829,9 @@
       .then(function (res) { return res.json(); })
       .then(function (data) {
         if (data.success) {
-          if (Array.isArray(data.rooms)) data.rooms.forEach(updateRoomCard);
-          updateRoomCardReservation(Object.assign({}, r, { check_in: checkIn, check_out: checkOut, expected_payment_date: checkOut }));
+          if (Array.isArray(data.rooms)) data.rooms.forEach(window.updateRoomCard);
+          window.updateRoomCardReservation(Object.assign({}, r, { check_in: checkIn, check_out: checkOut, expected_payment_date: checkOut }));
+          if (window.triggerLayoutPoll) window.triggerLayoutPoll();
         } else {
           alert('Error: ' + (data.message || 'Could not update dates.'));
         }
@@ -864,7 +1021,8 @@
         .then(function (res) { return res.json(); })
         .then(function (data) {
           if (data.success) {
-            if (Array.isArray(data.rooms)) data.rooms.forEach(updateRoomCard);
+            if (Array.isArray(data.rooms)) data.rooms.forEach(window.updateRoomCard);
+            if (window.triggerLayoutPoll) window.triggerLayoutPoll();
           } else {
             alert('Error: ' + (data.message || 'Could not move reservation.'));
           }
@@ -1036,7 +1194,7 @@
                 return;
               }
               if (data.success) {
-                if (data.room) updateRoomCard(data.room);
+                if (data.room) window.updateRoomCard(data.room);
               } else {
                 alert(data.message || 'Could not update cleaning status.');
               }
@@ -1075,12 +1233,15 @@
     showRoomMenu(e.clientX, e.clientY, card);
   }, true);
 
+  // ─── WebSocket / Polling ────────────────────────────────────────────
   let socket = null;
   let reconnectAttempts = 0;
   let reconnectTimer = null;
   const MAX_RECONNECT_DELAY_MS = 30000;
+  let wsEnabled = true;
 
   function scheduleReconnect() {
+    if (!wsEnabled) return;
     if (reconnectTimer) return;
     const delay = Math.min(1000 * Math.pow(1.5, reconnectAttempts), MAX_RECONNECT_DELAY_MS);
     reconnectAttempts++;
@@ -1091,10 +1252,12 @@
   }
 
   function connect() {
+    if (!wsEnabled) return;
     try {
       socket = new WebSocket(WS_URL);
     } catch (err) {
-      console.warn('[layout] Room sync WebSocket unavailable:', err.message);
+      console.warn('[layout] Room sync WebSocket unavailable, falling back to polling.');
+      wsEnabled = false;
       return;
     }
 
@@ -1111,155 +1274,143 @@
         return;
       }
       if (msg && msg.type === 'rooms_changed' && Array.isArray(msg.rooms)) {
-        msg.rooms.forEach(updateRoomCard);
+        msg.rooms.forEach(window.updateRoomCard);
       }
       if (msg && msg.type === 'reservations_changed' && Array.isArray(msg.reservations)) {
-        msg.reservations.forEach(updateRoomCardReservation);
+        msg.reservations.forEach(window.updateRoomCardReservation);
       }
     });
 
-    socket.addEventListener('close', scheduleReconnect);
-    socket.addEventListener('error', function () {});
+    socket.addEventListener('close', function () {
+      if (wsEnabled) scheduleReconnect();
+    });
+    socket.addEventListener('error', function () {
+      console.warn('[layout] WebSocket error, falling back to polling.');
+      wsEnabled = false;
+      if (socket) socket.close();
+    });
   }
 
   connect();
 
+  // ─── AJAX polling — syncs Layout with Calendar, Reports & Reservations ──
+  var branchFromUrl = (function() {
+    var m = window.location.search.match(/[?&]branch=([^&]+)/);
+    return m ? decodeURIComponent(m[1]) : 'mtv';
+  })();
+
+  var lastHash = '';
+  var pollTimer = null;
+
+  window.pollNow = function() {
+    fetch('/admin/process_layout_poll.php?branch=' + encodeURIComponent(branchFromUrl))
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (!data.success) return;
+
+        var hash = JSON.stringify(data.rooms) + JSON.stringify(data.reservations);
+        if (hash === lastHash) return;
+        lastHash = hash;
+
+        if (Array.isArray(data.rooms)) {
+          data.rooms.forEach(function(room) { window.updateRoomCard(room); });
+        }
+
+        if (Array.isArray(data.reservations)) {
+          data.reservations.forEach(function(resv) { window.updateRoomCardReservation(resv); });
+        }
+
+        var countEl = document.getElementById('rlCount');
+        if (countEl && data.rooms) countEl.textContent = data.rooms.length + ' rooms';
+      })
+      .catch(function() { /* silent */ });
+  };
+
+  window.triggerLayoutPoll = function() {
+    if (pollTimer) {
+      clearTimeout(pollTimer);
+      pollTimer = null;
+    }
+    window.pollNow();
+    pollTimer = setTimeout(function() {
+      pollTimer = null;
+      window.pollNow();
+    }, 1000);
+  };
+
+  setInterval(window.pollNow, 10000);
+  setTimeout(window.pollNow, 3000);
+
+  // ─── Legend filtering (if present) ──────────────────────────────────
   (function wireLayoutLegend() {
     const legendItems = document.querySelectorAll('#layoutLegend .layout-legend__item');
-    let activeFilter = null; // { status: 'available'|'dirty'|'occupied'|'reserved'|'maintenance'|'all' }
+    let activeFilter = null;
 
     function clearLegendHighlights() {
-        legendItems.forEach(el => el.classList.remove('active-filter'));
+      legendItems.forEach(el => el.classList.remove('active-filter'));
     }
 
     function filterRooms(status) {
-        const cards = document.querySelectorAll('.room-card');
-        if (status === 'all') {
-            cards.forEach(card => card.style.display = '');
-            clearLegendHighlights();
-            activeFilter = null;
-            return;
-        }
-
-        // Map status to card classes
-        let showClass = '';
-        let extraCondition = null;
-        switch (status) {
-            case 'available':
-                showClass = 'status-available';
-                extraCondition = (card) => !card.classList.contains('room-card--dirty');
-                break;
-            case 'dirty':
-                showClass = 'status-available';
-                extraCondition = (card) => card.classList.contains('room-card--dirty');
-                break;
-            case 'occupied':
-                showClass = 'status-occupied';
-                break;
-            case 'reserved':
-                showClass = 'status-reserved';
-                break;
-            case 'maintenance':
-                showClass = 'status-maintenance';
-                break;
-            default:
-                return;
-        }
-
-        cards.forEach(card => {
-            const hasClass = card.classList.contains(showClass);
-            let show = hasClass;
-            if (extraCondition) {
-                show = show && extraCondition(card);
-            }
-            card.style.display = show ? '' : 'none';
-        });
-
-        // Highlight the active legend item
+      const cards = document.querySelectorAll('.room-card');
+      if (status === 'all') {
+        cards.forEach(card => card.style.display = '');
         clearLegendHighlights();
-        const target = document.querySelector(`#layoutLegend .layout-legend__item[data-status="${status}"]`);
-        if (target) target.classList.add('active-filter');
-        activeFilter = { status };
+        activeFilter = null;
+        return;
+      }
+
+      let showClass = '';
+      let extraCondition = null;
+      switch (status) {
+        case 'available':
+          showClass = 'status-available';
+          extraCondition = (card) => !card.classList.contains('room-card--dirty');
+          break;
+        case 'dirty':
+          showClass = 'status-available';
+          extraCondition = (card) => card.classList.contains('room-card--dirty');
+          break;
+        case 'occupied':
+          showClass = 'status-occupied';
+          break;
+        case 'reserved':
+          showClass = 'status-reserved';
+          break;
+        case 'maintenance':
+          showClass = 'status-maintenance';
+          break;
+        default:
+          return;
+      }
+
+      cards.forEach(card => {
+        const hasClass = card.classList.contains(showClass);
+        let show = hasClass;
+        if (extraCondition) {
+          show = show && extraCondition(card);
+        }
+        card.style.display = show ? '' : 'none';
+      });
+
+      clearLegendHighlights();
+      const target = document.querySelector(`#layoutLegend .layout-legend__item[data-status="${status}"]`);
+      if (target) target.classList.add('active-filter');
+      activeFilter = { status };
     }
 
-    // Add click listeners
     legendItems.forEach(item => {
-        item.addEventListener('click', function(e) {
-            const status = this.dataset.status;
-            if (!status) return;
-
-            // If already active, reset to show all
-            if (activeFilter && activeFilter.status === status) {
-                filterRooms('all');
-                return;
-            }
-
-            filterRooms(status);
-        });
+      item.addEventListener('click', function(e) {
+        const status = this.dataset.status;
+        if (!status) return;
+        if (activeFilter && activeFilter.status === status) {
+          filterRooms('all');
+          return;
+        }
+        filterRooms(status);
+      });
     });
 
-    // Expose reset function globally (used by other parts if needed)
     window.resetLayoutLegend = function() { filterRooms('all'); };
-
-    // Also, when a room card is updated (via WebSocket), we might want to re-apply filter
-    // if active. We'll override the updateRoomCard to re-filter after update.
-    const originalUpdateRoomCard = window.updateRoomCard;
-    if (originalUpdateRoomCard) {
-        window.updateRoomCard = function(room) {
-            originalUpdateRoomCard(room);
-            // If a filter is active, re-apply it to maintain filtering
-            if (activeFilter) {
-                filterRooms(activeFilter.status);
-            }
-        };
-    }
+  })();
 
 })();
-
-})();
-
-
-  // ── AJAX polling — syncs Layout with Calendar, Reports & Reservations ──
-  (function wirePoll() {
-    var branch  = (window.BB_LAYOUT_ROOMS && window.BB_LAYOUT_ROOMS[0])
-                  ? null : null; // resolved from URL
-    var branchFromUrl = (function() {
-      var m = window.location.search.match(/[?&]branch=([^&]+)/);
-      return m ? decodeURIComponent(m[1]) : 'mtv';
-    })();
-
-    var lastHash = '';
-
-    function pollNow() {
-      fetch('/admin/process_layout_poll.php?branch=' + encodeURIComponent(branchFromUrl))
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-          if (!data.success) return;
-
-          // Simple change detection via JSON hash
-          var hash = JSON.stringify(data.rooms) + JSON.stringify(data.reservations);
-          if (hash === lastHash) return;
-          lastHash = hash;
-
-          // Update room statuses
-          if (Array.isArray(data.rooms)) {
-            data.rooms.forEach(function(room) { updateRoomCard(room); });
-          }
-
-          // Update reservation data on cards
-          if (Array.isArray(data.reservations)) {
-            data.reservations.forEach(function(resv) { updateRoomCardReservation(resv); });
-          }
-
-          // Update sidebar count
-          var countEl = document.getElementById('rlCount');
-          if (countEl && data.rooms) countEl.textContent = data.rooms.length + ' rooms';
-        })
-        .catch(function() { /* silent on network error */ });
-    }
-
-    // Poll every 30 seconds
-    setInterval(pollNow, 30000);
-    // Also poll after 3 s on page load to catch changes made elsewhere
-    setTimeout(pollNow, 3000);
-  }());

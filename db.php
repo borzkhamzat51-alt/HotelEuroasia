@@ -2,6 +2,7 @@
 /**
  * db.php
  * Every direct database query lives here, behind small named functions.
+ * Added debug logging for reservation range queries.
  */
 
 function db_find_user_by_username($username)
@@ -115,6 +116,7 @@ function db_find_room($id)
 function db_list_reservations_in_range($roomIds, $rangeStart, $rangeEnd)
 {
     if (empty($roomIds)) {
+        error_log("[db_list_reservations_in_range] No room IDs provided.");
         return [];
     }
     $placeholders = implode(',', array_fill(0, count($roomIds), '?'));
@@ -125,8 +127,17 @@ function db_list_reservations_in_range($roomIds, $rangeStart, $rangeEnd)
               AND check_out > ?
             ORDER BY check_in ASC";
     $stmt = bb_db()->prepare($sql);
-    $stmt->execute(array_merge($roomIds, [$rangeEnd, $rangeStart]));
-    return $stmt->fetchAll();
+    $params = array_merge($roomIds, [$rangeEnd, $rangeStart]);
+    $stmt->execute($params);
+    $results = $stmt->fetchAll();
+
+    error_log("[db_list_reservations_in_range] Range: $rangeStart to $rangeEnd, Room IDs: " . implode(',', $roomIds) . ", Found: " . count($results) . " reservations.");
+    if (count($results) > 0) {
+        error_log("[db_list_reservations_in_range] First reservation: " . print_r($results[0], true));
+    } else {
+        error_log("[db_list_reservations_in_range] No reservations found.");
+    }
+    return $results;
 }
 
 function db_find_reservation($id)
@@ -199,7 +210,9 @@ function db_create_reservation($data)
         $data['notes'], $data['special_requests'], $data['user_id'], $data['user_id'],
         $data['expected_payment_date'],
     ]);
-    return (int) bb_db()->lastInsertId();
+    $newId = (int) bb_db()->lastInsertId();
+    error_log("[db_create_reservation] Created reservation ID: $newId, room_id: " . $data['room_id'] . ", status: " . $data['status'] . ", dates: " . $data['check_in'] . " to " . $data['check_out']);
+    return $newId;
 }
 
 function db_update_reservation($id, $data)
@@ -244,12 +257,14 @@ function db_update_reservation($id, $data)
         $data['notes'], $data['special_requests'], $data['user_id'],
         $data['expected_payment_date'], $id,
     ]);
+    error_log("[db_update_reservation] Updated reservation ID: $id, room_id: " . $data['room_id'] . ", status: " . $data['status']);
 }
 
 function db_delete_reservation($id)
 {
     $stmt = bb_db()->prepare('DELETE FROM reservations WHERE id = ?');
     $stmt->execute([$id]);
+    error_log("[db_delete_reservation] Deleted reservation ID: $id");
 }
 
 function db_log_reservation_activity($reservationId, $userId, $action, $details)
@@ -273,11 +288,90 @@ function db_get_reservation_activity($reservationId)
     return $stmt->fetchAll();
 }
 
-function db_find_active_reservation_for_room($roomId)
+function db_find_active_reservation_for_room($roomId, $date = null)
 {
-    $stmt = bb_db()->prepare("SELECT * FROM reservations WHERE room_id = ? AND status NOT IN ('cancelled','checked_out') LIMIT 1");
-    $stmt->execute([$roomId]);
+    $date = $date ?: date('Y-m-d');
+    $stmt = bb_db()->prepare(
+        "SELECT * FROM reservations
+         WHERE room_id = ? AND status IN ('reserved','checked_in')
+           AND check_in <= ? AND check_out > ?
+         ORDER BY (status = 'checked_in') DESC, check_in ASC
+         LIMIT 1"
+    );
+    $stmt->execute([$roomId, $date, $date]);
     return $stmt->fetch() ?: null;
+}
+
+/* ============================================================================
+ * Payments — Phase 1 Financial Foundation
+ * ========================================================================= */
+
+function db_list_payments(int $reservationId): array
+{
+    $stmt = bb_db()->prepare(
+        'SELECT p.*, u.username, u.full_name
+         FROM payments p
+         LEFT JOIN users u ON u.id = p.created_by
+         WHERE p.reservation_id = ?
+         ORDER BY p.payment_date ASC, p.id ASC'
+    );
+    $stmt->execute([$reservationId]);
+    return $stmt->fetchAll();
+}
+
+function db_create_payment(array $data): int
+{
+    $stmt = bb_db()->prepare(
+        'INSERT INTO payments (reservation_id, amount, payment_date, payment_method, remarks, created_by)
+         VALUES (?, ?, ?, ?, ?, ?)'
+    );
+    $stmt->execute([
+        $data['reservation_id'],
+        (float)$data['amount'],
+        $data['payment_date'],
+        $data['payment_method'] ?: null,
+        $data['remarks'] ?: null,
+        $data['created_by'] ?? null,
+    ]);
+    return (int)bb_db()->lastInsertId();
+}
+
+function db_delete_payment(int $paymentId): void
+{
+    $stmt = bb_db()->prepare('DELETE FROM payments WHERE id = ?');
+    $stmt->execute([$paymentId]);
+}
+
+function db_find_payment(int $id): ?array
+{
+    $stmt = bb_db()->prepare('SELECT * FROM payments WHERE id = ? LIMIT 1');
+    $stmt->execute([$id]);
+    return $stmt->fetch() ?: null;
+}
+
+function db_get_payment_months(int $reservationId): array
+{
+    return db_list_payments($reservationId);
+}
+
+function db_get_outstanding_balance(int $reservationId): float
+{
+    if (!function_exists('fin_outstanding_balance')) {
+        return 0.0;
+    }
+    $resv = db_find_reservation($reservationId);
+    if (!$resv) return 0.0;
+    return fin_outstanding_balance($resv);
+}
+
+function db_get_payment_status(int $reservationId): string
+{
+    if (!function_exists('fin_payment_status')) {
+        return 'Unknown';
+    }
+    $resv = db_find_reservation($reservationId);
+    if (!$resv) return 'Unknown';
+    return fin_payment_status($resv);
 }
 
 function db_set_room_status($roomId, $status)
@@ -755,5 +849,4 @@ function db_count_checked_in($branch)
         $stmt->execute([$branch]);
     }
     return (int) $stmt->fetchColumn();
-    
 }

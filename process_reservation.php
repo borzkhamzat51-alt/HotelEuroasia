@@ -2,8 +2,6 @@
 /**
  * process_reservation.php
  * Handles reservation CRUD via AJAX. Always returns JSON.
- * Now merges existing reservation data on updates so drag operations never fail validation.
- * Added strict validation: reject reservations on dirty, occupied, maintenance, or overlapping rooms.
  */
 
 ini_set('display_errors', 0);
@@ -13,18 +11,15 @@ require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/db.php';
 
 header('Content-Type: application/json');
-ini_set('display_errors', 0);
 
 function respond($data) {
     echo json_encode($data);
     exit;
 }
 
-$roomStatusFor = ['checked_in' => 'occupied', 'reserved' => 'reserved'];
-
 // --- Helper: sync room status ---
 function syncRoomStatusFromReservation($roomId, $previousStatus = null, $newStatus = null) {
-    global $roomStatusFor;
+    $roomStatusFor = ['checked_in' => 'occupied', 'reserved' => 'reserved'];
     $active = db_find_active_reservation_for_room($roomId);
     if ($active && isset($roomStatusFor[$active['status']])) {
         db_set_room_status($roomId, $roomStatusFor[$active['status']]);
@@ -36,20 +31,6 @@ function syncRoomStatusFromReservation($roomId, $previousStatus = null, $newStat
     if ($newStatus === 'checked_out') {
         db_update_room_meta($roomId, 'Pending', null, date('Y-m-d'), null);
     }
-}
-
-// --- Helper: check if room is dirty (available + not clean) ---
-function isRoomDirty($roomId) {
-    $room = db_find_room($roomId);
-    if (!$room) return false;
-    return ($room['room_status'] === 'available' && $room['cleaning_status'] !== 'Clean');
-}
-
-// --- Helper: check if room is occupied (status = occupied) ---
-function isRoomOccupied($roomId) {
-    $room = db_find_room($roomId);
-    if (!$room) return false;
-    return ($room['room_status'] === 'occupied');
 }
 
 // --- Helper: check if room is maintenance ---
@@ -65,47 +46,80 @@ if (!bb_has_permission('reservations')) {
     respond(['success' => false, 'message' => 'Reservations permission required.']);
 }
 
-// --- GET: fetch full reservation data with payment months for the Payment Modal / Folio ---
-if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['action'] ?? '') === 'get_reservation_for_payment') {
-    $id = (int) ($_GET['id'] ?? 0);
-    if (!$id) {
-        respond(['success' => false, 'message' => 'Reservation ID required.']);
+// ============================================================
+// GET handlers
+// ============================================================
+
+if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+    $getAction = $_GET['action'] ?? '';
+
+    // --- Fetch full reservation + payment data (Payment Modal / Folio) ---
+    if ($getAction === 'get_reservation_for_payment') {
+        $id = (int) ($_GET['id'] ?? 0);
+        if (!$id) respond(['success' => false, 'message' => 'Reservation ID required.']);
+        $res = db_find_reservation($id);
+        if (!$res) respond(['success' => false, 'message' => 'Reservation not found.']);
+        $room = db_find_room($res['room_id']);
+        if ($room) {
+            $res['room_number'] = $room['room_number'];
+            $res['room_type']   = $room['room_type'];
+            $res['branch']      = $room['branch'];
+        }
+        respond([
+            'success'          => true,
+            'reservation'      => $res,
+            'months'           => db_get_payment_months($id),
+            'outstanding_balance' => db_get_outstanding_balance($id),
+            'payment_status'   => db_get_payment_status($id),
+        ]);
     }
-    $res = db_find_reservation($id);
-    if (!$res) {
-        respond(['success' => false, 'message' => 'Reservation not found.']);
+
+    // --- Fetch a single reservation by its own ID ---
+    // Used by calendar.js checkout flow to re-fetch before submitting status change.
+    if ($getAction === 'get_reservation') {
+        $id = (int) ($_GET['id'] ?? 0);
+        if (!$id) respond(['success' => false, 'message' => 'Reservation ID required.']);
+        $res = db_find_reservation($id);
+        if (!$res) respond(['success' => false, 'reservation' => null]);
+        $room = db_find_room($res['room_id']);
+        if ($room) $res['room_number'] = $room['room_number'];
+        respond(['success' => true, 'reservation' => $res]);
     }
-    $room = db_find_room($res['room_id']);
-    if ($room) {
-        $res['room_number'] = $room['room_number'];
-        $res['room_type']   = $room['room_type'];
-        $res['branch']      = $room['branch'];
+
+    // --- Fetch a room's active reservation (by room_id) ---
+    // Used by the context menu and room card sidebar.
+    if ($getAction === 'get_active_reservation') {
+        $roomId = (int) ($_GET['room_id'] ?? 0);
+        if (!$roomId) respond(['success' => false, 'message' => 'Room ID required.']);
+
+        $res = db_find_active_reservation_for_room($roomId);
+
+        // FIX: db_find_active_reservation_for_room only looks at TODAY.
+        // But the calendar checkout flow calls this right after a status change,
+        // so race conditions can cause a miss. Also fetch by reservation_id if provided.
+        if (!$res && isset($_GET['reservation_id'])) {
+            $rid = (int) $_GET['reservation_id'];
+            $candidate = db_find_reservation($rid);
+            // Accept it if it belongs to this room and isn't already cancelled/checked_out
+            if ($candidate && (int)$candidate['room_id'] === $roomId
+                && !in_array($candidate['status'], ['cancelled', 'checked_out'], true)) {
+                $res = $candidate;
+            }
+        }
+
+        if ($res) {
+            $room = db_find_room($roomId);
+            if ($room) $res['room_number'] = $room['room_number'];
+        }
+        respond(['success' => true, 'reservation' => $res ?: null]);
     }
-    $months = db_get_payment_months($id);
-    $outstanding = db_get_outstanding_balance($id);
-    $paymentStatus = db_get_payment_status($id);
-    respond([
-        'success' => true,
-        'reservation' => $res,
-        'months' => $months,
-        'outstanding_balance' => $outstanding,
-        'payment_status' => $paymentStatus,
-    ]);
+
+    respond(['success' => false, 'message' => 'Unknown GET action.']);
 }
 
-// --- GET: fetch a room's active reservation (full row + room_number) ---
-if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['action'] ?? '') === 'get_active_reservation') {
-    $roomId = (int) ($_GET['room_id'] ?? 0);
-    if (!$roomId) {
-        respond(['success' => false, 'message' => 'Room ID required.']);
-    }
-    $res = db_find_active_reservation_for_room($roomId);
-    if ($res) {
-        $room = db_find_room($roomId);
-        if ($room) $res['room_number'] = $room['room_number'];
-    }
-    respond(['success' => true, 'reservation' => $res ?: null]);
-}
+// ============================================================
+// POST handlers
+// ============================================================
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
@@ -113,10 +127,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 /**
- * Enriches a fetched reservation row with the room number, matching the
- * same field reservations.php's PHP-rendered data-reservation JSON
- * carries. Without this, anything reading r.room_number client-side
- * (folio/print/move UI) shows "RM?" right after an AJAX update.
+ * Enriches a fetched reservation row with the room number.
  */
 function enrichWithRoomNumber($reservation) {
     if (!$reservation) return $reservation;
@@ -126,22 +137,16 @@ function enrichWithRoomNumber($reservation) {
 }
 
 /**
- * The fields calendar.js's updateRoomSidebar() needs to refresh a room's
- * panel (number, type, floor, price, status pill, availability dot,
- * maintenance badge, filter attributes) without a page reload.
- * syncRoomStatusFromReservation() above already keeps room_status/
- * cleaning_status correct in the database on every create, update, and
- * delete — this is what exposes that (and the room's other editable
- * fields) to the client, so the sidebar can actually be told about it.
+ * Sidebar payload for a room.
  */
 function roomSidebarPayload($room) {
     if (!$room) return null;
     return [
-        'id' => $room['id'],
-        'room_number' => $room['room_number'],
-        'room_type' => $room['room_type'],
+        'id'              => $room['id'],
+        'room_number'     => $room['room_number'],
+        'room_type'       => $room['room_type'],
         'price_per_night' => $room['price_per_night'],
-        'room_status' => $room['room_status'],
+        'room_status'     => $room['room_status'],
         'cleaning_status' => $room['cleaning_status'],
     ];
 }
@@ -166,6 +171,38 @@ try {
         respond(['success' => true, 'rooms' => [roomSidebarPayload(db_find_room($existing['room_id']))]]);
     }
 
+    // --- Quick status-only update (checkout, checkin shortcuts from context menu) ---
+    // calendar.js posts: action=update_reservation_status, id=X, status=Y
+    if ($action === 'update_reservation_status') {
+        $id     = (int) ($_POST['id'] ?? 0);
+        $status = $_POST['status'] ?? '';
+        if (!$id)     respond(['success' => false, 'message' => 'Reservation ID required.']);
+        if (!$status) respond(['success' => false, 'message' => 'Status required.']);
+        if (!in_array($status, ['reserved','checked_in','checked_out','cancelled'])) {
+            respond(['success' => false, 'message' => 'Invalid status.']);
+        }
+        $existing = db_find_reservation($id);
+        if (!$existing) respond(['success' => false, 'message' => 'Reservation not found.']);
+
+        $data = array_merge($existing, [
+            'status'  => $status,
+            'user_id' => $_SESSION['user_id'],
+        ]);
+        $oldStatus = $existing['status'];
+        db_update_reservation($id, $data);
+        db_log_reservation_activity($id, $_SESSION['user_id'], 'status_change', "$oldStatus → $status");
+        db_audit_log('reservation.status_change', 'reservation', $id, $existing['guest_full_name'], "status:$status");
+        syncRoomStatusFromReservation($existing['room_id'], $oldStatus, $status);
+
+        $updated = enrichWithRoomNumber(db_find_reservation($id));
+        respond([
+            'success'     => true,
+            'id'          => $id,
+            'reservation' => $updated,
+            'rooms'       => [roomSidebarPayload(db_find_room($existing['room_id']))]
+        ]);
+    }
+
     // --- Create / Update ---
     if (!in_array($action, ['create', 'update'])) {
         respond(['success' => false, 'message' => 'Unknown action.']);
@@ -175,30 +212,32 @@ try {
 
     // Build data array from POST
     $data = [
-        'room_id' => (int) ($_POST['room_id'] ?? 0),
-        'guest_full_name' => trim($_POST['guest_full_name'] ?? ''),
-        'contact_number' => trim($_POST['contact_number'] ?? ''),
-        'email' => trim($_POST['email'] ?? ''),
-        'address' => trim($_POST['address'] ?? ''),
-        'valid_id_type' => trim($_POST['valid_id_type'] ?? ''),
-        'valid_id_number' => trim($_POST['valid_id_number'] ?? ''),
-        'check_in' => trim($_POST['check_in'] ?? ''),
-        'check_out' => trim($_POST['check_out'] ?? ''),
-        'num_adults' => max(0, (int) ($_POST['num_adults'] ?? 1)),
-        'num_children' => max(0, (int) ($_POST['num_children'] ?? 0)),
-        'status' => $_POST['status'] ?? 'reserved',
-        'room_rate' => (float) ($_POST['room_rate'] ?? 0),
-        'security_deposit' => (float) ($_POST['security_deposit'] ?? 0),
-        'total_amount' => (float) ($_POST['total_amount'] ?? 0),
-        'amount_paid' => (float) ($_POST['amount_paid'] ?? 0),
-        'payment_method' => $_POST['payment_method'] ?: null,
-        'notes' => trim($_POST['notes'] ?? ''),
-        'special_requests' => trim($_POST['special_requests'] ?? ''),
+        'room_id'               => (int) ($_POST['room_id'] ?? 0),
+        'guest_full_name'       => trim($_POST['guest_full_name'] ?? ''),
+        'contact_number'        => trim($_POST['contact_number'] ?? ''),
+        'email'                 => trim($_POST['email'] ?? ''),
+        'address'               => trim($_POST['address'] ?? ''),
+        'valid_id_type'         => trim($_POST['valid_id_type'] ?? ''),
+        'valid_id_number'       => trim($_POST['valid_id_number'] ?? ''),
+        'check_in'              => trim($_POST['check_in'] ?? ''),
+        'check_out'             => trim($_POST['check_out'] ?? ''),
+        'num_adults'            => max(0, (int) ($_POST['num_adults'] ?? 1)),
+        'num_children'          => max(0, (int) ($_POST['num_children'] ?? 0)),
+        'status'                => $_POST['status'] ?? 'reserved',
+        'room_rate'             => (float) ($_POST['room_rate'] ?? 0),
+        'security_deposit'      => (float) ($_POST['security_deposit'] ?? 0),
+        'total_amount'          => (float) ($_POST['total_amount'] ?? 0),
+        'amount_paid'           => (float) ($_POST['amount_paid'] ?? 0),
+        'payment_method'        => $_POST['payment_method'] ?: null,
+        'notes'                 => trim($_POST['notes'] ?? ''),
+        'special_requests'      => trim($_POST['special_requests'] ?? ''),
         'expected_payment_date' => $_POST['expected_payment_date'] ?? null,
-        'user_id' => $_SESSION['user_id'],
+        'user_id'               => $_SESSION['user_id'],
     ];
 
-    // --- For updates, fill in any field truly missing from the request
+    error_log("[process_reservation] Received data: " . print_r($data, true));
+
+    // --- For updates, fill in missing fields from existing record ---
     if ($action === 'update') {
         $existing = db_find_reservation($reservationId);
         if (!$existing) {
@@ -212,38 +251,39 @@ try {
         }
     }
 
-    // --- Server-side validation: room availability ---
+    // --- Validate room ---
     $roomId = $data['room_id'];
-    $room = db_find_room($roomId);
+    $room   = db_find_room($roomId);
     if (!$room) {
         respond(['success' => false, 'message' => 'Invalid room selected.']);
     }
 
-    // 1. Dirty room
-    if (isRoomDirty($roomId)) {
-        respond(['success' => false, 'message' => 'This room is currently marked as Vacant Dirty. Please mark it as clean before creating a reservation.']);
-    }
-    // 2. Maintenance
+    error_log("[process_reservation] Room ID: $roomId, status: " . $room['room_status'] . ", cleaning: " . $room['cleaning_status']);
+
+    // 1. Block maintenance rooms
     if (isRoomMaintenance($roomId)) {
         respond(['success' => false, 'message' => 'This room is under maintenance and cannot accept reservations.']);
     }
-    // 3. Occupied
-    if (isRoomOccupied($roomId)) {
-        respond(['success' => false, 'message' => 'This room is currently occupied. Please check out the guest before making a new reservation.']);
-    }
 
-    // 4. Overlapping reservations (if status is not cancelled or checked_out)
-    if ($data['status'] !== 'cancelled' && db_room_has_conflict($roomId, $data['check_in'], $data['check_out'], $reservationId)) {
+    // 2. Overlap / conflict check — only real date guard needed.
+    //    (The old hasActiveCheckedInGuest guard was removed: it incorrectly blocked
+    //    future reservations on rooms that had a current checked-in guest, even when
+    //    the dates didn't overlap. db_room_has_conflict handles this correctly.)
+    $conflict = ($data['status'] !== 'cancelled')
+        ? db_room_has_conflict($roomId, $data['check_in'], $data['check_out'], $reservationId)
+        : false;
+    error_log("[process_reservation] Conflict check: " . ($conflict ? 'YES' : 'NO'));
+    if ($conflict) {
         respond(['success' => false, 'message' => 'That room is already booked for an overlapping date range.']);
     }
 
-    // --- Validation ---
+    // --- Field validation ---
     $errors = [];
     if ($data['guest_full_name'] === '') $errors['guest_full_name'] = 'Guest name is required.';
-    $checkInDate = DateTime::createFromFormat('Y-m-d', $data['check_in']);
+    $checkInDate  = DateTime::createFromFormat('Y-m-d', $data['check_in']);
     $checkOutDate = DateTime::createFromFormat('Y-m-d', $data['check_out']);
     if (!$checkInDate || !$checkOutDate) $errors['check_in'] = 'Enter valid dates (YYYY-MM-DD).';
-    elseif ($checkOutDate <= $checkInDate) $errors['check_out'] = 'Check‑out must be after check‑in.';
+    elseif ($checkOutDate <= $checkInDate) $errors['check_out'] = 'Check-out must be after check-in.';
     if (!in_array($data['status'], ['reserved','checked_in','checked_out','cancelled'])) $errors['status'] = 'Invalid status.';
     if ($data['payment_method'] !== null && !in_array($data['payment_method'], ['cash','gcash','bank_transfer','card'])) $errors['payment_method'] = 'Invalid payment method.';
     if ($data['expected_payment_date'] && !strtotime($data['expected_payment_date'])) $errors['expected_payment_date'] = 'Invalid expected payment date.';
@@ -258,10 +298,10 @@ try {
         syncRoomStatusFromReservation($data['room_id']);
         $created = enrichWithRoomNumber(db_find_reservation($newId));
         respond([
-            'success' => true,
-            'id' => $newId,
+            'success'     => true,
+            'id'          => $newId,
             'reservation' => $created,
-            'rooms' => [roomSidebarPayload(db_find_room($data['room_id']))]
+            'rooms'       => [roomSidebarPayload(db_find_room($data['room_id']))]
         ]);
     }
 
@@ -277,16 +317,16 @@ try {
 
     $updated = enrichWithRoomNumber(db_find_reservation($reservationId));
     $affectedRoomIds = array_unique([$data['room_id'], $oldRoomId]);
-    $affectedRooms = [];
+    $affectedRooms   = [];
     foreach ($affectedRoomIds as $rid) {
         $payload = roomSidebarPayload(db_find_room($rid));
         if ($payload) $affectedRooms[] = $payload;
     }
     respond([
-        'success' => true,
-        'id' => $reservationId,
+        'success'     => true,
+        'id'          => $reservationId,
         'reservation' => $updated,
-        'rooms' => $affectedRooms
+        'rooms'       => $affectedRooms
     ]);
 
 } catch (Exception $e) {
