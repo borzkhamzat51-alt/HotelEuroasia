@@ -61,8 +61,8 @@
   font-size: .58rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: .07em;
-  color: #a9c2d8;
+  letter-spacing: .70em;
+  color: #2C2D2D;
   white-space: nowrap;
 }
 
@@ -112,9 +112,9 @@
   background: rgba(0,0,0,.25);
 }
 .rl-legend-swatch--reserved {
-  background: linear-gradient(90deg, #fbbf24, #d97706);
+  background: linear-gradient(90deg, #2D68C4, #82C8E5);
 }
-.rl-legend-swatch--reserved::before   { background: #92400e; }
+.rl-legend-swatch--reserved::before   { background: #000080; }
 .rl-legend-swatch--checked_in {
   background: linear-gradient(90deg, #34d399, #059669);
 }
@@ -163,7 +163,7 @@
 .rl-legend-showall:hover { color: #1d4ed8; text-decoration: underline; }
 
 .rl-sidebar__footer {
-  padding-left: 14px;
+  padding-left: 15px;
   font-size: .62rem;
   color: #a9c2d8;
   font-weight: 600;

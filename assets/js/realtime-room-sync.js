@@ -139,52 +139,82 @@
     return '';
   }
 
+  // ── Status label helper ──────────────────────────────────
+  function rlStatusLabel(status, isDirty) {
+    if (status === 'available' && isDirty) return 'Vacant Dirty';
+    if (status === 'available') return 'Vacant Clean';
+    if (status === 'occupied')  return 'Occupied';
+    if (status === 'reserved')  return 'Reserved';
+    if (status === 'maintenance') return 'Out of Order';
+    return status.replace(/_/g, ' ').replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+  }
+
   function updateRoomCard(room) {
     if (!room || !room.id) return;
     const card = document.querySelector('.room-card[data-room-id="' + room.id + '"]');
     if (!card) return;
 
-    const isDirty = room.cleaning_status !== 'Clean';
+    const isDirty   = room.cleaning_status !== 'Clean';
+    const statusKey = (room.room_status === 'available' && isDirty) ? 'needs_cleaning' : room.room_status;
 
+    // Update classes
     card.className = card.className
       .split(' ')
       .filter(function (c) { return c.indexOf('status-') !== 0 && c !== 'room-card--dirty'; })
       .join(' ');
     card.classList.add('status-' + room.room_status);
-    if (room.room_status === 'available' && isDirty) {
-      card.classList.add('room-card--dirty');
+    if (room.room_status === 'available' && isDirty) card.classList.add('room-card--dirty');
+
+    // Update data attributes
+    card.dataset.status      = room.room_status;
+    card.dataset.statusKey   = statusKey;
+    card.dataset.typeMain    = room.room_type;
+    card.dataset.price       = room.price_per_night;
+    card.dataset.roomNumber  = room.room_number;
+    card.dataset.cleaning    = room.cleaning_status;
+    if (room.maintenance_status !== undefined) card.dataset.maintenance   = room.maintenance_status;
+    if (room.last_occupancy     !== undefined && room.last_occupancy !== null) card.dataset.lastOccupancy = room.last_occupancy;
+
+    // Status badge
+    const badgeEl = card.querySelector('.rc-status-badge');
+    if (badgeEl) {
+      badgeEl.className   = 'rc-status-badge rc-badge--' + statusKey;
+      badgeEl.textContent = rlStatusLabel(room.room_status, isDirty);
     }
 
-    card.dataset.status = room.room_status;
-    card.dataset.typeMain = room.room_type;
-    card.dataset.price = room.price_per_night;
-    card.dataset.roomNumber = room.room_number;
-    card.dataset.cleaning = room.cleaning_status;
-    if (room.maintenance_status !== undefined) card.dataset.maintenance = room.maintenance_status;
-    if (room.last_occupancy !== undefined && room.last_occupancy !== null) card.dataset.lastOccupancy = room.last_occupancy;
+    // Room type (bottom)
+    const typeEl = card.querySelector('.rc-room-type');
+    if (typeEl) typeEl.textContent = room.room_type || '';
 
-    const titleEl = card.querySelector('.rc-title');
-    if (titleEl) titleEl.textContent = room.room_type;
-
-    const priceEl = card.querySelector('.rc-price');
-    if (priceEl) priceEl.textContent = room.price_per_night ? '₱' + Number(room.price_per_night).toLocaleString() : '--';
-
-    const footerEl = card.querySelector('.rc-footer');
-    if (footerEl) footerEl.textContent = 'RM ' + room.room_number;
-
-    const datesEl = card.querySelector('.rc-dates');
-    if (datesEl) {
-      if (room.room_status === 'available' || room.room_status === 'maintenance') {
-        datesEl.textContent = formatDateDisplay(null, null, room.room_status, isDirty);
+    // Rate
+    const rateEl = card.querySelector('.rc-rate');
+    if (rateEl) {
+      if (room.price_per_night && parseFloat(room.price_per_night) > 0) {
+        rateEl.textContent  = 'Rate: ₱' + Number(room.price_per_night).toLocaleString() + '/month';
+        rateEl.style.display = '';
+      } else {
+        rateEl.style.display = 'none';
       }
     }
 
-    if (room.room_status === 'available' || room.room_status === 'maintenance') {
-      const guestEl = card.querySelector('.rc-guest');
-      if (guestEl) guestEl.textContent = '';
-    }
+    // Room number
+    const numEl = card.querySelector('.rc-room-num');
+    if (numEl) numEl.textContent = 'ROOM ' + room.room_number;
 
-    card.setAttribute('title', 'RM' + room.room_number);
+    // Clear guest / dates when room is vacant or maintenance
+    if (room.room_status === 'available' || room.room_status === 'maintenance') {
+      const datesEl = card.querySelector('.rc-dates');
+      if (datesEl) datesEl.textContent = '';
+      const guestEl = card.querySelector('.rc-guest-name');
+      if (guestEl) {
+        guestEl.textContent = 'No Guest Assigned';
+        guestEl.className   = 'rc-guest-name rc-guest-name--empty';
+        guestEl.title       = '';
+      }
+      card.dataset.guestName = '';
+      card.dataset.checkIn   = '';
+      card.dataset.checkOut  = '';
+    }
   }
 
   function updateRoomCardReservation(resv) {
@@ -193,28 +223,44 @@
     if (!card) return;
 
     const cardStatus = card.dataset.status;
-    const isActive = (resv.status === 'reserved' || resv.status === 'checked_in')
-                  && cardStatus !== 'available';
-    const guestEl = card.querySelector('.rc-guest');
+    const isActive   = (resv.status === 'reserved' || resv.status === 'checked_in')
+                    && cardStatus !== 'available';
+
+    const guestEl  = card.querySelector('.rc-guest-name');
+    const datesEl  = card.querySelector('.rc-dates');
 
     if (isActive) {
-      if (guestEl) guestEl.textContent = resv.guest_full_name || '';
-      card.dataset.guestName = resv.guest_full_name || '';
-      card.dataset.checkIn = resv.check_in || '';
-      card.dataset.checkOut = resv.check_out || '';
+      const name = resv.guest_full_name || '';
+      if (guestEl) {
+        guestEl.textContent = name || 'No Guest Assigned';
+        guestEl.className   = name ? 'rc-guest-name' : 'rc-guest-name rc-guest-name--empty';
+        guestEl.title       = name;
+      }
+      card.dataset.guestName = name;
+      card.dataset.checkIn   = resv.check_in  || '';
+      card.dataset.checkOut  = resv.check_out || '';
       if (resv.num_adults !== undefined) card.dataset.pax = resv.num_adults;
 
-      const datesEl = card.querySelector('.rc-dates');
-      const computedDate = formatDateDisplay(resv.check_in, resv.check_out, card.dataset.status, card.dataset.cleaning !== 'Clean');
-      if (datesEl && computedDate !== null) datesEl.textContent = computedDate;
+      // Dates: "Jun 01 - Jun 05, 2026"
+      if (datesEl && resv.check_in && resv.check_out) {
+        const ci = new Date(resv.check_in  + 'T00:00:00');
+        const co = new Date(resv.check_out + 'T00:00:00');
+        const fmt = { month: 'short', day: '2-digit' };
+        const fmtY = { month: 'short', day: '2-digit', year: 'numeric' };
+        datesEl.textContent = ci.toLocaleDateString('en-US', fmt)
+                            + ' - '
+                            + co.toLocaleDateString('en-US', fmtY);
+      }
     } else {
-      if (guestEl) guestEl.textContent = '';
+      if (guestEl) {
+        guestEl.textContent = 'No Guest Assigned';
+        guestEl.className   = 'rc-guest-name rc-guest-name--empty';
+        guestEl.title       = '';
+      }
       card.dataset.guestName = '';
-      card.dataset.checkIn = '';
-      card.dataset.checkOut = '';
-      const datesEl = card.querySelector('.rc-dates');
-      const computedDate = formatDateDisplay(null, null, card.dataset.status, card.dataset.cleaning !== 'Clean');
-      if (datesEl && computedDate !== null) datesEl.textContent = computedDate;
+      card.dataset.checkIn   = '';
+      card.dataset.checkOut  = '';
+      if (datesEl) datesEl.textContent = '';
     }
   }
 
@@ -284,10 +330,12 @@
     }).join('');
   }
 
+  // roomOptions is no longer used in the form (replaced with hidden input)
   function roomOptions(selectedRoomId) {
+    // Kept only for backward compatibility if called elsewhere, but not used in the modal.
     return LAYOUT_ROOMS.map(function (r) {
       const sel = String(r.id) === String(selectedRoomId) ? 'selected' : '';
-      return '<option value="' + r.id + '" ' + sel + '>RM' + r.room_number + ' — ' + r.room_type + ' (₱' + Number(r.price_per_night).toLocaleString() + '/night)</option>';
+      return '<option value="' + r.id + '" ' + sel + '>RM' + r.room_number + ' — ' + r.room_type + ' (₱' + Number(r.price_per_night).toLocaleString() + '/month)</option>';
     }).join('');
   }
 
@@ -336,7 +384,9 @@
     html += '</div>';
 
     html += '<h3>Booking Information</h3><div class="bb-grid">';
-    html += '<div class="bb-field"><label for="room_id">Room Number</label><select id="room_id" name="room_id" required>' + roomOptions(roomId) + '</select>' + fieldError(errors, 'room_id') + '</div>';
+    // ─── Room selector removed – hidden input only ──────────────
+    html += '<input type="hidden" name="room_id" value="' + roomId + '">';
+    // Status dropdown (no room selection)
     html += '<div class="bb-field"><label for="status">Booking Status</label><select id="status" name="status">' + optionList(STATUS_LABELS, resv.status || 'reserved') + '</select></div>';
     html += field('Check-in Date', 'check_in', resv.check_in, 'date', errors, true);
     html += field('Check-out Date', 'check_out', resv.check_out, 'date', errors, true);
@@ -433,19 +483,12 @@
     document.getElementById('bbResvCancelBtn').addEventListener('click', closeFormModal);
     modal.addEventListener('click', function (e) { if (e.target === modal) closeFormModal(); });
 
-    const roomSel = form.querySelector('[name="room_id"]');
-    if (roomSel) {
-      roomSel.addEventListener('change', function () {
-        if (isDirtyLayoutRoom(this.value)) {
-          alert('This room is Vacant Dirty. Please mark it as clean before creating a reservation.');
-          this.value = '';
-        }
-      });
-    }
+    // ─── Removed the room selector change handler because the dropdown no longer exists ──
 
     form.addEventListener('submit', function (e) {
       e.preventDefault();
-      if (!isEdit && roomSel && isDirtyLayoutRoom(roomSel.value)) {
+      // Dirty check still applies to the hidden room ID
+      if (!isEdit && isDirtyLayoutRoom(roomId)) {
         alert('This room is Vacant Dirty. Please mark it as clean before creating a reservation.');
         return;
       }
@@ -723,7 +766,7 @@
       '<div class="row"><span class="label">Contact</span><span class="value">' + (r.contact_number || 'N/A') + '</span></div>' +
       '<div class="row"><span class="label">Email</span><span class="value">' + (r.email || 'N/A') + '</span></div>' +
       '<div class="row"><span class="label">Valid ID</span><span class="value">' + (r.valid_id_type || 'N/A') + ' #' + (r.valid_id_number || 'N/A') + '</span></div>' +
-      '<div class="row"><span class="label">Rate/Night</span><span class="value">₱' + parseFloat(r.room_rate || 0).toFixed(2) + '</span></div>' +
+      '<div class="row"><span class="label">Rate/Month</span><span class="value">₱' + parseFloat(r.room_rate || 0).toFixed(2) + '</span></div>' +
       '<div class="row"><span class="label">Total Amount</span><span class="value">₱' + parseFloat(r.total_amount || 0).toFixed(2) + '</span></div>' +
       '<div class="row"><span class="label">Amount Paid</span><span class="value">₱' + parseFloat(r.amount_paid || 0).toFixed(2) + '</span></div>' +
       '<div class="row"><span class="label">Payment Method</span><span class="value">' + (r.payment_method || 'N/A') + '</span></div>' +
@@ -753,7 +796,7 @@
       '<div class="row"><span class="label">Check-in</span><span class="value">' + r.check_in + '</span></div>' +
       '<div class="row"><span class="label">Check-out</span><span class="value">' + r.check_out + '</span></div>' +
       '<div class="row"><span class="label">Nights</span><span class="value">' + nights + '</span></div>' +
-      '<div class="row"><span class="label">Rate/Night</span><span class="value">₱' + parseFloat(r.room_rate || 0).toFixed(2) + '</span></div>' +
+      '<div class="row"><span class="label">Rate/Month</span><span class="value">₱' + parseFloat(r.room_rate || 0).toFixed(2) + '</span></div>' +
       '<div class="row total"><span class="label">Total Amount</span><span class="value">₱' + parseFloat(r.total_amount || 0).toFixed(2) + '</span></div>' +
       '<div class="row"><span class="label">Amount Paid</span><span class="value">₱' + parseFloat(r.amount_paid || 0).toFixed(2) + '</span></div>' +
       '<div class="row"><span class="label">Balance Due</span><span class="value" style="' + (balance > 0 ? 'color:#b3433f;' : '') + '">₱' + balance.toFixed(2) + '</span></div>' +
@@ -774,7 +817,7 @@
       .map(function (room) {
         const dirty = isDirtyLayoutRoom(room.id);
         const label = 'RM' + room.room_number + ' — ' + room.room_type +
-          ' (₱' + Number(room.price_per_night).toLocaleString() + '/night)' +
+          ' (₱' + Number(room.price_per_night).toLocaleString() + '/Month)' +
           (dirty ? ' — Vacant Dirty' : '');
         return '<option value="' + room.id + '"' + (dirty ? ' disabled' : '') + '>' + label + '</option>';
       }).join('');
@@ -1174,3 +1217,49 @@
 })();
 
 })();
+
+
+  // ── AJAX polling — syncs Layout with Calendar, Reports & Reservations ──
+  (function wirePoll() {
+    var branch  = (window.BB_LAYOUT_ROOMS && window.BB_LAYOUT_ROOMS[0])
+                  ? null : null; // resolved from URL
+    var branchFromUrl = (function() {
+      var m = window.location.search.match(/[?&]branch=([^&]+)/);
+      return m ? decodeURIComponent(m[1]) : 'mtv';
+    })();
+
+    var lastHash = '';
+
+    function pollNow() {
+      fetch('/admin/process_layout_poll.php?branch=' + encodeURIComponent(branchFromUrl))
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (!data.success) return;
+
+          // Simple change detection via JSON hash
+          var hash = JSON.stringify(data.rooms) + JSON.stringify(data.reservations);
+          if (hash === lastHash) return;
+          lastHash = hash;
+
+          // Update room statuses
+          if (Array.isArray(data.rooms)) {
+            data.rooms.forEach(function(room) { updateRoomCard(room); });
+          }
+
+          // Update reservation data on cards
+          if (Array.isArray(data.reservations)) {
+            data.reservations.forEach(function(resv) { updateRoomCardReservation(resv); });
+          }
+
+          // Update sidebar count
+          var countEl = document.getElementById('rlCount');
+          if (countEl && data.rooms) countEl.textContent = data.rooms.length + ' rooms';
+        })
+        .catch(function() { /* silent on network error */ });
+    }
+
+    // Poll every 30 seconds
+    setInterval(pollNow, 30000);
+    // Also poll after 3 s on page load to catch changes made elsewhere
+    setTimeout(pollNow, 3000);
+  }());

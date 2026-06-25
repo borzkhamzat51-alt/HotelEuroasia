@@ -42,12 +42,24 @@ $filters = array_filter([
     'offset'      => $offset,
 ], fn($v) => $v !== null);
 
-$logs      = db_list_audit_log($filters);
-$totalRows = db_count_audit_log(array_diff_key($filters, ['limit' => 1, 'offset' => 1]));
-$totalPages= max(1, (int) ceil($totalRows / $perPage));
+$logs       = [];
+$totalRows  = 0;
+$totalPages = 1;
+$auditUsers = [];
+$tableError = null;
 
-// Users who have ever been logged — for the filter dropdown
-$auditUsers = db_list_audit_users();
+try {
+    $logs      = db_list_audit_log($filters);
+    $totalRows = db_count_audit_log(array_diff_key($filters, ['limit' => 1, 'offset' => 1]));
+    $totalPages= max(1, (int) ceil($totalRows / $perPage));
+    $auditUsers = db_list_audit_users();
+} catch (PDOException $e) {
+    if (str_contains($e->getMessage(), "doesn't exist") || str_contains($e->getMessage(), "Table") || $e->getCode() === '42S02') {
+        $tableError = 'The <code>audit_log</code> table does not exist yet. Please run <strong>audit_log_migration.sql</strong> in phpMyAdmin to create it.';
+    } else {
+        $tableError = 'Database error: ' . htmlspecialchars($e->getMessage());
+    }
+}
 
 // ── Action label map ──────────────────────────────────────────────────────────
 $actionLabels = [
@@ -473,7 +485,18 @@ function qs($overrides = []) {
 
     <!-- Table card -->
     <div class="audit-card">
-        <?php if (empty($logs)): ?>
+        <?php if ($tableError): ?>
+            <div style="padding:32px 28px; background:#fef2f2; border:1px solid #fecaca; border-radius:12px; margin:0;">
+                <h3 style="margin:0 0 8px; color:#991b1b; font-size:1rem;">⚠️ Audit Log Not Set Up</h3>
+                <p style="margin:0 0 16px; color:#7f1d1d; font-size:.9rem;"><?= $tableError ?></p>
+                <ol style="color:#991b1b; font-size:.85rem; margin:0; padding-left:20px; line-height:1.8;">
+                    <li>Open <strong>phpMyAdmin</strong> → select your <code>bluebookers</code> database</li>
+                    <li>Click the <strong>SQL</strong> tab</li>
+                    <li>Paste the contents of <code>audit_log_migration.sql</code> and click <strong>Go</strong></li>
+                    <li>Reload this page</li>
+                </ol>
+            </div>
+        <?php elseif (empty($logs)): ?>
             <div class="audit-empty">
                 <div class="audit-empty__icon">📋</div>
                 <p class="audit-empty__text">No audit entries match your filters.</p>

@@ -138,7 +138,6 @@ $paymentLabels = ['cash' => 'Cash', 'gcash' => 'GCash', 'bank_transfer' => 'Bank
 $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
 
 // ─── Legend data ────────────────────────────────────────────────────
-// This will be used by JavaScript to build the interactive legend.
 $legendItems = [
     ['key' => 'reserved', 'label' => 'Reserved', 'color' => '#fbbf24', 'type' => 'reservation'],
     ['key' => 'checked_in', 'label' => 'Checked-In', 'color' => '#34d399', 'type' => 'reservation'],
@@ -149,10 +148,6 @@ $legendItems = [
     ['key' => 'occupied', 'label' => 'Occupied', 'color' => '#f97316', 'type' => 'room'],
     ['key' => 'maintenance', 'label' => 'Out of Order', 'color' => '#ef4444', 'type' => 'room'],
     ['key' => 'overdue', 'label' => 'Overdue Payment', 'color' => '#dc2626', 'type' => 'reservation'],
-    // Placeholder for future extensions
-    ['key' => 'vip', 'label' => 'VIP Guest', 'color' => '#fbbf24', 'type' => 'reservation', 'disabled' => true],
-    ['key' => 'house_use', 'label' => 'House Use', 'color' => '#8b5cf6', 'type' => 'reservation', 'disabled' => true],
-    ['key' => 'complimentary', 'label' => 'Complimentary', 'color' => '#06b6d4', 'type' => 'reservation', 'disabled' => true],
 ];
 ?>
 <!DOCTYPE html>
@@ -172,6 +167,13 @@ $legendItems = [
   min-height: calc(100vh - 120px);
 }
 </style>
+<script>
+/* Apply the calendar zoom factor BEFORE first paint so the grid is laid out at
+   its final scale immediately. This removes the post-load scale jump that used
+   to leave every measured overlay (today line, day boundaries, top scrollbar)
+   drifted until the user zoomed, resized or refreshed. */
+document.documentElement.style.setProperty('--scale', '1.3');
+</script>
 </head>
 <body class="dashboard-body">
 <header class="topbar">
@@ -270,7 +272,7 @@ $legendItems = [
                         <p class="cal-legend-group__label">Reservation Status</p>
                         <?php foreach ($legendItems as $item): ?>
                             <?php if ($item['type'] === 'reservation'): ?>
-                                <div class="cal-legend-item <?= isset($item['disabled']) && $item['disabled'] ? 'disabled' : '' ?>" data-filter-key="<?= $item['key'] ?>" data-filter-type="reservation">
+                                <div class="cal-legend-item" data-filter-key="<?= $item['key'] ?>" data-filter-type="reservation">
                                     <span class="cal-legend-swatch cal-legend-swatch--<?= $item['key'] ?>" style="background:<?= $item['color'] ?>;"></span>
                                     <span><?= $item['label'] ?></span>
                                 </div>
@@ -306,7 +308,7 @@ $legendItems = [
             </aside>
 
             <!-- ── Calendar grid ──────────────────────────────────── -->
-            <div class="cal-grid-area">
+            <div class="cal-grid-area cal-grid-area--initializing">
                 <div class="cal-top-scroll" id="calTopScroll"><div class="cal-top-scroll__spacer" id="calTopScrollSpacer"></div></div>
                 <div class="cal-grid-wrap">
                     <div class="cal-grid" style="--days: <?= $daysInMonth ?>;">
@@ -374,7 +376,6 @@ $legendItems = [
                                     <?php endforeach; ?>
                                     <?php foreach (($reservationsByRoom[$room['id']] ?? []) as $r): ?>
                                         <?php
-                                        // Determine if overdue
                                         $balance = (float)$r['total_amount'] - (float)$r['amount_paid'];
                                         $isOverdue = ($balance > 0 && strtotime($r['check_out']) < strtotime($todayStr) && $r['status'] !== 'cancelled');
                                         $barClass = $isOverdue ? 'cal-bar--overdue' : 'cal-bar--' . $r['status'];
@@ -402,5 +403,13 @@ $legendItems = [
 <script>window.BB_CALENDAR = { branch: <?= json_encode($branch) ?>, branchLabel: <?= json_encode($branchName) ?>, rooms: <?= json_encode($rooms) ?>, statusLabels: <?= json_encode($statusLabels) ?>, paymentLabels: <?= json_encode($paymentLabels) ?>, canDelete: <?= bb_is_admin() ? 'true' : 'false' ?>, csrfToken: <?= json_encode($_SESSION['csrf_token'] ?? '') ?>, legendItems: <?= json_encode($legendItems) ?> };</script>
 <script src="../assets/js/dashboard.js" defer></script>
 <script src="../assets/js/calendar.js" defer></script>
+<script>
+/* Failsafe: never leave the calendar hidden, even if calendar.js fails to load
+   or throws before its own reveal step runs. */
+setTimeout(function () {
+  var g = document.querySelector('.cal-grid-area');
+  if (g) g.classList.remove('cal-grid-area--initializing');
+}, 2500);
+</script>
 </body>
 </html>

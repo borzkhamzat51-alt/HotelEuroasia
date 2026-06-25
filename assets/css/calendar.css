@@ -805,3 +805,57 @@
     50% { box-shadow: 0 0 0 6px rgba(220,38,38,0); }
     100% { box-shadow: 0 0 0 0 rgba(220,38,38,0); }
 }
+
+/* ─── First-paint reveal ──────────────────────────────────────────────
+   The grid area is held invisible (but fully laid out, so it can still be
+   measured) until calendar.js has run its initial alignment pass, then it
+   fades in already-aligned. This is what makes the calendar render correctly
+   on first load with no zoom / resize / refresh required. */
+.cal-grid-area {
+    transition: opacity 220ms ease;
+}
+.cal-grid-area--initializing {
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* ─── Quick Stay Duration ─────────────────────────────────────────── */
+.bb-quick-duration {
+    margin-top: 12px;
+}
+.bb-quick-duration label {
+    display: block;
+    font-size: 0.76rem;
+    font-weight: 600;
+    color: var(--blue-900);
+    margin-bottom: 6px;
+}
+.bb-duration-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.bb-duration-buttons button {
+    padding: 6px 14px;
+    border: 1.5px solid var(--sky-200);
+    border-radius: 999px;
+    background: var(--white);
+    color: var(--ink-700);
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 150ms ease;
+}
+.bb-duration-buttons button:hover {
+    background: var(--sky-50);
+    border-color: var(--blue-500);
+    transform: translateY(-1px);
+}
+.bb-duration-buttons button:active {
+    transform: scale(0.95);
+}
+.bb-duration-buttons button.is-active {
+    background: var(--blue-500);
+    color: var(--white);
+    border-color: var(--blue-700);
+}

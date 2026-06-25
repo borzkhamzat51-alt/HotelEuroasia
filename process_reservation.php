@@ -3,6 +3,7 @@
  * process_reservation.php
  * Handles reservation CRUD via AJAX. Always returns JSON.
  * Now merges existing reservation data on updates so drag operations never fail validation.
+ * Added strict validation: reject reservations on dirty, occupied, maintenance, or overlapping rooms.
  */
 
 ini_set('display_errors', 0);
@@ -37,10 +38,59 @@ function syncRoomStatusFromReservation($roomId, $previousStatus = null, $newStat
     }
 }
 
+// --- Helper: check if room is dirty (available + not clean) ---
+function isRoomDirty($roomId) {
+    $room = db_find_room($roomId);
+    if (!$room) return false;
+    return ($room['room_status'] === 'available' && $room['cleaning_status'] !== 'Clean');
+}
+
+// --- Helper: check if room is occupied (status = occupied) ---
+function isRoomOccupied($roomId) {
+    $room = db_find_room($roomId);
+    if (!$room) return false;
+    return ($room['room_status'] === 'occupied');
+}
+
+// --- Helper: check if room is maintenance ---
+function isRoomMaintenance($roomId) {
+    $room = db_find_room($roomId);
+    if (!$room) return false;
+    return ($room['room_status'] === 'maintenance');
+}
+
 // --- Permission ---
 if (!bb_has_permission('reservations')) {
     http_response_code(403);
     respond(['success' => false, 'message' => 'Reservations permission required.']);
+}
+
+// --- GET: fetch full reservation data with payment months for the Payment Modal / Folio ---
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['action'] ?? '') === 'get_reservation_for_payment') {
+    $id = (int) ($_GET['id'] ?? 0);
+    if (!$id) {
+        respond(['success' => false, 'message' => 'Reservation ID required.']);
+    }
+    $res = db_find_reservation($id);
+    if (!$res) {
+        respond(['success' => false, 'message' => 'Reservation not found.']);
+    }
+    $room = db_find_room($res['room_id']);
+    if ($room) {
+        $res['room_number'] = $room['room_number'];
+        $res['room_type']   = $room['room_type'];
+        $res['branch']      = $room['branch'];
+    }
+    $months = db_get_payment_months($id);
+    $outstanding = db_get_outstanding_balance($id);
+    $paymentStatus = db_get_payment_status($id);
+    respond([
+        'success' => true,
+        'reservation' => $res,
+        'months' => $months,
+        'outstanding_balance' => $outstanding,
+        'payment_status' => $paymentStatus,
+    ]);
 }
 
 // --- GET: fetch a room's active reservation (full row + room_number) ---
@@ -162,10 +212,34 @@ try {
         }
     }
 
+    // --- Server-side validation: room availability ---
+    $roomId = $data['room_id'];
+    $room = db_find_room($roomId);
+    if (!$room) {
+        respond(['success' => false, 'message' => 'Invalid room selected.']);
+    }
+
+    // 1. Dirty room
+    if (isRoomDirty($roomId)) {
+        respond(['success' => false, 'message' => 'This room is currently marked as Vacant Dirty. Please mark it as clean before creating a reservation.']);
+    }
+    // 2. Maintenance
+    if (isRoomMaintenance($roomId)) {
+        respond(['success' => false, 'message' => 'This room is under maintenance and cannot accept reservations.']);
+    }
+    // 3. Occupied
+    if (isRoomOccupied($roomId)) {
+        respond(['success' => false, 'message' => 'This room is currently occupied. Please check out the guest before making a new reservation.']);
+    }
+
+    // 4. Overlapping reservations (if status is not cancelled or checked_out)
+    if ($data['status'] !== 'cancelled' && db_room_has_conflict($roomId, $data['check_in'], $data['check_out'], $reservationId)) {
+        respond(['success' => false, 'message' => 'That room is already booked for an overlapping date range.']);
+    }
+
     // --- Validation ---
     $errors = [];
     if ($data['guest_full_name'] === '') $errors['guest_full_name'] = 'Guest name is required.';
-    if (!db_find_room($data['room_id'])) $errors['room_id'] = 'Select a valid room.';
     $checkInDate = DateTime::createFromFormat('Y-m-d', $data['check_in']);
     $checkOutDate = DateTime::createFromFormat('Y-m-d', $data['check_out']);
     if (!$checkInDate || !$checkOutDate) $errors['check_in'] = 'Enter valid dates (YYYY-MM-DD).';
@@ -174,9 +248,6 @@ try {
     if ($data['payment_method'] !== null && !in_array($data['payment_method'], ['cash','gcash','bank_transfer','card'])) $errors['payment_method'] = 'Invalid payment method.';
     if ($data['expected_payment_date'] && !strtotime($data['expected_payment_date'])) $errors['expected_payment_date'] = 'Invalid expected payment date.';
 
-    if ($data['status'] !== 'cancelled' && db_room_has_conflict($data['room_id'], $data['check_in'], $data['check_out'], $reservationId)) {
-        respond(['success' => false, 'message' => 'That room is already booked for an overlapping date range.']);
-    }
     if (!empty($errors)) respond(['success' => false, 'message' => 'Please fix the highlighted fields.', 'errors' => $errors]);
 
     // --- Create ---

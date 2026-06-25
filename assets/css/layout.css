@@ -1,5 +1,6 @@
 /* ==========================================================================
    Bluebookers — Corporate Hotel Management Floor Plan
+   Larger Room Cards for Better Readability
    ========================================================================== */
 
 /* ─── CSS Variables (Corporate Palette) ───────────────────────────── */
@@ -11,17 +12,17 @@
   --corp-shadow-hover: 0 12px 40px -8px rgba(0, 0, 0, 0.12);
   
   /* ── Status Colors — fixed standard ─────────────────────────── */
-  --status-available:           #10b981;  /* Vacant Clean  → Green      */
+  --status-available:           #10b981;
   --status-available-bg:        #d1fae5;
-  --status-reserved:            #2563eb;  /* Reserved      → Blue       */
+  --status-reserved:            #2563eb;
   --status-reserved-bg:         #dbeafe;
-  --status-occupied:            #6b7280;  /* Occupied      → Gray       */
+  --status-occupied:            #6b7280;
   --status-occupied-bg:         #f3f4f6;
-  --status-needs-cleaning:      #f97316;  /* Vacant Dirty  → Orange     */
+  --status-needs-cleaning:      #f97316;
   --status-needs-cleaning-bg:   #ffedd5;
-  --status-maintenance:         #ef4444;  /* Out of Order  → Red        */
+  --status-maintenance:         #ef4444;
   --status-maintenance-bg:      #fee2e2;
-  --status-maintenance-dark:    #374151;  /* Maintenance   → Dark Gray  */
+  --status-maintenance-dark:    #374151;
   --status-maintenance-dark-bg: #e5e7eb;
   --status-blocked:             #6b7280;
   --status-blocked-bg:          #f3f4f6;
@@ -41,11 +42,11 @@
   display: flex;
   align-items: stretch;
   justify-content: center;
-  gap: clamp(20px, 3vw, 40px);
+  gap: clamp(24px, 3.5vw, 48px);
   width: 100%;
-  max-width: 1400px;
+  max-width: 1600px;
   margin: 40px auto;
-  padding: 24px;
+  padding: 28px 24px;
   background: var(--corp-bg);
   border-radius: 12px;
   box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.02);
@@ -70,7 +71,7 @@
   gap: 20px;
   color: var(--text-muted);
   align-items: center;
-  min-width: 30px;
+  min-width: 36px;
 }
 
 .ef-zone--hallway .ef-vertical-text {
@@ -85,7 +86,7 @@
   width: 1px;
   background: linear-gradient(to bottom, transparent, var(--border-light), transparent);
   height: 100%;
-  min-height: 350px;
+  min-height: 380px;
 }
 
 .ef-vertical-text {
@@ -100,8 +101,8 @@
 }
 
 .ef-arrow {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   display: block;
   opacity: 0.3;
   color: var(--text-muted);
@@ -112,86 +113,194 @@
 .ef-room-col {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
   justify-content: center;
 }
 
 /* ==========================================================================
-   ROOM CARDS – Top-down floor plan style with status backgrounds
+   ROOM CARDS — Larger Size for Better Readability
    ========================================================================== */
+
+/* ── Card shell ──────────────────────────────────────────── */
 .room-card {
   position: relative;
-  background: var(--corp-card-bg);  /* fallback */
-  border-radius: 8px;
+  background: #ffffff;
+  border-radius: 12px;
   width: 260px;
-  min-height: 200px;
-  height: auto;
+  min-width: 240px;
   display: flex;
   flex-direction: column;
   cursor: pointer;
-  box-shadow: var(--corp-shadow);
-  transition: all 320ms cubic-bezier(.16, 1, .3, 1);
-  overflow: visible;
-  border: 1.5px solid var(--corp-border);
-  
-  /* ─── Status strip (left) ─── */
-  border-left: 6px solid var(--text-muted);
-  
+  border: 1px solid #e2edf6;
+  border-top: 5px solid #94a3b8;   /* status stripe at TOP = head wall */
+  /* outer drop + inset “wall lining” so the card reads as a room seen from above */
+  box-shadow: 0 2px 10px rgba(22,50,79,.07),
+              0 1px 3px rgba(22,50,79,.04),
+              inset 0 0 0 1.5px rgba(22,50,79,.045);
+  transition: transform 200ms cubic-bezier(.16,1,.3,1),
+              box-shadow 200ms,
+              border-top-color 200ms,
+              background 200ms ease,
+              border-color 200ms ease;
+  overflow: hidden;
   opacity: 0;
-  transform: translateY(16px);
-  animation: popIn 500ms ease forwards;
+  animation: popIn 440ms cubic-bezier(.16,1,.3,1) forwards;
+}
+.room-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 30px rgba(22,50,79,.13),
+              0 2px 8px rgba(22,50,79,.05),
+              inset 0 0 0 1.5px rgba(22,50,79,.06);
 }
 
-/* ─── Status Backgrounds & Border Colors ──────────────────────────── */
+/* ─ Door indicator — a doorway opening in the bottom wall ─ */
+.room-card::after {
+  content: '';
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 30px;
+  height: 6px;
+  border-radius: 4px;
+  background: #374151;
+  box-shadow: 0 1px 2px rgba(0,0,0,.18),
+              0 0 0 3px rgba(255,255,255,.55);
+  opacity: .78;
+  z-index: 2;
+  pointer-events: none;
+}
 
-/* Vacant Clean — Green */
+/* ── Status top-stripe colors ────────────────────────────── */
+.room-card.status-available                  { border-top-color: #10b981; }
+.room-card.status-available.room-card--dirty { border-top-color: #f97316; }
+.room-card.status-reserved                   { border-top-color: #2563eb; }
+.room-card.status-occupied                   { border-top-color: #6b7280; }
+.room-card.status-maintenance                { border-top-color: #ef4444; }
+
+/* ── Soft background tints ───────────────────────────────── */
 .room-card.status-available {
-  background-color: var(--status-available-bg);
-  border-left-color: var(--status-available);
+  background: #f0fdf4;
+  border-color: #86efac;
 }
-.room-card.status-available .status-badge         { color: var(--status-available); }
-.room-card.status-available .room-card__status-indicator { background: var(--status-available); }
-.room-card.status-available .rc-title             { color: #065f46; }
-
-/* Vacant Dirty — Orange */
 .room-card.status-available.room-card--dirty {
-  background-color: var(--status-needs-cleaning-bg);
-  border-left-color: var(--status-needs-cleaning);
+  background: #fff7ed;
+  border-color: #fdba74;
 }
-.room-card.status-available.room-card--dirty .status-badge         { color: var(--status-needs-cleaning); }
-.room-card.status-available.room-card--dirty .room-card__status-indicator { background: var(--status-needs-cleaning); }
-.room-card.status-available.room-card--dirty .rc-title             { color: #9a3412; }
-
-/* Reserved — Blue #2563EB */
 .room-card.status-reserved {
-  background-color: var(--status-reserved-bg);
-  border-left-color: var(--status-reserved);
+  background: #eff6ff;
+  border-color: #93c5fd;
 }
-.room-card.status-reserved .status-badge         { color: var(--status-reserved); }
-.room-card.status-reserved .room-card__status-indicator { background: var(--status-reserved); }
-.room-card.status-reserved .rc-title             { color: #1e40af; }
-
-/* Occupied — Gray */
 .room-card.status-occupied {
-  background-color: var(--status-occupied-bg);
-  border-left-color: var(--status-occupied);
+  background: #f3f4f6;
+  border-color: #d1d5db;
 }
-.room-card.status-occupied .status-badge         { color: var(--status-occupied); }
-.room-card.status-occupied .room-card__status-indicator { background: var(--status-occupied); }
-.room-card.status-occupied .rc-title             { color: #374151; }
-
-/* Out of Order — Red */
 .room-card.status-maintenance {
-  background-color: var(--status-maintenance-bg);
-  border-left-color: var(--status-maintenance);
-  opacity: 0.90;
+  background: #fef2f2;
+  border-color: #fca5a5;
 }
-.room-card.status-maintenance .status-badge         { color: var(--status-maintenance); }
-.room-card.status-maintenance .room-card__status-indicator { background: var(--status-maintenance); }
-.room-card.status-maintenance .rc-title             { color: #991b1b; }
 
+/* ── Card body: centered column ──────────────────────────── */
+.rc-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 22px 20px 26px;
+  text-align: center;
+  flex: 1;
+}
 
-/* ─── Staggered load ───────────────────────────────────────────────── */
+/* 1. Guest name ─────────────────────────────────────────── */
+.rc-guest-name {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #16324f;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  line-height: 1.3;
+  margin: 0 0 8px;
+  letter-spacing: -.01em;
+}
+.rc-guest-name--empty {
+  font-weight: 400;
+  font-style: italic;
+  color: #b0c4d8;
+  font-size: 0.9rem;
+  letter-spacing: 0;
+}
+
+/* 2. Room number ─────────────────────────────────────────── */
+.rc-room-num {
+  font-family: 'Inter', sans-serif;
+  font-size: 2rem;
+  font-weight: 800;
+  color: #0f2744;
+  letter-spacing: .5px;
+  line-height: 1;
+  margin-bottom: 12px;
+}
+
+/* 4. Divider before date/rate section ───────────────────── */
+.rc-body .rc-dates:not(:empty),
+.rc-body .rc-duration,
+.rc-body .rc-rate {
+  position: relative;
+}
+.rc-body .rc-dates:not(:empty)::before {
+  content: '';
+  display: block;
+  width: 50px;
+  height: 1px;
+  background: #e2edf6;
+  margin: 0 auto 12px;
+}
+
+/* 4. Reservation dates ──────────────────────────────────── */
+.rc-dates {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #5b7693;
+  letter-spacing: .01em;
+  margin-bottom: 6px;
+  min-height: 0;
+}
+
+/* 5. Duration Display ───────────────────────────────────── */
+.rc-duration {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #3b7dd8;
+  margin-bottom: 6px;
+}
+
+/* 6. Rate ───────────────────────────────────────────────── */
+.rc-rate {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #16324f;
+  margin-bottom: 10px;
+}
+
+/* 7. Room type — bottom, muted ──────────────────────────── */
+.rc-room-type {
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: #8dafc8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  padding-top: 12px;
+  border-top: 1px solid #edf4fa;
+  width: 100%;
+  letter-spacing: .01em;
+}
+
+/* ── Staggered entrance ──────────────────────────────────── */
 .ef-room-col:nth-child(2) .room-card:nth-child(1) { animation-delay: 60ms; }
 .ef-room-col:nth-child(2) .room-card:nth-child(2) { animation-delay: 120ms; }
 .ef-room-col:nth-child(4) .room-card:nth-child(1) { animation-delay: 180ms; }
@@ -199,15 +308,31 @@
 .ef-room-col:nth-child(6) .room-card:nth-child(1) { animation-delay: 300ms; }
 .ef-room-col:nth-child(6) .room-card:nth-child(2) { animation-delay: 360ms; }
 
+/* ── Hide old elements ───────────────────────────────────── */
+.rc-content, .rc-title, .rc-subtitle, .rc-price,
+.rc-guest, .rc-footer, .rc-badge,
+.rc-guest-row, .rc-core, .rc-info,
+.room-card__admin-controls { display: none !important; }
+
+/* ── Update flash ────────────────────────────────────────── */
+@keyframes statusUpdatePulse {
+  0%   { box-shadow: 0 0 0 0    rgba(37,99,235,.35); }
+  60%  { box-shadow: 0 0 0 12px rgba(37,99,235,0);   }
+  100% { box-shadow: 0 0 0 0    rgba(37,99,235,0);   }
+}
+.room-card.is-updating { animation: statusUpdatePulse 600ms ease forwards; }
+
 @keyframes popIn {
   to { opacity: 1; transform: translateY(0); }
 }
 
 /* ─── Hover ────────────────────────────────────────────────────────── */
 .room-card:hover {
-  transform: translateY(-4px) scale(1.01);
-  box-shadow: var(--corp-shadow-hover);
-  border-color: #d1d5db;
+  transform: translateY(-3px);
+  box-shadow: 0 12px 30px rgba(22,50,79,.13),
+              0 2px 8px rgba(22,50,79,.05),
+              inset 0 0 0 1.5px rgba(22,50,79,.06);
+  border-color: #cdd9e6;
   z-index: 5;
 }
 
@@ -270,96 +395,70 @@
   z-index: 1;
 }
 
-.rc-title {
-  font-family: 'Inter', sans-serif;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin: 0 0 2px;
-  transition: color 300ms;
-  letter-spacing: -0.01em;
-}
-.room-card:hover .rc-title { color: #2563eb; }
-
-.rc-subtitle {
-  font-family: 'Inter', sans-serif;
-  font-size: 0.6rem;
-  font-weight: 500;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  margin-bottom: 6px;
-}
-
-.rc-dates {
-  font-family: 'Inter', sans-serif;
-  font-size: 0.7rem;
-  font-weight: 500;
-  color: var(--text-secondary);
-  margin-bottom: 4px;
-}
-
-.rc-price {
-  font-family: 'Inter', sans-serif;
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.rc-guest {
-  font-weight: 600;
-  font-size: 0.8rem;
-  color: #1e40af;
-  margin-top: 6px;
-  background: rgba(255,255,255,0.6);
-  padding: 2px 14px;
-  border-radius: 4px;
-  border: 1px solid rgba(255,255,255,0.8);
-}
-
-/* ─── Card footer ──────────────────────────────────────────────────── */
-.rc-footer {
-  background: rgba(0, 0, 0, 0.03);
-  border-top: 1px solid rgba(0,0,0,0.06);
-  padding: 8px 16px;
-  text-align: center;
-  font-family: 'Inter', sans-serif;
-  font-weight: 600;
-  font-size: 0.6rem;
-  color: var(--text-muted);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  transition: all 300ms ease;
-  border-radius: 0 0 8px 8px;
-}
-.room-card:hover .rc-footer {
-  background: rgba(0, 0, 0, 0.06);
-  color: var(--text-secondary);
-}
-
-/* ─── Hide old elements ────────────────────────────────────────────── */
-.rc-badge { display: none !important; }
-.room-card__admin-controls { display: none !important; }
-
-/* ─── Pulse animation for updates ────────────────────────────────── */
+/* ── Pulse on update ─────────────────────────────────────── */
 @keyframes statusUpdatePulse {
-  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.2); }
-  50% { transform: scale(1.02); box-shadow: 0 0 0 20px rgba(59, 130, 246, 0); }
-  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+  0%   { box-shadow: 0 0 0 0   rgba(37,99,235,.3); }
+  50%  { box-shadow: 0 0 0 14px rgba(37,99,235,0); }
+  100% { box-shadow: 0 0 0 0   rgba(37,99,235,0); }
 }
-.room-card.is-updating {
-  animation: statusUpdatePulse 600ms ease forwards;
-}
+.room-card.is-updating { animation: statusUpdatePulse 600ms ease forwards; }
+
 
 /* ─── Responsive ───────────────────────────────────────────────────── */
+@media (max-width: 1200px) {
+  .elegant-floor-container {
+    gap: 20px;
+    padding: 20px 16px;
+  }
+  .ef-room-col {
+    gap: 16px;
+  }
+}
+
 @media (max-width: 1100px) {
   .elegant-floor-container { flex-wrap: wrap; padding: 16px; }
   .ef-zone--parking, .ef-zone--rightside { display: none; }
+  .room-card {
+    width: 100%;
+    max-width: 300px;
+    min-width: 0;
+  }
 }
+
 @media (max-width: 768px) {
   .ef-zone--hallway { display: none; }
-  .ef-room-col { width: 100%; align-items: center; }
-  .room-card { width: 100%; max-width: 320px; min-height: 180px; }
+  .ef-room-col {
+    width: 100%;
+    align-items: center;
+    gap: 16px;
+  }
+  .room-card {
+    width: 100%;
+    max-width: 340px;
+    min-height: 200px;
+  }
+  .rc-room-num {
+    font-size: 1.7rem;
+  }
+  .rc-guest-name {
+    font-size: 0.95rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .room-card {
+    max-width: 100%;
+    border-radius: 12px;
+  }
+  .rc-body {
+    padding: 16px 14px;
+  }
+  .rc-room-num {
+    font-size: 1.5rem;
+  }
+  .rc-guest-name {
+    font-size: 0.9rem;
+  }
 }
 
 /* ==========================================================================
@@ -772,6 +871,7 @@
 .pms-status-btn.status-reserved.active { background: var(--status-reserved); color: #ffffff; }
 .pms-status-btn.status-maintenance { border-color: var(--status-maintenance); color: var(--status-maintenance); }
 .pms-status-btn.status-maintenance.active { background: var(--status-maintenance); color: #ffffff; }
+
 /* ==========================================================================
    SIDE LEGEND SIDEBAR — two-column layout wrapper
    ========================================================================== */
@@ -988,3 +1088,107 @@
 }
 .room-card.status-available .rc-guest { display: none; }
 .rc-guest:empty { display: none; }
+
+/* ==========================================================================
+   BABYLON.JS FLOOR-PLAN VISUAL LAYER  (.is-3d)
+   Purely presentational. Added by layout-3d.js only when WebGL is available;
+   if it isn't, none of this applies and the normal cards show as a fallback.
+   The .room-card nodes keep ALL their handlers/data — here they simply become
+   transparent text overlays sitting on top of their rendered 3D room.
+   ========================================================================== */
+.elegant-floor-container.is-3d {
+  position: relative;
+  background:
+    radial-gradient(circle at 50% 0%, #fbfdff 0%, #eef3f8 60%, #e7edf4 100%);
+}
+.elegant-floor-container.is-3d::before {
+  /* faint architectural blueprint grid under the rendered rooms */
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(22,50,79,.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(22,50,79,.04) 1px, transparent 1px);
+  background-size: 30px 30px;
+  border-radius: inherit;
+}
+.bb3d-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  pointer-events: none;   /* the real cards on top receive all clicks/hover */
+  display: block;
+  outline: none;
+  touch-action: none;
+}
+/* keep zones, hallways and room columns above the canvas */
+.elegant-floor-container.is-3d > .ef-zone,
+.elegant-floor-container.is-3d > .ef-room-col {
+  position: relative;
+  z-index: 2;
+}
+/* cards become transparent text overlays — the 3D mesh draws the room */
+.elegant-floor-container.is-3d .room-card {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  opacity: 1 !important;
+  animation: none !important;
+  z-index: 2;
+}
+.elegant-floor-container.is-3d .room-card::after { display: none !important; } /* 3D draws its own door */
+.elegant-floor-container.is-3d .room-card:hover {
+  transform: none !important;       /* elevation is handled in 3D instead */
+  box-shadow: none !important;
+  border-color: transparent !important;
+}
+/* lift the guest name / room number a touch for legibility over the 3D floor */
+.elegant-floor-container.is-3d .rc-guest-name,
+.elegant-floor-container.is-3d .rc-room-num {
+  text-shadow: 0 1px 2px rgba(255,255,255,.7);
+}
+
+/* ─── Quick Stay Duration ─────────────────────────────────────────── */
+.bb-quick-duration {
+    margin-top: 12px;
+}
+.bb-quick-duration label {
+    display: block;
+    font-size: 0.76rem;
+    font-weight: 600;
+    color: var(--blue-900);
+    margin-bottom: 6px;
+}
+.bb-duration-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.bb-duration-buttons button {
+    padding: 6px 14px;
+    border: 1.5px solid var(--sky-200);
+    border-radius: 999px;
+    background: var(--white);
+    color: var(--ink-700);
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 150ms ease;
+}
+.bb-duration-buttons button:hover {
+    background: var(--sky-50);
+    border-color: var(--blue-500);
+    transform: translateY(-1px);
+}
+.bb-duration-buttons button:active {
+    transform: scale(0.95);
+}
+.bb-duration-buttons button.is-active {
+    background: var(--blue-500);
+    color: var(--white);
+    border-color: var(--blue-700);
+}

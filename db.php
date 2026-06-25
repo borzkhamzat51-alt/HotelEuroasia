@@ -755,4 +755,5 @@ function db_count_checked_in($branch)
         $stmt->execute([$branch]);
     }
     return (int) $stmt->fetchColumn();
+    
 }

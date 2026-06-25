@@ -275,7 +275,7 @@ $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
             </div>
         </div>
         <?= rpt_trend_svg($trend) ?>
-        <div class="rpt-legend">
+        <div class="rpt-legend">    
             <span><i style="background:#2563eb;border-radius:3px;"></i> Revenue billed (bars, left axis)</span>
             <span><i style="background:#f59e0b;border-radius:50%;"></i> Occupancy rate (line, right axis)</span>
         </div>

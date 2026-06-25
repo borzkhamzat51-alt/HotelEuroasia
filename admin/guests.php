@@ -22,6 +22,20 @@ $status   = $_GET['status']        ?? '';
 $branch   = $_GET['branch']        ?? '';
 $sort     = $_GET['sort']          ?? 'check_in_desc';
 
+// ── Helper: format duration in months and days (same as layout pages) ──────
+function formatDuration($checkIn, $checkOut) {
+    $start = new DateTime($checkIn);
+    $end   = new DateTime($checkOut);
+    $diff  = $start->diff($end);
+    $months = $diff->m + ($diff->y * 12);
+    $days   = $diff->d;
+    if ($months == 0 && $days == 0) return '0 Days';
+    $parts = [];
+    if ($months > 0) $parts[] = $months . ' Month' . ($months > 1 ? 's' : '');
+    if ($days > 0)   $parts[] = $days . ' Day' . ($days > 1 ? 's' : '');
+    return implode(' ', $parts);
+}
+
 // ── Fetch guests (from reservations + rooms) ──────────────────────────────────
 $pdo = bb_db();
 
@@ -61,6 +75,12 @@ $sql  = "SELECT r.*, ro.room_number, ro.room_type, ro.branch, ro.price_per_night
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $guests = $stmt->fetchAll();
+
+// Compute duration for each guest
+foreach ($guests as &$g) {
+    $g['duration'] = formatDuration($g['check_in'], $g['check_out']);
+}
+unset($g);
 
 // ── Stats bar ─────────────────────────────────────────────────────────────────
 $statsStmt = $pdo->query("SELECT status, COUNT(*) as cnt FROM reservations GROUP BY status");
@@ -327,7 +347,7 @@ $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
                     <th>Room</th>
                     <th>Check-In</th>
                     <th>Check-Out</th>
-                    <th>Nights</th>
+                    <th>Duration</th>
                     <th>Status</th>
                     <th>Amount Due</th>
                     <th>Paid</th>
@@ -337,7 +357,6 @@ $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
             <tbody>
             <?php foreach ($guests as $g):
                 $branchLabel = $allBranches[$g['branch']] ?? ucfirst($g['branch']);
-                $nights = (new DateTime($g['check_in']))->diff(new DateTime($g['check_out']))->days;
                 $balance = (float)$g['total_amount'] - (float)$g['amount_paid'];
             ?>
                 <tr class="guest-row" data-id="<?= $g['id'] ?>" data-reservation='<?= htmlspecialchars(json_encode($g), ENT_QUOTES) ?>'>
@@ -353,7 +372,7 @@ $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
                     <td><strong>RM <?= htmlspecialchars($g['room_number']) ?></strong><div class="guest-meta"><?= htmlspecialchars($g['room_type']) ?></div></td>
                     <td><?= htmlspecialchars($g['check_in']) ?></td>
                     <td><?= htmlspecialchars($g['check_out']) ?></td>
-                    <td><?= $nights ?></td>
+                    <td><?= htmlspecialchars($g['duration']) ?></td>
                     <td><span class="status-badge status-badge--<?= $g['status'] ?>"><?= $statusLabels[$g['status']] ?></span></td>
                     <td>₱<?= number_format((float)$g['total_amount'], 2) ?></td>
                     <td style="color:#1a7a46; font-weight:600;">₱<?= number_format((float)$g['amount_paid'], 2) ?></td>
@@ -389,16 +408,33 @@ const allBranches   = <?= json_encode($allBranches) ?>;
 function fmt(n){ return '₱' + parseFloat(n||0).toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function esc(s){ const d=document.createElement('div'); d.textContent=s??'—'; return d.innerHTML; }
 
+// Helper: format duration in months and days (client-side version)
+function formatDuration(checkIn, checkOut) {
+    var start = new Date(checkIn + 'T00:00:00');
+    var end   = new Date(checkOut + 'T00:00:00');
+    var diff  = end - start;
+    if (diff <= 0) return '0 Days';
+    var totalDays = diff / 86400000;
+    // Approximate months: 30.44 days average
+    var months = Math.floor(totalDays / 30.44);
+    var days = Math.round(totalDays - months * 30.44);
+    if (months === 0 && days === 0) return '0 Days';
+    var parts = [];
+    if (months > 0) parts.push(months + ' Month' + (months > 1 ? 's' : ''));
+    if (days > 0)   parts.push(days + ' Day' + (days > 1 ? 's' : ''));
+    return parts.join(' ');
+}
+
 document.querySelectorAll('.guest-row').forEach(row => {
     row.addEventListener('click', () => openFolio(JSON.parse(row.dataset.reservation)));
 });
 
 function openFolio(r) {
-    const nights  = Math.round((new Date(r.check_out) - new Date(r.check_in)) / 86400000);
     const balance = (parseFloat(r.total_amount)||0) - (parseFloat(r.amount_paid)||0);
     const brLabel = allBranches[r.branch] ?? r.branch;
     const stLabel = statusLabels[r.status] ?? r.status;
     const pmLabel = paymentLabels[r.payment_method] ?? (r.payment_method || '—');
+    const durationStr = formatDuration(r.check_in, r.check_out);
 
     document.getElementById('folioTitle').textContent    = 'Master Folio [#' + String(r.id).padStart(10,'0') + ']';
     document.getElementById('folioSubtitle').textContent = (r.guest_full_name ?? '') + ' · ' + brLabel;
@@ -408,7 +444,7 @@ function openFolio(r) {
         <div class="folio-card"><div class="folio-card__label">Folio No.</div><div class="folio-card__value">#${String(r.id).padStart(10,'0')}</div></div>
         <div class="folio-card"><div class="folio-card__label">Booking Type</div><div class="folio-card__value">${esc(stLabel)}</div></div>
         <div class="folio-card"><div class="folio-card__label">Room</div><div class="folio-card__value">RM ${esc(r.room_number)} – ${esc(r.room_type)}</div></div>
-        <div class="folio-card"><div class="folio-card__label">No. Nights</div><div class="folio-card__value">${nights} Night${nights!==1?'s':''}</div></div>
+        <div class="folio-card"><div class="folio-card__label">Duration</div><div class="folio-card__value">${esc(durationStr)}</div></div>
         <div class="folio-card"><div class="folio-card__label">Arrival</div><div class="folio-card__value">${esc(r.check_in)}</div></div>
         <div class="folio-card"><div class="folio-card__label">Departure</div><div class="folio-card__value">${esc(r.check_out)}</div></div>
         <div class="folio-card folio-card--highlight"><div class="folio-card__label">Amount Due</div><div class="folio-card__value">${fmt(r.total_amount)}</div></div>
@@ -425,15 +461,15 @@ function openFolio(r) {
         <div class="folio-info-row"><span>Valid ID No.</span><span>${esc(r.valid_id_number||'—')}</span></div>
         <div class="folio-info-row"><span>Adults</span><span>${esc(r.num_adults)}</span></div>
         <div class="folio-info-row"><span>Children</span><span>${esc(r.num_children)}</span></div>
-        <div class="folio-info-row"><span>Room Rate / Night</span><span>${fmt(r.room_rate)}</span></div>
+        <div class="folio-info-row"><span>Monthly Rate</span><span>${fmt(r.room_rate)}</span></div>
         <div class="folio-info-row"><span>Security Deposit</span><span>${fmt(r.security_deposit)}</span></div>
         ${r.special_requests ? `<div class="folio-info-row" style="grid-column:1/-1"><span>Special Requests</span><span>${esc(r.special_requests)}</span></div>` : ''}
         ${r.notes ? `<div class="folio-info-row" style="grid-column:1/-1"><span>Notes</span><span>${esc(r.notes)}</span></div>` : ''}
       </div>
-      <div class="folio-charges-title">Room Charges Breakdown</div>
+      <div class="folio-charges-title">Monthly Charges Breakdown</div>
       <div style="overflow-x:auto;">
       <table class="folio-charges-table">
-        <thead><tr><th>Date</th><th>Room No.</th><th>Description</th><th>Qty</th><th style="text-align:right">Price</th><th style="text-align:right">Amount Due</th><th style="text-align:right">Amount Paid</th></tr></thead>
+        <thead><tr><th>Period</th><th>Room No.</th><th>Description</th><th>Months</th><th style="text-align:right">Monthly Rate</th><th style="text-align:right">Amount Due</th><th style="text-align:right">Amount Paid</th></tr></thead>
         <tbody id="chargesBody"><tr><td colspan="7" class="no-charges">Loading…</td></tr></tbody>
         <tfoot><tr class="tfoot-row"><td colspan="5">Total</td><td class="amount">${fmt(r.total_amount)}</td><td class="amount-paid">${fmt(r.amount_paid)}</td></tr></tfoot>
       </table>
@@ -441,23 +477,76 @@ function openFolio(r) {
     `;
 
     document.getElementById('folioModal').removeAttribute('hidden');
-    buildNightlyCharges(r, nights);
+    buildMonthlyCharges(r);
 }
 
-function buildNightlyCharges(r, nights) {
+function buildMonthlyCharges(r) {
     const tbody = document.getElementById('chargesBody');
     if (!tbody) return;
-    if (nights <= 0) { tbody.innerHTML = '<tr><td colspan="7" class="no-charges">No nightly charges.</td></tr>'; return; }
+    const checkIn = new Date(r.check_in + 'T00:00:00');
+    const checkOut = new Date(r.check_out + 'T00:00:00');
+    if (checkOut <= checkIn) {
+        tbody.innerHTML = '<tr><td colspan="7" class="no-charges">Invalid date range.</td></tr>';
+        return;
+    }
+
+    const monthlyRate = parseFloat(r.room_rate) || 0;
+    if (monthlyRate <= 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="no-charges">No rate set.</td></tr>';
+        return;
+    }
+
+    // We'll generate charges per month, prorating the first and last partial months.
+    // Start and end are inclusive-exclusive: we charge for each month covered.
+    let charges = [];
+    let current = new Date(checkIn);
+    // Move to first day of month
+    current.setDate(1);
+    // While current < checkOut
+    while (current < checkOut) {
+        let monthStart = new Date(current);
+        let monthEnd = new Date(current);
+        monthEnd.setMonth(monthEnd.getMonth() + 1); // first day of next month
+        // Determine the portion of this month that falls within the stay
+        let stayStart = new Date(Math.max(monthStart.getTime(), checkIn.getTime()));
+        let stayEnd = new Date(Math.min(monthEnd.getTime(), checkOut.getTime()));
+        let daysInMonth = (monthEnd - monthStart) / 86400000; // days in this month
+        let stayDays = (stayEnd - stayStart) / 86400000;
+        if (stayDays <= 0) break;
+        let amount = monthlyRate * (stayDays / daysInMonth);
+        // Format period: "Jan 2026"
+        let period = monthStart.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+        // Description: "Monthly Rent - RM X"
+        let desc = 'Monthly Rent – RM ' + r.room_number;
+        charges.push({
+            period: period,
+            room_no: r.room_number,
+            description: desc,
+            months: (stayDays / daysInMonth).toFixed(2), // fractional months
+            rate: monthlyRate,
+            amount: amount,
+            paid: 0 // no paid breakdown
+        });
+        current = monthEnd;
+    }
+
+    if (charges.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="no-charges">No charges computed.</td></tr>';
+        return;
+    }
+
     let rows = '';
-    const checkIn = new Date(r.check_in);
-    for (let i = 0; i < nights; i++) {
-        const d = new Date(checkIn); d.setDate(d.getDate() + i);
-        const dateStr = d.toISOString().split('T')[0];
-        rows += `<tr><td>${dateStr}</td><td>${esc(r.room_number)}</td><td>RM ${esc(r.room_number)} – ${esc(r.room_type)}</td><td>1</td><td class="amount">${fmt(r.room_rate)}</td><td class="amount">${fmt(r.room_rate)}</td><td class="amount-paid">0.00</td></tr>`;
-    }
-    if (parseFloat(r.security_deposit) > 0) {
-        rows += `<tr><td>${r.check_in}</td><td>${esc(r.room_number)}</td><td>Security Deposit</td><td>1</td><td class="amount">${fmt(r.security_deposit)}</td><td class="amount">${fmt(r.security_deposit)}</td><td class="amount-paid">0.00</td></tr>`;
-    }
+    charges.forEach(c => {
+        rows += `<tr>
+            <td>${esc(c.period)}</td>
+            <td>${esc(c.room_no)}</td>
+            <td>${esc(c.description)}</td>
+            <td class="amount">${c.months}</td>
+            <td class="amount">${fmt(c.rate)}</td>
+            <td class="amount">${fmt(c.amount)}</td>
+            <td class="amount-paid">${fmt(c.paid)}</td>
+        </tr>`;
+    });
     tbody.innerHTML = rows;
 }
 

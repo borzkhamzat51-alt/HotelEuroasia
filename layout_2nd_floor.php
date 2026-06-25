@@ -63,7 +63,7 @@ function rl_card($room) {
     // Rate — only if price > 0
     $rateHtml = '';
     if (!empty($room['price']) && (float)$room['price'] > 0) {
-        $rateHtml = '<div class="rc-rate">Rate: ₱' . number_format((float)$room['price']) . '/month</div>';
+        $rateHtml = '<div class="rc-rate">Rate: ₱' . number_format((float)$room['price']) . '/night</div>';
     }
 
     // Room type (bottom, muted)

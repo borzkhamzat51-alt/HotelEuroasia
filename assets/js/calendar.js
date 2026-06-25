@@ -5,6 +5,7 @@
  * Fixed room context menu – header excluded, roomId parsed as int.
  * Added live stay duration and expected payment date.
  * Added legend filtering – click legend items to filter calendar.
+ * Added Quick Stay Duration – 1,2,3,4,6,12 month buttons.
  */
 (function () {
   'use strict';
@@ -50,7 +51,96 @@
 
   window.addEventListener('scroll', saveScrollPosition, { passive: true });
 
-  // ─── SCROLL POSITION CALCULATORS ──────────────────────────────────
+  // ─── LAYOUT RECALCULATION FRAMEWORK ───────────────────────────────
+  const _layoutPasses = [];
+  function registerLayoutPass(fn) { if (typeof fn === 'function') _layoutPasses.push(fn); }
+  function runLayoutPasses() {
+    for (let i = 0; i < _layoutPasses.length; i++) {
+      try { _layoutPasses[i](); } catch (err) { console.error('[calendar] layout pass failed:', err); }
+    }
+  }
+
+  function repositionAllBars() {
+    const tracks = document.querySelectorAll('.cal-row__track');
+    tracks.forEach(function (track) {
+      const slots = Array.prototype.slice.call(track.querySelectorAll('.cal-day-slot'));
+      const totalDays = slots.length;
+      if (totalDays === 0) return;
+      const monthStart = new Date(slots[0].dataset.date + 'T00:00:00');
+      track.querySelectorAll('.cal-bar').forEach(function (bar) {
+        let resv;
+        try { resv = JSON.parse(bar.dataset.reservation); } catch (e) { return; }
+        if (!resv || !resv.check_in || !resv.check_out) return;
+        const checkIn = new Date(resv.check_in + 'T00:00:00');
+        const checkOut = new Date(resv.check_out + 'T00:00:00');
+        let startOffset = Math.round((checkIn - monthStart) / 86400000);
+        let endOffset = Math.round((checkOut - monthStart) / 86400000);
+        startOffset = Math.max(0, Math.min(startOffset, totalDays));
+        endOffset = Math.max(0, Math.min(endOffset, totalDays));
+        const duration = Math.max(1, endOffset - startOffset);
+        bar.style.left = (startOffset / totalDays * 100) + '%';
+        bar.style.width = (duration / totalDays * 100) + '%';
+      });
+    });
+  }
+
+  let _recalcRaf = null;
+  function scheduleRecalc() {
+    if (_recalcRaf) return;
+    _recalcRaf = requestAnimationFrame(function () {
+      _recalcRaf = null;
+      runLayoutPasses();
+      repositionAllBars();
+    });
+  }
+  window.__bbRecalcCalendar = scheduleRecalc;
+
+  let _calResizeObserver = null;
+  function observeCalendarSize() {
+    if (_calResizeObserver) return;
+    const grid = document.querySelector('.cal-grid');
+    const wrap = document.querySelector('.cal-grid-wrap');
+    if (window.ResizeObserver && grid) {
+      _calResizeObserver = new ResizeObserver(scheduleRecalc);
+      _calResizeObserver.observe(grid);
+      if (wrap) _calResizeObserver.observe(wrap);
+    }
+    window.addEventListener('resize', scheduleRecalc, { passive: true });
+  }
+
+  let _calRevealed = false;
+  function revealCalendar() {
+    if (_calRevealed) return;
+    _calRevealed = true;
+    const gridArea = document.querySelector('.cal-grid-area');
+    if (gridArea) gridArea.classList.remove('cal-grid-area--initializing');
+  }
+
+  function initCalendarLayout() {
+    function firstPass() {
+      runLayoutPasses();
+      repositionAllBars();
+      requestAnimationFrame(function () {
+        runLayoutPasses();
+        repositionAllBars();
+        revealCalendar();
+        observeCalendarSize();
+      });
+    }
+    const fontsReady = (document.fonts && document.fonts.ready) ? document.fonts.ready : Promise.resolve();
+    let started = false;
+    fontsReady.then(function () {
+      if (started) return;
+      started = true;
+      requestAnimationFrame(function () { requestAnimationFrame(firstPass); });
+    });
+    setTimeout(function () {
+      if (started) { revealCalendar(); return; }
+      started = true;
+      firstPass();
+    }, 1000);
+  }
+
   function offsetFromGrid(el) {
     const grid = document.querySelector('.cal-grid');
     let left = 0, top = 0, node = el;
@@ -75,7 +165,6 @@
     return y + '-' + m + '-' + day;
   }
 
-  // ─── Helper functions for room sidebar ────────────────────────────
   function roomStatusLabel(room) {
     if (room.room_status === 'maintenance') return 'Out of Order';
     if (room.room_status === 'occupied') return 'Checked In';
@@ -118,7 +207,6 @@
     return 'Standard';
   }
 
-  // ─── BAR ICONS ──────────────────────────────────────────────────────
   const BAR_ICONS = {
     checked_in: '<svg viewBox="0 0 24 24" class="cal-bar__icon" fill="none" aria-hidden="true"><path d="M5 4h6a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 12H9m0 0 3.5-3.5M9 12l3.5 3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     checked_out: '<svg viewBox="0 0 24 24" class="cal-bar__icon" fill="none" aria-hidden="true"><path d="M13 4H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 12h10m0 0-3.5-3.5M19 12l-3.5 3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -184,7 +272,7 @@
   function roomOptions(selectedRoomId) {
     return cfg.rooms.map(function (r) {
       const sel = String(r.id) === String(selectedRoomId) ? 'selected' : '';
-      return '<option value="' + r.id + '" ' + sel + '>RM' + r.room_number + ' — ' + r.room_type + ' (₱' + Number(r.price_per_night).toLocaleString() + '/night)</option>';
+      return '<option value="' + r.id + '" ' + sel + '>RM' + r.room_number + ' — ' + r.room_type + ' (₱' + Number(r.price_per_night).toLocaleString() + '/month)</option>';
     }).join('');
   }
 
@@ -230,6 +318,17 @@
     html += field('Check-out Date', 'check_out', checkOut, 'date', errors, true);
     html += field('Number of Adults', 'num_adults', resv.num_adults || 1, 'number', errors);
     html += field('Number of Children', 'num_children', resv.num_children || 0, 'number', errors);
+    // ─── Quick Stay Duration ─────────────────────────────────────
+    html += '<div class="bb-quick-duration">';
+    html += '<label>Quick Stay Duration</label>';
+    html += '<div class="bb-duration-buttons">';
+    html += '<button type="button" data-months="1">1 Month</button>';
+    html += '<button type="button" data-months="2">2 Months</button>';
+    html += '<button type="button" data-months="3">3 Months</button>';
+    html += '<button type="button" data-months="4">4 Months</button>';
+    html += '<button type="button" data-months="6">6 Months</button>';
+    html += '<button type="button" data-months="12">12 Months</button>';
+    html += '</div></div>';
     html += '</div>';
 
     // ---- Duration and Expected Payment Date ----
@@ -312,13 +411,14 @@
     recalc();
   }
 
-  // ---- Duration and Payment Date update ----
+  // ---- Duration and Payment Date update with Quick Duration ----
   function wireDateCalculations() {
     const form = document.getElementById('resvForm');
     const checkIn = form.querySelector('[name="check_in"]');
     const checkOut = form.querySelector('[name="check_out"]');
     const expectedPayment = form.querySelector('[name="expected_payment_date"]');
     const durationDisplay = document.getElementById('stayDurationDisplay');
+    let selectedDuration = null; // in months
 
     function updateDurationAndPayment() {
       const inVal = checkIn.value;
@@ -338,6 +438,53 @@
       }
     }
 
+    function applyDuration(months) {
+      if (!checkIn.value) {
+        alert('Please select a check-in date first.');
+        return;
+      }
+      const start = new Date(checkIn.value + 'T00:00:00');
+      const end = new Date(start);
+      end.setMonth(end.getMonth() + months);
+      const outVal = formatLocalDate(end);
+      checkOut.value = outVal;
+      if (!expectedPayment.dataset.userEdited) {
+        expectedPayment.value = outVal;
+      }
+      updateDurationAndPayment();
+      selectedDuration = months;
+      const buttons = form.querySelectorAll('.bb-duration-buttons button');
+      buttons.forEach(btn => btn.classList.remove('is-active'));
+      const activeBtn = form.querySelector('.bb-duration-buttons button[data-months="' + months + '"]');
+      if (activeBtn) activeBtn.classList.add('is-active');
+    }
+
+    // Wire duration buttons
+    const buttons = form.querySelectorAll('.bb-duration-buttons button');
+    buttons.forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        const months = parseInt(this.dataset.months, 10);
+        applyDuration(months);
+      });
+    });
+
+    // On check-in change, if a duration is selected, recalc
+    checkIn.addEventListener('input', function() {
+      if (selectedDuration !== null) {
+        applyDuration(selectedDuration);
+      }
+    });
+
+    // On manual check-out change, clear selected duration
+    checkOut.addEventListener('input', function() {
+      selectedDuration = null;
+      const buttons = form.querySelectorAll('.bb-duration-buttons button');
+      buttons.forEach(btn => btn.classList.remove('is-active'));
+      updateDurationAndPayment();
+    });
+
+    // Initial updates
     checkIn.addEventListener('input', updateDurationAndPayment);
     checkOut.addEventListener('input', updateDurationAndPayment);
     expectedPayment.addEventListener('input', function() {
@@ -472,7 +619,6 @@
       creationTrack.appendChild(bar);
     }
 
-    // ── Month-scope guard ─────────────────────────────────────────
     const scopeTrack = bar.closest('.cal-row__track');
     if (scopeTrack) {
       const scopeSlots = Array.prototype.slice.call(scopeTrack.querySelectorAll('.cal-day-slot'));
@@ -508,7 +654,6 @@
       iconSpan.outerHTML = BAR_ICONS[serverResv.status];
     }
 
-    // Determine if overdue
     const todayStr = new Date().toISOString().split('T')[0];
     const balance = (parseFloat(serverResv.total_amount) || 0) - (parseFloat(serverResv.amount_paid) || 0);
     const isOverdue = (balance > 0 && serverResv.check_out < todayStr && serverResv.status !== 'cancelled');
@@ -608,7 +753,6 @@
       if (catEl) catEl.textContent = category;
     }
 
-    // Maintenance badge
     if (labelCol) {
       let badge = labelCol.querySelector('.maintenance-badge');
       if (isMaintenance && !badge) {
@@ -1376,7 +1520,7 @@
 <div class="row"><span class="label">Contact</span><span class="value">${r.contact_number || 'N/A'}</span></div>
 <div class="row"><span class="label">Email</span><span class="value">${r.email || 'N/A'}</span></div>
 <div class="row"><span class="label">Valid ID</span><span class="value">${r.valid_id_type || 'N/A'} #${r.valid_id_number || 'N/A'}</span></div>
-<div class="row"><span class="label">Rate/Night</span><span class="value">₱${parseFloat(r.room_rate || 0).toFixed(2)}</span></div>
+<div class="row"><span class="label">Rate/Month</span><span class="value">₱${parseFloat(r.room_rate || 0).toFixed(2)}</span></div>
 <div class="row"><span class="label">Total Amount</span><span class="value">₱${parseFloat(r.total_amount || 0).toFixed(2)}</span></div>
 <div class="row"><span class="label">Amount Paid</span><span class="value">₱${parseFloat(r.amount_paid || 0).toFixed(2)}</span></div>
 <div class="row"><span class="label">Payment Method</span><span class="value">${r.payment_method || 'N/A'}</span></div>
@@ -1413,7 +1557,7 @@
 <div class="row"><span class="label">Check-in</span><span class="value">${r.check_in}</span></div>
 <div class="row"><span class="label">Check-out</span><span class="value">${r.check_out}</span></div>
 <div class="row"><span class="label">Nights</span><span class="value">${nights}</span></div>
-<div class="row"><span class="label">Rate/Night</span><span class="value">₱${parseFloat(r.room_rate || 0).toFixed(2)}</span></div>
+<div class="row"><span class="label">Rate/Month</span><span class="value">₱${parseFloat(r.room_rate || 0).toFixed(2)}</span></div>
 <div class="row total"><span class="label">Total Amount</span><span class="value">₱${parseFloat(r.total_amount || 0).toFixed(2)}</span></div>
 <div class="row"><span class="label">Amount Paid</span><span class="value">₱${parseFloat(r.amount_paid || 0).toFixed(2)}</span></div>
 <div class="row"><span class="label">Balance Due</span><span class="value" style="${balance > 0 ? 'color:#b3433f;' : ''}">₱${balance.toFixed(2)}</span></div>
@@ -1949,7 +2093,6 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
         return;
       }
 
-      // Only body rows – exclude the header
       const label = e.target.closest('.cal-label-col[data-room-id]');
       if (label && !label.classList.contains('cal-label-col--header') && label.dataset.roomId) {
         e.preventDefault();
@@ -2041,11 +2184,7 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
     }
 
     position();
-    let resizeTimer = null;
-    window.addEventListener('resize', function () {
-      clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(position, 150);
-    });
+    registerLayoutPass(position);
   })();
 
   (function wireDayBoundaryLines() {
@@ -2079,11 +2218,7 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
     }
 
     draw();
-    let resizeTimer = null;
-    window.addEventListener('resize', function () {
-      clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(draw, 150);
-    });
+    registerLayoutPass(draw);
   })();
 
   (function wireTopScroll() {
@@ -2113,11 +2248,7 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
     });
 
     syncWidth();
-    let resizeTimer = null;
-    window.addEventListener('resize', function () {
-      clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(syncWidth, 150);
-    });
+    registerLayoutPass(syncWidth);
   })();
 
   (function wireFilters() {
@@ -2158,7 +2289,6 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
         availSel.value = '';
         occSel.value = '';
         applyFilters();
-        // Also reset legend filter if active
         if (window.resetLegendFilter) window.resetLegendFilter();
       });
     }
@@ -2230,25 +2360,21 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
   // ─── LEGEND CLICK FILTERING ──────────────────────────────────────────
   (function wireLegendFilter() {
     const legendItems = document.querySelectorAll('.cal-legend-item:not(.disabled)');
-    let activeFilter = null; // { key, type }
+    let activeFilter = null;
 
     function clearLegendHighlights() {
       legendItems.forEach(el => el.classList.remove('active-filter'));
     }
 
     function applyFilter(key, type) {
-      // Clear any existing filter
       clearLegendHighlights();
-      // Highlight the clicked item
       const target = document.querySelector(`.cal-legend-item[data-filter-key="${key}"][data-filter-type="${type}"]`);
       if (target) target.classList.add('active-filter');
 
-      // Now filter the grid
       const bars = document.querySelectorAll('.cal-bar');
       const rows = document.querySelectorAll('.cal-row[data-room-id]');
 
       if (type === 'reservation') {
-        // Show only bars with matching status (or overdue if key === 'overdue')
         bars.forEach(bar => {
           let resv;
           try { resv = JSON.parse(bar.dataset.reservation); } catch(e) { return; }
@@ -2262,7 +2388,6 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
           }
           bar.style.display = show ? '' : 'none';
         });
-        // Hide rows that have no visible bars
         rows.forEach(row => {
           const track = row.querySelector('.cal-row__track');
           const barsInRow = track ? track.querySelectorAll('.cal-bar') : [];
@@ -2270,13 +2395,11 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
           row.style.display = visible ? '' : 'none';
         });
       } else if (type === 'room') {
-        // Filter by room status
         rows.forEach(row => {
           const statusKey = row.dataset.statusKey;
           const show = (statusKey === key);
           row.style.display = show ? '' : 'none';
         });
-        // Also reset bar visibility (show all bars in visible rows)
         bars.forEach(bar => {
           const row = bar.closest('.cal-row');
           if (row && row.style.display !== 'none') {
@@ -2291,10 +2414,8 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
     function resetFilter() {
       clearLegendHighlights();
       activeFilter = null;
-      // Show all bars and rows
       document.querySelectorAll('.cal-bar').forEach(bar => bar.style.display = '');
       document.querySelectorAll('.cal-row[data-room-id]').forEach(row => row.style.display = '');
-      // Also re-apply any existing filters from the filter bar (dropdowns)
       if (window.__bbApplyCalFilters) {
         window.__bbApplyCalFilters();
       }
@@ -2306,7 +2427,6 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
         const type = this.dataset.filterType;
         if (!key) return;
 
-        // Toggle off if already active
         if (activeFilter && activeFilter.key === key && activeFilter.type === type) {
           resetFilter();
           activeFilter = null;
@@ -2318,9 +2438,10 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
       });
     });
 
-    // Reset legend filter when reset button is clicked (already handled in wireFilters)
-    // Expose reset function globally
     window.resetLegendFilter = resetFilter;
   })();
+
+  // ─── KICK OFF THE FIRST-PAINT LAYOUT PIPELINE ─────────────────────
+  initCalendarLayout();
 
 })();

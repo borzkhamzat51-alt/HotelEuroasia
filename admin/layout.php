@@ -29,6 +29,79 @@ function rl_dates($ci, $co, $status, $dirty) {
     if ($status === 'available') return $dirty ? 'Vacant Dirty' : 'Vacant Clean';
     return '';
 }
+function rl_status_label($status, $is_dirty) {
+    if ($status === 'available' && $is_dirty) return 'Vacant Dirty';
+    if ($status === 'available') return 'Vacant Clean';
+    if ($status === 'occupied')  return 'Occupied';
+    if ($status === 'reserved')  return 'Reserved';
+    if ($status === 'maintenance') return 'Out of Order';
+    return ucfirst(str_replace('_', ' ', $status));
+}
+
+function rl_card($room) {
+    $status    = $room['status'];
+    $isDirty   = $room['is_dirty'];
+    $statusKey = ($status === 'available' && $isDirty) ? 'needs_cleaning' : $status;
+    $dirtyClass = ($status === 'available' && $isDirty) ? ' room-card--dirty' : '';
+
+    // Guest name
+    $guestName    = trim($room['guest_name'] ?? '');
+    $guestDisplay = $guestName ?: 'No Guest Assigned';
+    $guestClass   = $guestName ? 'rc-guest-name' : 'rc-guest-name rc-guest-name--empty';
+
+    // Room number
+    $roomNum = 'ROOM ' . htmlspecialchars($room['number']);
+
+    // Dates — full format: Jun 01 - Jun 05, 2026
+    $datesHtml = '';
+    if (!empty($room['check_in']) && !empty($room['check_out'])) {
+        $ci = date('M d', strtotime($room['check_in']));
+        $co = date('M d, Y', strtotime($room['check_out']));
+        $datesHtml = '<div class="rc-dates">' . $ci . ' - ' . $co . '</div>';
+    }
+
+    // Rate — only if price > 0
+    $rateHtml = '';
+    if (!empty($room['price']) && (float)$room['price'] > 0) {
+        $rateHtml = '<div class="rc-rate">Rate: ₱' . number_format((float)$room['price']) . '/month</div>';
+    }
+
+    // Room type (bottom, muted)
+    $typeHtml = '';
+    if (!empty($room['type_main'])) {
+        $typeHtml = '<div class="rc-room-type">' . htmlspecialchars($room['type_main']) . '</div>';
+    }
+
+    // Status badge removed – status is now conveyed solely by card color and the Legend.
+    return '<div class="room-card status-' . htmlspecialchars($status) . $dirtyClass . '"
+         data-room-id="'         . htmlspecialchars($room['id'])                    . '"
+         data-room-number="'     . htmlspecialchars($room['number'])                . '"
+         data-status="'          . htmlspecialchars($status)                        . '"
+         data-status-key="'      . htmlspecialchars($statusKey)                     . '"
+         data-type-main="'       . htmlspecialchars($room['type_main'])             . '"
+         data-type-sub="'        . htmlspecialchars($room['type_sub'])              . '"
+         data-guest-name="'      . htmlspecialchars($guestName)                    . '"
+         data-check-in="'        . htmlspecialchars($room['check_in'])              . '"
+         data-check-out="'       . htmlspecialchars($room['check_out'])             . '"
+         data-price="'           . htmlspecialchars($room['price'])                 . '"
+         data-phone="'           . htmlspecialchars($room['phone'])                 . '"
+         data-email="'           . htmlspecialchars($room['email'])                 . '"
+         data-pax="'             . htmlspecialchars($room['pax'])                   . '"
+         data-cleaning="'        . htmlspecialchars($room['cleaning'])              . '"
+         data-maintenance="'     . htmlspecialchars($room['maintenance_status'])    . '"
+         data-last-occupancy="'  . htmlspecialchars($room['last_occupancy'] ?? '')  . '"
+         data-notes="'           . htmlspecialchars($room['notes'])                 . '">
+        <div class="rc-body">
+            <p class="' . $guestClass . '" title="' . htmlspecialchars($guestDisplay) . '">'
+                . htmlspecialchars($guestDisplay) . '</p>
+            <div class="rc-room-num">' . $roomNum . '</div>'
+            . $datesHtml
+            . $rateHtml
+            . $typeHtml . '
+        </div>
+    </div>';
+}
+
 function rl_room_data($room, $activeRes) {
     return [
         'id'                 => $room['id'],
@@ -50,37 +123,6 @@ function rl_room_data($room, $activeRes) {
         'is_dirty'           => $room['cleaning_status'] !== 'Clean',
     ];
 }
-function rl_card($room) {
-    $dirty = ($room['status'] === 'available' && $room['is_dirty']) ? ' room-card--dirty' : '';
-    $dates = htmlspecialchars(rl_dates($room['check_in'], $room['check_out'], $room['status'], $room['is_dirty']));
-    return '<div class="room-card status-' . htmlspecialchars($room['status']) . $dirty . '"
-         data-room-id="'        . htmlspecialchars($room['id'])                   . '"
-         data-room-number="'    . htmlspecialchars($room['number'])               . '"
-         data-status="'         . htmlspecialchars($room['status'])               . '"
-         data-type-main="'      . htmlspecialchars($room['type_main'])            . '"
-         data-type-sub="'       . htmlspecialchars($room['type_sub'])             . '"
-         data-guest-name="'     . htmlspecialchars($room['guest_name'])           . '"
-         data-check-in="'       . htmlspecialchars($room['check_in'])             . '"
-         data-check-out="'      . htmlspecialchars($room['check_out'])            . '"
-         data-price="'          . htmlspecialchars($room['price'])                . '"
-         data-phone="'          . htmlspecialchars($room['phone'])                . '"
-         data-email="'          . htmlspecialchars($room['email'])                . '"
-         data-pax="'            . htmlspecialchars($room['pax'])                  . '"
-         data-cleaning="'       . htmlspecialchars($room['cleaning'])             . '"
-         data-maintenance="'    . htmlspecialchars($room['maintenance_status'])   . '"
-         data-last-occupancy="' . htmlspecialchars($room['last_occupancy'] ?? '') . '"
-         data-notes="'          . htmlspecialchars($room['notes'])                . '">
-        <div class="rc-content">
-            <h3 class="rc-title">'      . htmlspecialchars($room['type_main'])  . '</h3>
-            <span class="rc-subtitle">' . htmlspecialchars($room['type_sub'])   . '</span>
-            <div class="rc-dates">'     . $dates                                . '</div>
-            <div class="rc-price">'     . ($room['price'] ? '₱' . number_format($room['price']) : '--') . '</div>
-            <div class="rc-guest">'     . htmlspecialchars($room['guest_name']) . '</div>
-        </div>
-        <div class="rc-footer">RM ' . htmlspecialchars($room['number']) . '</div>
-    </div>';
-}
-
 // 3rd floor columns
 $leftRooms   = ['303','302','301'];
 $middleRooms = ['306','305','304'];
@@ -182,7 +224,6 @@ $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
             </div>
 
             <div class="rl-legend-divider"></div>
-            <div class="rl-legend-showall" data-rl-filter="all">&#8635; Show All</div>
             <div class="rl-sidebar__footer" id="rlCount"><?= count($rooms) ?> rooms</div>
         </div>
     </aside>
@@ -253,5 +294,8 @@ window.BB_LAYOUT_ROOMS = <?= json_encode(array_map(fn($r) => [
 <script src="../assets/js/layout.js" defer></script>
 <script src="../assets/js/realtime-room-sync.js" defer></script>
 <script src="../assets/js/layout-legend.js" defer></script>
+<!-- Babylon.js floor-plan visual layer (presentation only — see layout-3d.js) -->
+<script src="https://cdn.babylonjs.com/babylon.js" defer></script>
+<script src="../assets/js/layout-3d.js" defer></script>
 </body>
 </html>

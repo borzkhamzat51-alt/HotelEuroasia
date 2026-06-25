@@ -1,4 +1,9 @@
 <?php
+/**
+ * DASHBOARD – UNIFIED VERSION
+ * Billing and Reports are removed entirely from the navigation.
+ * All users (admin and staff) see: Guests, Users & Staff (if admin), and Settings.
+ */
 require_once __DIR__ . '/../config.php';
 bb_require_permission('dashboard');
 
@@ -32,7 +37,7 @@ unset($p);
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Admin Dashboard · Bluebookers</title>
+<title>Dashboard · Bluebookers</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,700;1,500&family=EB+Garamond:ital@1&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -66,12 +71,6 @@ unset($p);
 <nav class="navbar" id="navbar">
     <?php if (bb_has_permission('guests')): ?>
         <a class="navbar__item" href="guests.php">Guests</a>
-    <?php endif; ?>
-    <?php if (bb_has_permission('billing')): ?>
-        <a class="navbar__item" href="billing.php">Billing</a>
-    <?php endif; ?>
-    <?php if (bb_has_permission('reports')): ?>
-        <a class="navbar__item" href="reports.php">Reports</a>
     <?php endif; ?>
     <?php if (bb_is_admin()): ?>
         <a class="navbar__item" href="users.php">Users &amp; Staff</a>

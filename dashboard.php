@@ -1,4 +1,9 @@
 <?php
+/**
+ * DASHBOARD – UNIFIED VERSION
+ * Billing and Reports are removed entirely from the navigation.
+ * All users (admin and staff) see: Guests, Users & Staff (if admin), and Settings.
+ */
 require_once __DIR__ . '/../config.php';
 bb_require_permission('dashboard');
 
@@ -32,7 +37,7 @@ unset($p);
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Admin Dashboard · Bluebookers</title>
+<title>Dashboard · Bluebookers</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,700;1,500&family=EB+Garamond:ital@1&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -66,12 +71,6 @@ unset($p);
 <nav class="navbar" id="navbar">
     <?php if (bb_has_permission('guests')): ?>
         <a class="navbar__item" href="guests.php">Guests</a>
-    <?php endif; ?>
-    <?php if (bb_has_permission('billing')): ?>
-        <a class="navbar__item" href="billing.php">Billing</a>
-    <?php endif; ?>
-    <?php if (bb_has_permission('reports')): ?>
-        <a class="navbar__item" href="reports.php">Reports</a>
     <?php endif; ?>
     <?php if (bb_is_admin()): ?>
         <a class="navbar__item" href="users.php">Users &amp; Staff</a>
@@ -129,19 +128,24 @@ unset($p);
                     <p class="property-card__tag"><?= htmlspecialchars($p['tag']) ?></p>
                 </div>
             </a>
+
             <?php if (bb_has_permission('rooms')): ?>
                 <?php if (bb_is_admin()): ?>
-                <button type="button" class="property-card__manage"
-                        aria-label="Edit <?= htmlspecialchars($p['name']) ?>"
-                        onclick='openPropertyEdit(<?= json_encode(["key"=>$p["key"],"name"=>$p["name"],"tag"=>$p["tag"],"image"=>$p["custom_image"]]) ?>)'>
-                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15.5 4.5l3 3-9 9-3.5 1 1-3.5 9-9.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
-                    <span>Manage</span>
-                </button>
+                    <!-- ─── Admin: Manage button opens edit modal ─── -->
+                    <button type="button" class="property-card__manage"
+                            aria-label="Edit <?= htmlspecialchars($p['name']) ?>"
+                            onclick='openPropertyEdit(<?= json_encode(["key"=>$p["key"],"name"=>$p["name"],"tag"=>$p["tag"],"image"=>$p["custom_image"]]) ?>)'>
+                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15.5 4.5l3 3-9 9-3.5 1 1-3.5 9-9.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+                        <span>Manage</span>
+                    </button>
                 <?php else: ?>
-                <a href="property.php?branch=<?= htmlspecialchars($p['key']) ?>" class="property-card__manage" aria-label="Manage <?= htmlspecialchars($p['name']) ?>">
-                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15.5 4.5l3 3-9 9-3.5 1 1-3.5 9-9.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
-                    <span>Manage</span>
-                </a>
+                    <!-- ─── Staff: Manage button links to property page ─── -->
+                    <a href="property.php?branch=<?= htmlspecialchars($p['key']) ?>"
+                       class="property-card__manage"
+                       aria-label="Manage <?= htmlspecialchars($p['name']) ?>">
+                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15.5 4.5l3 3-9 9-3.5 1 1-3.5 9-9.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+                        <span>Manage</span>
+                    </a>
                 <?php endif; ?>
             <?php endif; ?>
         </article>
