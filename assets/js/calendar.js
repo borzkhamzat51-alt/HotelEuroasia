@@ -287,7 +287,7 @@
     return errors && errors[key] ? '<span class="form-error">' + errors[key] + '</span>' : '';
   }
 
-  function renderForm(resv, prefill, errors, successMsg) {
+  function renderForm(resv, prefill, errors, successMsg, justCreated) {
     resv = resv || {};
     prefill = prefill || {};
     const isEdit = !!resv.id;
@@ -360,18 +360,25 @@
     // Inline payment panel — loads real payment records and lets staff record payments
     // directly from this form so they appear in the folio immediately.
     if (isEdit) {
+      // The Method dropdown only appears in the panel that shows immediately
+      // after creating a brand-new reservation (justCreated). Reopening an
+      // already-existing reservation later to log a follow-up payment hides
+      // it — just Amount + Remarks — per the agreed behavior.
+      const methodColHtml = justCreated
+        ? '<div><label style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:#2c4a68;display:block;margin-bottom:4px;">Method</label>' +
+            '<select id="calPayMethod" style="width:100%;padding:8px 10px;border:1.5px solid #c5deef;border-radius:6px;font-family:inherit;font-size:.86rem;">' +
+              '<option value="">—</option><option value="cash">Cash</option><option value="gcash">GCash</option>' +
+              '<option value="bank_transfer">Bank Transfer</option><option value="card">Card</option>' +
+            '</select></div>'
+        : '';
       html += '<div id="calPayPanel" style="margin:14px 0 4px;border:1px solid #c5deef;border-radius:10px;overflow:hidden;">' +
         '<div style="background:#eef5fc;padding:9px 16px;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#3b7dd8;border-bottom:1px solid #c5deef;">Payment History</div>' +
         '<div id="calPayList" style="padding:12px 16px;font-size:.84rem;color:#5b7693;">Loading…</div>' +
         '<div style="padding:10px 16px;border-top:1px solid #c5deef;background:#f8fbff;">' +
-          '<div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end;">' +
+          '<div style="display:grid;grid-template-columns:' + (justCreated ? '1fr 1fr auto' : '1fr auto') + ';gap:8px;align-items:end;">' +
             '<div><label style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:#2c4a68;display:block;margin-bottom:4px;">Amount</label>' +
               '<input type="number" id="calPayAmt" min="0.01" step="0.01" placeholder="e.g. 10000" style="width:100%;padding:8px 10px;border:1.5px solid #c5deef;border-radius:6px;font-family:inherit;font-size:.86rem;"></div>' +
-            '<div><label style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:#2c4a68;display:block;margin-bottom:4px;">Method</label>' +
-              '<select id="calPayMethod" style="width:100%;padding:8px 10px;border:1.5px solid #c5deef;border-radius:6px;font-family:inherit;font-size:.86rem;">' +
-                '<option value="">—</option><option value="cash">Cash</option><option value="gcash">GCash</option>' +
-                '<option value="bank_transfer">Bank Transfer</option><option value="card">Card</option>' +
-              '</select></div>' +
+            methodColHtml +
             '<button type="button" id="calPayBtn" style="padding:8px 14px;background:#16a34a;color:#fff;border:none;border-radius:6px;font-family:inherit;font-size:.82rem;font-weight:600;cursor:pointer;white-space:nowrap;">+ Add</button>' +
           '</div>' +
           '<input type="text" id="calPayRemarks" placeholder="Remarks / ref no. (optional)" style="width:100%;margin-top:8px;padding:8px 10px;border:1.5px solid #c5deef;border-radius:6px;font-family:inherit;font-size:.84rem;box-sizing:border-box;">' +
@@ -407,7 +414,7 @@
     wireBalance();
     wireDateCalculations();
     wireFormSubmit(isEdit, resv.id);
-    if (isEdit && resv.id) wireCalPayPanel(resv.id);
+    if (isEdit && resv.id) wireCalPayPanel(resv.id, justCreated);
 
     document.getElementById('resvCancelBtn').addEventListener('click', closeModal);
     if (isEdit && cfg.canDelete) {
@@ -569,7 +576,22 @@
               // right after booking — or a follow-up payment right after an
               // edit — without reopening. The modal now only closes when
               // Cancel/X is clicked.
-              renderForm(res.reservation, null, null, isEdit ? 'Changes saved.' : 'Reservation created — you can record a payment below.');
+              const wasCreate = !isEdit;
+              const reopenMsg = isEdit ? 'Changes saved.' : 'Reservation created — you can record a payment below.';
+              const targetRoomId = (res.reservation && res.reservation.room_id) || (roomSel && roomSel.value);
+              // Re-fetch the full row before reopening rather than trusting
+              // this POST's response directly — same reasoning as the
+              // right-click menu fix: don't let the form repopulate from a
+              // payload that might only carry the narrow live-sync fields.
+              fetch('/process_reservation.php?action=get_active_reservation&room_id=' + targetRoomId)
+                .then(function (r2) { return r2.json(); })
+                .then(function (data2) {
+                  const full = (data2 && data2.success && data2.reservation) ? data2.reservation : null;
+                  renderForm(Object.assign({}, res.reservation, full || {}), null, null, reopenMsg, wasCreate);
+                })
+                .catch(function () {
+                  renderForm(res.reservation, null, null, reopenMsg, wasCreate);
+                });
             } else {
               const resv = isEdit ? Object.assign({ id: id }, formToObject(fd)) : formToObject(fd);
               renderForm(resv, null, Object.assign({ _general: res.message }, res.errors || {}));
@@ -1285,6 +1307,33 @@
 
     console.log('[context] Handling action:', action, 'reservation:', r);
 
+    // Always refresh from the server before acting on this reservation.
+    // A bar that arrived here purely through the live-sync channel (the
+    // other page created/edited it, or another Calendar tab did, and it
+    // reached this page only via the WebSocket/poll broadcast) only ever
+    // carries the narrow live-sync field set: id, room_id, status, dates,
+    // guest name, totals. Acting on that cached object directly — as this
+    // used to — would submit blanks for every other field (contact info,
+    // valid ID, adults/children, deposit, notes...) on the very next save,
+    // silently wiping them server-side. This mirrors the fetch-before-act
+    // pattern the Layout page already uses for every room-card action.
+    fetch('/process_reservation.php?action=get_active_reservation&room_id=' + r.room_id)
+      .then(function (resp) { return resp.json(); })
+      .then(function (data) {
+        if (data && data.success && data.reservation) {
+          r = Object.assign({}, r, data.reservation);
+          contextReservation = r;
+        }
+        runAction();
+      })
+      .catch(function () {
+        // Couldn't reach the server — fall back to the cached copy rather
+        // than blocking the action entirely; better than nothing if it's
+        // a quick read-only action (profile/history/print).
+        runAction();
+      });
+
+    function runAction() {
     switch(action) {
       case 'edit':
         renderForm(r, null);
@@ -1611,6 +1660,7 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
 
       default:
         console.warn('[context] Unknown action:', action);
+    }
     }
   }
 
@@ -2479,7 +2529,7 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
   })();
 
   // ── Inline payment panel wiring ─────────────────────────────────────
-  function wireCalPayPanel(resvId) {
+  function wireCalPayPanel(resvId, justCreated) {
     function fmtMoney(n) {
       return '₱' + parseFloat(n||0).toLocaleString('en-PH', {minimumFractionDigits:2, maximumFractionDigits:2});
     }
@@ -2546,10 +2596,13 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
     btnEl.addEventListener('click', function() {
       errEl.style.display = 'none';
       var amount = parseFloat(amtEl.value);
-      var method = mthEl.value;
+      // mthEl only exists when this panel was rendered with justCreated —
+      // method is required in that case, but isn't asked for at all when
+      // logging a payment against an already-existing reservation.
+      var method = mthEl ? mthEl.value : '';
       var remarks= rmkEl ? rmkEl.value.trim() : '';
       if (!amount || amount <= 0) { errEl.textContent = 'Enter an amount.'; errEl.style.display='block'; return; }
-      if (!method)                { errEl.textContent = 'Select a method.'; errEl.style.display='block'; return; }
+      if (mthEl && !method)       { errEl.textContent = 'Select a method.'; errEl.style.display='block'; return; }
 
       btnEl.disabled = true;
       btnEl.textContent = '…';

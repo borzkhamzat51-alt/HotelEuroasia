@@ -395,7 +395,7 @@
   }
 
   // ─── Reservation form modal ────────────────────────────────────────
-  function renderReservationForm(resv, prefillRoomId, errors, successMsg) {
+  function renderReservationForm(resv, prefillRoomId, errors, successMsg, justCreated) {
     resv = resv || {};
     const isEdit = !!resv.id;
     const roomId = resv.room_id || prefillRoomId || (LAYOUT_ROOMS[0] && LAYOUT_ROOMS[0].id) || '';
@@ -467,18 +467,25 @@
     html += '<div class="bb-balance"><span>Remaining Balance</span><strong id="bbResvBalance">₱0.00</strong></div>';
     // Inline payment panel for edit mode
     if (isEdit) {
+      // The Method dropdown only appears in the panel that shows immediately
+      // after creating a brand-new reservation (justCreated). Reopening an
+      // already-existing reservation later to log a follow-up payment hides
+      // it — just Amount + Remarks — per the agreed behavior.
+      var methodColHtml = justCreated
+        ? '<div><label style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:var(--blue-900,#16324f);display:block;margin-bottom:4px;">Method</label>' +
+            '<select id="bbPayMethod" style="width:100%;padding:9px 11px;border:1.5px solid var(--sky-200,#c5deef);border-radius:6px;font-family:inherit;font-size:.86rem;">' +
+              '<option value="">—</option><option value="cash">Cash</option><option value="gcash">GCash</option>' +
+              '<option value="bank_transfer">Bank Transfer</option><option value="card">Card</option>' +
+            '</select></div>'
+        : '';
       html += '<div id="bbPayPanel" style="margin:14px 0 4px;border:1px solid var(--sky-200,#c5deef);border-radius:10px;overflow:hidden;">' +
         '<div style="background:var(--sky-50,#eef5fc);padding:9px 16px;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--blue-500,#3b7dd8);border-bottom:1px solid var(--sky-200,#c5deef);">Payment History</div>' +
         '<div id="bbPayList" style="padding:12px 16px;font-size:.84rem;color:var(--ink-500,#5b7693);">Loading…</div>' +
         '<div style="padding:10px 16px;border-top:1px solid var(--sky-200,#c5deef);background:#f8fbff;">' +
-          '<div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end;">' +
+          '<div style="display:grid;grid-template-columns:' + (justCreated ? '1fr 1fr auto' : '1fr auto') + ';gap:8px;align-items:end;">' +
             '<div><label style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:var(--blue-900,#16324f);display:block;margin-bottom:4px;">Amount</label>' +
               '<input type="number" id="bbPayAmt" min="0.01" step="0.01" placeholder="e.g. 10000" style="width:100%;padding:9px 11px;border:1.5px solid var(--sky-200,#c5deef);border-radius:6px;font-family:inherit;font-size:.86rem;box-sizing:border-box;"></div>' +
-            '<div><label style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:var(--blue-900,#16324f);display:block;margin-bottom:4px;">Method</label>' +
-              '<select id="bbPayMethod" style="width:100%;padding:9px 11px;border:1.5px solid var(--sky-200,#c5deef);border-radius:6px;font-family:inherit;font-size:.86rem;">' +
-                '<option value="">—</option><option value="cash">Cash</option><option value="gcash">GCash</option>' +
-                '<option value="bank_transfer">Bank Transfer</option><option value="card">Card</option>' +
-              '</select></div>' +
+            methodColHtml +
             '<button type="button" id="bbPayBtn" class="bb-btn bb-btn--primary" style="padding:9px 14px;background:#16a34a;white-space:nowrap;">+ Add</button>' +
           '</div>' +
           '<input type="text" id="bbPayRemarks" placeholder="Remarks / ref no. (optional)" style="width:100%;margin-top:8px;padding:9px 11px;border:1.5px solid var(--sky-200,#c5deef);border-radius:6px;font-family:inherit;font-size:.84rem;box-sizing:border-box;">' +
@@ -582,7 +589,7 @@
       updateDurationAndPayment();
     }
     wireBbDateCalculations();
-    if (isEdit && resv.id) wireBbPayPanel(resv.id);
+    if (isEdit && resv.id) wireBbPayPanel(resv.id, justCreated);
 
     // ── Financial Summary for edit mode ─────────────────────────────────
     if (isEdit && resv.id) {
@@ -665,12 +672,21 @@
               // panel, so a deposit can be logged right after booking — or a
               // follow-up payment right after an edit — without reopening.
               // The modal now only closes when Cancel/X is clicked.
-              renderReservationForm(
-                Object.assign({}, saved, { status: resvStatus }),
-                saved.room_id || roomId,
-                null,
-                isEdit ? 'Changes saved.' : 'Reservation created — you can record a payment below.'
-              );
+              const wasCreate = !isEdit;
+              const reopenMsg = isEdit ? 'Changes saved.' : 'Reservation created — you can record a payment below.';
+              const targetRoomId = saved.room_id || roomId;
+              // Re-fetch the full row before reopening rather than trusting
+              // this POST's response directly — same reasoning as the
+              // Calendar right-click menu fix: don't let the form repopulate
+              // from a payload that might only carry the narrow live-sync
+              // field set instead of every column the form needs.
+              fetchActiveReservation(targetRoomId)
+                .then(function (full) {
+                  renderReservationForm(Object.assign({}, saved, full, { status: resvStatus }), targetRoomId, null, reopenMsg, wasCreate);
+                })
+                .catch(function () {
+                  renderReservationForm(Object.assign({}, saved, { status: resvStatus }), targetRoomId, null, reopenMsg, wasCreate);
+                });
             } else {
               const resvData = isEdit ? Object.assign({ id: resv.id }, formToObject(fd)) : formToObject(fd);
               renderReservationForm(resvData, roomId, Object.assign({ _general: res.message }, res.errors || {}));
@@ -1102,7 +1118,7 @@
   }
 
   // ── Inline payment panel wiring (layout form) ───────────────────────────
-  function wireBbPayPanel(resvId) {
+  function wireBbPayPanel(resvId, justCreated) {
     function fmtMoney(n) {
       return '₱' + parseFloat(n||0).toLocaleString('en-PH', {minimumFractionDigits:2, maximumFractionDigits:2});
     }
@@ -1167,10 +1183,13 @@
     btnEl.addEventListener('click', function() {
       errEl.style.display = 'none';
       var amount  = parseFloat(amtEl.value);
-      var method  = mthEl.value;
+      // mthEl only exists when this panel was rendered with justCreated —
+      // method is required in that case, but isn't asked for at all when
+      // logging a payment against an already-existing reservation.
+      var method  = mthEl ? mthEl.value : '';
       var remarks = rmkEl ? rmkEl.value.trim() : '';
       if (!amount || amount <= 0) { errEl.textContent='Enter an amount.'; errEl.style.display='block'; return; }
-      if (!method)                { errEl.textContent='Select a method.'; errEl.style.display='block'; return; }
+      if (mthEl && !method)       { errEl.textContent='Select a method.'; errEl.style.display='block'; return; }
 
       btnEl.disabled = true;
       btnEl.textContent = '…';
