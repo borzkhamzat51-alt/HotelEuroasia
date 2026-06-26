@@ -287,7 +287,7 @@
     return errors && errors[key] ? '<span class="form-error">' + errors[key] + '</span>' : '';
   }
 
-  function renderForm(resv, prefill, errors) {
+  function renderForm(resv, prefill, errors, successMsg) {
     resv = resv || {};
     prefill = prefill || {};
     const isEdit = !!resv.id;
@@ -298,6 +298,12 @@
     let html = '';
     html += '<h2 style="font-family:\'Playfair Display\',serif; margin-bottom:4px;">' + (isEdit ? 'Reservation Details' : 'New Reservation') + '</h2>';
     html += '<p style="color:var(--ink-500); font-size:0.85rem; margin-bottom:6px;">' + cfg.branchLabel + '</p>';
+    // Confirms the save that just happened (create or edit) and explains why
+    // the form re-opened instead of closing — the Payment History panel
+    // below lets staff log a payment immediately against what was just saved.
+    if (successMsg) {
+      html += '<p style="color:#1a7a46;background:#eafaf0;border:1px solid #b9ecd2;border-radius:8px;padding:8px 12px;font-size:.84rem;margin-bottom:10px;">✓ ' + successMsg + '</p>';
+    }
 
     html += '<form id="resvForm" class="resv-form" autocomplete="off">';
     if (isEdit) html += '<input type="hidden" name="id" value="' + resv.id + '">';
@@ -346,10 +352,33 @@
     html += field('Room Rate', 'room_rate', resv.room_rate || 0, 'number', errors);
     html += field('Security Deposit', 'security_deposit', resv.security_deposit || 0, 'number', errors);
     html += field('Total Amount', 'total_amount', resv.total_amount || 0, 'number', errors);
-    html += field('Amount Paid', 'amount_paid', resv.amount_paid || 0, 'number', errors);
-    html += '<div><label for="payment_method">Payment Method</label><select id="payment_method" name="payment_method"><option value="">— Select —</option>' + optionList(cfg.paymentLabels, resv.payment_method || '') + '</select></div>';
+    // amount_paid is kept as a hidden field so the server update path still works.
+    // The visible payment UI is the inline payment panel below.
+    html += '<input type="hidden" name="amount_paid" id="amount_paid" value="' + (resv.amount_paid || 0) + '">';
     html += '</div>';
     html += '<div class="resv-balance">Remaining Balance: <span id="resvBalance">₱0.00</span></div>';
+    // Inline payment panel — loads real payment records and lets staff record payments
+    // directly from this form so they appear in the folio immediately.
+    if (isEdit) {
+      html += '<div id="calPayPanel" style="margin:14px 0 4px;border:1px solid #c5deef;border-radius:10px;overflow:hidden;">' +
+        '<div style="background:#eef5fc;padding:9px 16px;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#3b7dd8;border-bottom:1px solid #c5deef;">Payment History</div>' +
+        '<div id="calPayList" style="padding:12px 16px;font-size:.84rem;color:#5b7693;">Loading…</div>' +
+        '<div style="padding:10px 16px;border-top:1px solid #c5deef;background:#f8fbff;">' +
+          '<div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end;">' +
+            '<div><label style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:#2c4a68;display:block;margin-bottom:4px;">Amount</label>' +
+              '<input type="number" id="calPayAmt" min="0.01" step="0.01" placeholder="e.g. 10000" style="width:100%;padding:8px 10px;border:1.5px solid #c5deef;border-radius:6px;font-family:inherit;font-size:.86rem;"></div>' +
+            '<div><label style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:#2c4a68;display:block;margin-bottom:4px;">Method</label>' +
+              '<select id="calPayMethod" style="width:100%;padding:8px 10px;border:1.5px solid #c5deef;border-radius:6px;font-family:inherit;font-size:.86rem;">' +
+                '<option value="">—</option><option value="cash">Cash</option><option value="gcash">GCash</option>' +
+                '<option value="bank_transfer">Bank Transfer</option><option value="card">Card</option>' +
+              '</select></div>' +
+            '<button type="button" id="calPayBtn" style="padding:8px 14px;background:#16a34a;color:#fff;border:none;border-radius:6px;font-family:inherit;font-size:.82rem;font-weight:600;cursor:pointer;white-space:nowrap;">+ Add</button>' +
+          '</div>' +
+          '<input type="text" id="calPayRemarks" placeholder="Remarks / ref no. (optional)" style="width:100%;margin-top:8px;padding:8px 10px;border:1.5px solid #c5deef;border-radius:6px;font-family:inherit;font-size:.84rem;box-sizing:border-box;">' +
+          '<p id="calPayErr" style="color:#b91c1c;font-size:.78rem;margin:6px 0 0;display:none;"></p>' +
+        '</div>' +
+      '</div>';
+    }
 
     html += '<h3>Additional Information</h3><div class="resv-grid">';
     html += '<div class="resv-grid--full"><label for="notes">Notes</label><textarea id="notes" name="notes" rows="2">' + (resv.notes || '') + '</textarea></div>';
@@ -378,6 +407,7 @@
     wireBalance();
     wireDateCalculations();
     wireFormSubmit(isEdit, resv.id);
+    if (isEdit && resv.id) wireCalPayPanel(resv.id);
 
     document.getElementById('resvCancelBtn').addEventListener('click', closeModal);
     if (isEdit && cfg.canDelete) {
@@ -532,7 +562,14 @@
           .then(function (res) {
             if (res.success) {
               handleReservationSaveSuccess(res);
-              closeModal();
+              // Re-render in place instead of closing. Once the saved
+              // reservation carries an id (true for both a brand-new create
+              // and an edit) this flips the form into edit mode and brings
+              // up the Payment History panel, so a deposit can be logged
+              // right after booking — or a follow-up payment right after an
+              // edit — without reopening. The modal now only closes when
+              // Cancel/X is clicked.
+              renderForm(res.reservation, null, null, isEdit ? 'Changes saved.' : 'Reservation created — you can record a payment below.');
             } else {
               const resv = isEdit ? Object.assign({ id: id }, formToObject(fd)) : formToObject(fd);
               renderForm(resv, null, Object.assign({ _general: res.message }, res.errors || {}));
@@ -2440,6 +2477,110 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
 
     window.resetLegendFilter = resetFilter;
   })();
+
+  // ── Inline payment panel wiring ─────────────────────────────────────
+  function wireCalPayPanel(resvId) {
+    function fmtMoney(n) {
+      return '₱' + parseFloat(n||0).toLocaleString('en-PH', {minimumFractionDigits:2, maximumFractionDigits:2});
+    }
+    const listEl = document.getElementById('calPayList');
+    const amtEl  = document.getElementById('calPayAmt');
+    const mthEl  = document.getElementById('calPayMethod');
+    const rmkEl  = document.getElementById('calPayRemarks');
+    const btnEl  = document.getElementById('calPayBtn');
+    const errEl  = document.getElementById('calPayErr');
+    if (!listEl || !btnEl) return;
+
+    const PAYMENT_LABELS_LOCAL = {cash:'Cash',gcash:'GCash',bank_transfer:'Bank Transfer',card:'Card'};
+
+    function loadPayments() {
+      fetch('/process_reservation.php?action=get_reservation_for_payment&id=' + resvId)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (!data.success) { listEl.textContent = 'Could not load payments.'; return; }
+          var payments = data.months || [];
+          var totalPaid = payments.reduce(function(s,p){ return s + parseFloat(p.amount||0); }, 0);
+          var totalDue  = parseFloat(document.querySelector('[name="total_amount"]')?.value || 0);
+          var balance   = totalDue - totalPaid;
+
+          // Update hidden amount_paid so the form submit stays in sync
+          var hiddenAmt = document.getElementById('amount_paid');
+          if (hiddenAmt) hiddenAmt.value = totalPaid.toFixed(2);
+
+          // Update balance display
+          var balEl = document.getElementById('resvBalance');
+          if (balEl) {
+            balEl.textContent = fmtMoney(balance);
+            balEl.style.color = balance > 0 ? '#b3433f' : '#1a7a46';
+          }
+
+          // Pre-fill amount field with outstanding balance
+          if (amtEl && !amtEl.dataset.userEdited) {
+            amtEl.value = balance > 0 ? balance.toFixed(2) : '';
+          }
+
+          if (payments.length === 0) {
+            listEl.innerHTML = '<div style="color:#8a9aa8;font-size:.82rem;padding:4px 0;">No payments recorded yet.</div>';
+            return;
+          }
+          listEl.innerHTML = payments.map(function(p) {
+            var pm = PAYMENT_LABELS_LOCAL[p.payment_method] || (p.payment_method || '—');
+            var dt = p.payment_date || (p.created_at ? p.created_at.split(' ')[0] : '—');
+            return '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid #eef3f9;">' +
+              '<span style="color:#5b7693;font-size:.8rem;">' + dt + ' &middot; ' + pm + (p.remarks ? ' &middot; ' + p.remarks : '') + '</span>' +
+              '<span style="font-weight:700;color:#1a7a46;">' + fmtMoney(p.amount) + '</span>' +
+              '</div>';
+          }).join('') +
+          '<div style="display:flex;justify-content:space-between;padding:7px 0 2px;font-weight:700;font-size:.84rem;">' +
+            '<span>Total Paid</span><span style="color:#1a7a46;">' + fmtMoney(totalPaid) + '</span>' +
+          '</div>';
+        })
+        .catch(function() { listEl.textContent = 'Could not load payments.'; });
+    }
+
+    loadPayments();
+
+    // Stop user edits from clearing the pre-fill
+    if (amtEl) amtEl.addEventListener('input', function() { this.dataset.userEdited = 'true'; });
+
+    btnEl.addEventListener('click', function() {
+      errEl.style.display = 'none';
+      var amount = parseFloat(amtEl.value);
+      var method = mthEl.value;
+      var remarks= rmkEl ? rmkEl.value.trim() : '';
+      if (!amount || amount <= 0) { errEl.textContent = 'Enter an amount.'; errEl.style.display='block'; return; }
+      if (!method)                { errEl.textContent = 'Select a method.'; errEl.style.display='block'; return; }
+
+      btnEl.disabled = true;
+      btnEl.textContent = '…';
+
+      var fd = new FormData();
+      fd.append('action',         'record_payment');
+      fd.append('reservation_id', resvId);
+      fd.append('amount',         amount);
+      fd.append('payment_date',   new Date().toISOString().split('T')[0]);
+      fd.append('payment_method', method);
+      fd.append('remarks',        remarks);
+
+      fetch('/process_reservation.php', { method:'POST', body: fd })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          btnEl.disabled    = false;
+          btnEl.textContent = '+ Add';
+          if (!data.success) { errEl.textContent = data.message || 'Error saving payment.'; errEl.style.display='block'; return; }
+          amtEl.value = '';
+          if (rmkEl) rmkEl.value = '';
+          amtEl.dataset.userEdited = '';
+          loadPayments();
+        })
+        .catch(function(err) {
+          btnEl.disabled    = false;
+          btnEl.textContent = '+ Add';
+          errEl.textContent = 'Network error.';
+          errEl.style.display = 'block';
+        });
+    });
+  }
 
   // ─── KICK OFF THE FIRST-PAINT LAYOUT PIPELINE ─────────────────────
   initCalendarLayout();

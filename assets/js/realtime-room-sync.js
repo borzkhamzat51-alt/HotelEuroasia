@@ -176,54 +176,33 @@
     card.dataset.status = statusInfo.status;
     card.dataset.statusKey = statusInfo.statusKey;
 
-    if (!isActive) {
-      // ── CHECKOUT / CANCEL: immediately wipe all guest & reservation data ──
-      // When status is checked_out or cancelled, isActive=false. We must clear
-      // every guest/reservation field from the card right now — do NOT use the
-      // old resv values (name, dates, rate) because those belong to the guest
-      // who just left. Leaving them in place is what caused the card to keep
-      // showing "Justin Miranda / Jun 26 – Jul 26" after checkout.
-      card.dataset.guestName      = '';
-      card.dataset.checkIn        = '';
-      card.dataset.checkOut       = '';
-      card.dataset.reservationId  = '';
-      card.dataset.price          = room.price_per_night || '';
-      card.dataset.cleaning       = room.cleaning_status || 'Pending';
-
-      const guestEl2 = card.querySelector('.rc-guest-name');
-      if (guestEl2) {
-        guestEl2.textContent = 'No Guest Assigned';
-        guestEl2.className   = 'rc-guest-name rc-guest-name--empty';
-        guestEl2.title       = '';
-      }
-      const datesEl2 = card.querySelector('.rc-dates');
-      if (datesEl2) datesEl2.textContent = statusInfo.label; // 'Vacant Dirty' or 'Vacant Clean'
-      const durationEl2 = card.querySelector('.rc-duration');
-      if (durationEl2) durationEl2.style.display = 'none';
-      const rateEl2 = card.querySelector('.rc-rate');
-      if (rateEl2) {
-        const fallbackRate = room.price_per_night || 0;
-        if (fallbackRate > 0) {
-          rateEl2.textContent = 'Rate: ₱' + Number(fallbackRate).toLocaleString() + '/month';
-          rateEl2.style.display = '';
-        } else {
-          rateEl2.style.display = 'none';
-        }
-      }
-      return;
+    // FIX: only carry guest/stay data over from resv while the reservation
+    // is actually active (reserved/checked_in). A checked_out or cancelled
+    // reservation still arrives here with the guest's name and dates intact
+    // (only its status field changed) — previously these fields were copied
+    // onto the card unconditionally, so a freshly checked-out room kept
+    // showing the departed guest's name, dates, rate and duration even
+    // though the card's status/colour had already flipped to vacant. When
+    // not active, clear back to the room's plain vacant-state values
+    // (mirrors window.updateRoomCard's no-reservation branch above).
+    if (isActive) {
+      card.dataset.guestName = resv.guest_full_name || '';
+      card.dataset.checkIn = resv.check_in || '';
+      card.dataset.checkOut = resv.check_out || '';
+      card.dataset.price = resv.room_rate || room.price_per_night || '';
+      card.dataset.reservationId = resv.id || '';
+    } else {
+      card.dataset.guestName = '';
+      card.dataset.checkIn = '';
+      card.dataset.checkOut = '';
+      card.dataset.price = room.price_per_night || '';
+      card.dataset.reservationId = '';
     }
-
-    // ── ACTIVE reservation (reserved / checked_in) ────────────────────────
-    card.dataset.guestName = resv.guest_full_name || '';
-    card.dataset.checkIn = resv.check_in || '';
-    card.dataset.checkOut = resv.check_out || '';
-    card.dataset.price = resv.room_rate || room.price_per_night || '';
-    card.dataset.reservationId = resv.id || '';
 
     // Update guest name
     const guestEl = card.querySelector('.rc-guest-name');
     if (guestEl) {
-      const name = resv.guest_full_name || '';
+      const name = isActive ? (resv.guest_full_name || '') : '';
       guestEl.textContent = name || 'No Guest Assigned';
       guestEl.className = name ? 'rc-guest-name' : 'rc-guest-name rc-guest-name--empty';
       guestEl.title = name;
@@ -232,7 +211,7 @@
     // Update dates
     const datesEl = card.querySelector('.rc-dates');
     if (datesEl) {
-      if (resv.check_in && resv.check_out) {
+      if (isActive && resv.check_in && resv.check_out) {
         const ci = new Date(resv.check_in + 'T00:00:00');
         const co = new Date(resv.check_out + 'T00:00:00');
         const fmt = { month: 'short', day: '2-digit' };
@@ -246,7 +225,7 @@
     // Update rate
     const rateEl = card.querySelector('.rc-rate');
     if (rateEl) {
-      const rate = resv.room_rate || room.price_per_night || 0;
+      const rate = isActive ? (resv.room_rate || room.price_per_night || 0) : (room.price_per_night || 0);
       if (rate > 0) {
         rateEl.textContent = 'Rate: ₱' + Number(rate).toLocaleString() + '/month';
         rateEl.style.display = '';
@@ -258,7 +237,7 @@
     // Update duration
     const durationEl = card.querySelector('.rc-duration');
     if (durationEl) {
-      if (resv.check_in && resv.check_out) {
+      if (isActive && resv.check_in && resv.check_out) {
         const start = new Date(resv.check_in + 'T00:00:00');
         const end = new Date(resv.check_out + 'T00:00:00');
         const diff = end - start;
@@ -416,7 +395,7 @@
   }
 
   // ─── Reservation form modal ────────────────────────────────────────
-  function renderReservationForm(resv, prefillRoomId, errors) {
+  function renderReservationForm(resv, prefillRoomId, errors, successMsg) {
     resv = resv || {};
     const isEdit = !!resv.id;
     const roomId = resv.room_id || prefillRoomId || (LAYOUT_ROOMS[0] && LAYOUT_ROOMS[0].id) || '';
@@ -431,6 +410,12 @@
     inner.className = 'bb-modal-card';
 
     let html = '<h2>' + (isEdit ? 'Reservation Details' : 'New Reservation') + '</h2>';
+    // Confirms the save that just happened (create or edit) and explains
+    // why the form re-opened instead of closing — the panel below it lets
+    // staff log a payment immediately against the just-saved reservation.
+    if (successMsg) {
+      html += '<p style="color:#1a7a46;background:#eafaf0;border:1px solid #b9ecd2;border-radius:8px;padding:8px 12px;font-size:.84rem;margin:6px 0 2px;">✓ ' + successMsg + '</p>';
+    }
     html += '<form id="bbResvForm" autocomplete="off">';
     if (isEdit) html += '<input type="hidden" name="id" value="' + resv.id + '">';
 
@@ -476,10 +461,31 @@
     html += field('Monthly Rate', 'room_rate', resv.room_rate || 0, 'number', errors);
     html += field('Security Deposit', 'security_deposit', resv.security_deposit || 0, 'number', errors);
     html += field('Total Amount', 'total_amount', resv.total_amount || 0, 'number', errors);
-    html += field('Amount Paid', 'amount_paid', resv.amount_paid || 0, 'number', errors);
-    html += '<div class="bb-field"><label for="payment_method">Payment Method</label><select id="payment_method" name="payment_method"><option value="">— Select —</option>' + optionList(PAYMENT_LABELS, resv.payment_method || '') + '</select></div>';
+    // Hidden field keeps server-side update in sync; real payment entry is the panel below
+    html += '<input type="hidden" name="amount_paid" id="bb_amount_paid" value="' + (resv.amount_paid || 0) + '">';
     html += '</div>';
     html += '<div class="bb-balance"><span>Remaining Balance</span><strong id="bbResvBalance">₱0.00</strong></div>';
+    // Inline payment panel for edit mode
+    if (isEdit) {
+      html += '<div id="bbPayPanel" style="margin:14px 0 4px;border:1px solid var(--sky-200,#c5deef);border-radius:10px;overflow:hidden;">' +
+        '<div style="background:var(--sky-50,#eef5fc);padding:9px 16px;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--blue-500,#3b7dd8);border-bottom:1px solid var(--sky-200,#c5deef);">Payment History</div>' +
+        '<div id="bbPayList" style="padding:12px 16px;font-size:.84rem;color:var(--ink-500,#5b7693);">Loading…</div>' +
+        '<div style="padding:10px 16px;border-top:1px solid var(--sky-200,#c5deef);background:#f8fbff;">' +
+          '<div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end;">' +
+            '<div><label style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:var(--blue-900,#16324f);display:block;margin-bottom:4px;">Amount</label>' +
+              '<input type="number" id="bbPayAmt" min="0.01" step="0.01" placeholder="e.g. 10000" style="width:100%;padding:9px 11px;border:1.5px solid var(--sky-200,#c5deef);border-radius:6px;font-family:inherit;font-size:.86rem;box-sizing:border-box;"></div>' +
+            '<div><label style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:var(--blue-900,#16324f);display:block;margin-bottom:4px;">Method</label>' +
+              '<select id="bbPayMethod" style="width:100%;padding:9px 11px;border:1.5px solid var(--sky-200,#c5deef);border-radius:6px;font-family:inherit;font-size:.86rem;">' +
+                '<option value="">—</option><option value="cash">Cash</option><option value="gcash">GCash</option>' +
+                '<option value="bank_transfer">Bank Transfer</option><option value="card">Card</option>' +
+              '</select></div>' +
+            '<button type="button" id="bbPayBtn" class="bb-btn bb-btn--primary" style="padding:9px 14px;background:#16a34a;white-space:nowrap;">+ Add</button>' +
+          '</div>' +
+          '<input type="text" id="bbPayRemarks" placeholder="Remarks / ref no. (optional)" style="width:100%;margin-top:8px;padding:9px 11px;border:1.5px solid var(--sky-200,#c5deef);border-radius:6px;font-family:inherit;font-size:.84rem;box-sizing:border-box;">' +
+          '<p id="bbPayErr" style="color:#b3433f;font-size:.78rem;margin:6px 0 0;display:none;"></p>' +
+        '</div>' +
+      '</div>';
+    }
 
     html += '<h3>Additional Information</h3><div class="bb-grid">';
     html += '<div class="bb-field bb-grid--full"><label for="notes">Notes</label><textarea id="notes" name="notes" rows="2">' + (resv.notes || '') + '</textarea></div>';
@@ -576,6 +582,7 @@
       updateDurationAndPayment();
     }
     wireBbDateCalculations();
+    if (isEdit && resv.id) wireBbPayPanel(resv.id);
 
     // ── Financial Summary for edit mode ─────────────────────────────────
     if (isEdit && resv.id) {
@@ -641,15 +648,29 @@
           .then(function (res) {
             if (res.success) {
               if (Array.isArray(res.rooms)) res.rooms.forEach(window.updateRoomCard);
-              const formData = formToObject(new FormData(form));
-              const resvStatus = formData.status || (isEdit ? (resv.status || 'reserved') : 'reserved');
-              window.updateRoomCardReservation(Object.assign({}, formData, {
-                room_id: formData.room_id || roomId,
+              // Prefer the server's saved reservation (has the real id on a
+              // fresh create, plus any server-computed fields) over the raw
+              // form values; fall back to the form only if it's ever absent.
+              const saved = res.reservation || Object.assign({}, formToObject(new FormData(form)), { room_id: roomId });
+              const resvStatus = saved.status || (isEdit ? (resv.status || 'reserved') : 'reserved');
+              window.updateRoomCardReservation(Object.assign({}, saved, {
+                room_id: saved.room_id || roomId,
                 status: resvStatus,
-                expected_payment_date: formData.expected_payment_date || formData.check_out || null,
+                expected_payment_date: saved.expected_payment_date || saved.check_out || null,
               }));
-              closeFormModal();
               if (window.triggerLayoutPoll) window.triggerLayoutPoll();
+              // Re-render in place instead of closing. Once `saved` carries an
+              // id (true for both a brand-new create and an edit) this flips
+              // the form into edit mode and brings up the Payment History
+              // panel, so a deposit can be logged right after booking — or a
+              // follow-up payment right after an edit — without reopening.
+              // The modal now only closes when Cancel/X is clicked.
+              renderReservationForm(
+                Object.assign({}, saved, { status: resvStatus }),
+                saved.room_id || roomId,
+                null,
+                isEdit ? 'Changes saved.' : 'Reservation created — you can record a payment below.'
+              );
             } else {
               const resvData = isEdit ? Object.assign({ id: resv.id }, formToObject(fd)) : formToObject(fd);
               renderReservationForm(resvData, roomId, Object.assign({ _general: res.message }, res.errors || {}));
@@ -758,28 +779,9 @@
     card.dataset.status = roomStatus;
     if (willBeDirty) card.dataset.cleaning = 'Pending';
 
-    const isNowVacant = (roomStatus === 'available');
-    if (isNowVacant) {
-      // Optimistically clear guest/reservation info so the card looks vacant
-      // immediately (before the server response arrives). If the server call
-      // fails, updateReservationStatusFor restores the old status via a second
-      // applyRoomCardStatus call, and the guest data stays in data-* attrs
-      // on the card for that restore — we only clear the visible DOM here.
-      card.dataset.guestName     = '';
-      card.dataset.checkIn       = '';
-      card.dataset.checkOut      = '';
-      card.dataset.reservationId = '';
-
-      const guestEl = card.querySelector('.rc-guest-name');
-      if (guestEl) {
-        guestEl.textContent = 'No Guest Assigned';
-        guestEl.className   = 'rc-guest-name rc-guest-name--empty';
-        guestEl.title       = '';
-      }
-      const datesEl = card.querySelector('.rc-dates');
-      if (datesEl) datesEl.textContent = willBeDirty ? 'Vacant Dirty' : 'Vacant Clean';
-      const durationEl = card.querySelector('.rc-duration');
-      if (durationEl) durationEl.style.display = 'none';
+    const datesEl = card.querySelector('.rc-dates');
+    if (datesEl && roomStatus === 'available') {
+      datesEl.textContent = willBeDirty ? 'Vacant Dirty' : 'Vacant Clean';
     }
   }
 
@@ -1096,6 +1098,108 @@
     }).catch(function (err) {
       console.error('[layout] Reservation fetch error:', err);
       alert('Could not load reservation data: ' + err.message);
+    });
+  }
+
+  // ── Inline payment panel wiring (layout form) ───────────────────────────
+  function wireBbPayPanel(resvId) {
+    function fmtMoney(n) {
+      return '₱' + parseFloat(n||0).toLocaleString('en-PH', {minimumFractionDigits:2, maximumFractionDigits:2});
+    }
+    var listEl = document.getElementById('bbPayList');
+    var amtEl  = document.getElementById('bbPayAmt');
+    var mthEl  = document.getElementById('bbPayMethod');
+    var rmkEl  = document.getElementById('bbPayRemarks');
+    var btnEl  = document.getElementById('bbPayBtn');
+    var errEl  = document.getElementById('bbPayErr');
+    if (!listEl || !btnEl) return;
+
+    var PM_LABELS = {cash:'Cash',gcash:'GCash',bank_transfer:'Bank Transfer',card:'Card'};
+
+    function loadPayments() {
+      fetch('/process_reservation.php?action=get_reservation_for_payment&id=' + resvId)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (!data.success) { listEl.textContent = 'Could not load payments.'; return; }
+          var payments = data.months || [];
+          var totalPaid = payments.reduce(function(s,p){ return s+parseFloat(p.amount||0); }, 0);
+          var totalDue  = parseFloat(document.querySelector('[name="total_amount"]')?.value || 0);
+          var balance   = totalDue - totalPaid;
+
+          // Keep hidden field in sync
+          var hiddenAmt = document.getElementById('bb_amount_paid');
+          if (hiddenAmt) hiddenAmt.value = totalPaid.toFixed(2);
+
+          // Update balance display
+          var balEl = document.getElementById('bbResvBalance');
+          if (balEl) {
+            balEl.textContent = fmtMoney(balance);
+            balEl.style.color = balance > 0 ? '#b3433f' : '#1a7a46';
+          }
+
+          // Pre-fill amount with outstanding
+          if (amtEl && !amtEl.dataset.userEdited) {
+            amtEl.value = balance > 0 ? balance.toFixed(2) : '';
+          }
+
+          if (payments.length === 0) {
+            listEl.innerHTML = '<div style="color:#8a9aa8;font-size:.82rem;padding:4px 0;">No payments recorded yet.</div>';
+            return;
+          }
+          listEl.innerHTML = payments.map(function(p) {
+            var pm = PM_LABELS[p.payment_method] || (p.payment_method || '—');
+            var dt = p.payment_date || (p.created_at ? p.created_at.split(' ')[0] : '—');
+            return '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--sky-100,#dceaf8);">' +
+              '<span style="color:var(--ink-500,#5b7693);font-size:.8rem;">' + dt + ' &middot; ' + pm + (p.remarks ? ' &middot; ' + p.remarks : '') + '</span>' +
+              '<span style="font-weight:700;color:#1a7a46;">' + fmtMoney(p.amount) + '</span>' +
+            '</div>';
+          }).join('') +
+          '<div style="display:flex;justify-content:space-between;padding:7px 0 2px;font-weight:700;font-size:.84rem;">' +
+            '<span>Total Paid</span><span style="color:#1a7a46;">' + fmtMoney(totalPaid) + '</span>' +
+          '</div>';
+        })
+        .catch(function() { listEl.textContent = 'Could not load payments.'; });
+    }
+
+    loadPayments();
+    if (amtEl) amtEl.addEventListener('input', function() { this.dataset.userEdited = 'true'; });
+
+    btnEl.addEventListener('click', function() {
+      errEl.style.display = 'none';
+      var amount  = parseFloat(amtEl.value);
+      var method  = mthEl.value;
+      var remarks = rmkEl ? rmkEl.value.trim() : '';
+      if (!amount || amount <= 0) { errEl.textContent='Enter an amount.'; errEl.style.display='block'; return; }
+      if (!method)                { errEl.textContent='Select a method.'; errEl.style.display='block'; return; }
+
+      btnEl.disabled = true;
+      btnEl.textContent = '…';
+
+      var fd = new FormData();
+      fd.append('action',         'record_payment');
+      fd.append('reservation_id', resvId);
+      fd.append('amount',         amount);
+      fd.append('payment_date',   new Date().toISOString().split('T')[0]);
+      fd.append('payment_method', method);
+      fd.append('remarks',        remarks);
+
+      fetch('/process_reservation.php', { method:'POST', body:fd })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          btnEl.disabled    = false;
+          btnEl.textContent = '+ Add';
+          if (!data.success) { errEl.textContent=data.message||'Error.'; errEl.style.display='block'; return; }
+          amtEl.value = '';
+          if (rmkEl) rmkEl.value = '';
+          amtEl.dataset.userEdited = '';
+          loadPayments();
+        })
+        .catch(function() {
+          btnEl.disabled    = false;
+          btnEl.textContent = '+ Add';
+          errEl.textContent = 'Network error.';
+          errEl.style.display = 'block';
+        });
     });
   }
 

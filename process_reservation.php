@@ -65,12 +65,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             $res['room_type']   = $room['room_type'];
             $res['branch']      = $room['branch'];
         }
+
+        // Fetch actual payment records from the payments table
+        $payments  = db_get_payment_months($id);
+        $totalPaid = (float)array_sum(array_column($payments, 'amount'));
+        $totalDue  = (float)($res['total_amount'] ?? 0);
+        $outstanding = round($totalDue - $totalPaid, 2);
+
+        // Keep reservations.amount_paid in sync with the payments table sum
+        if (abs((float)$res['amount_paid'] - $totalPaid) > 0.005) {
+            bb_db()->prepare('UPDATE reservations SET amount_paid = ? WHERE id = ?')
+                ->execute([$totalPaid, $id]);
+            $res['amount_paid'] = $totalPaid;
+        }
+
+        // Derive payment status from real numbers — no dependency on fin.php
+        $today = date('Y-m-d');
+        $isOverdue = (!empty($res['check_out']) && $res['check_out'] < $today
+                      && $res['status'] !== 'cancelled');
+        if ($outstanding <= 0) {
+            $paymentStatus = 'Fully Paid';
+        } elseif ($totalPaid > 0) {
+            $paymentStatus = $isOverdue ? 'Overdue' : 'Partially Paid';
+        } else {
+            $paymentStatus = $isOverdue ? 'Overdue' : 'Unpaid';
+        }
+
         respond([
-            'success'          => true,
-            'reservation'      => $res,
-            'months'           => db_get_payment_months($id),
-            'outstanding_balance' => db_get_outstanding_balance($id),
-            'payment_status'   => db_get_payment_status($id),
+            'success'             => true,
+            'reservation'         => $res,
+            'months'              => $payments,
+            'outstanding_balance' => $outstanding,
+            'payment_status'      => $paymentStatus,
         ]);
     }
 
@@ -92,16 +118,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $roomId = (int) ($_GET['room_id'] ?? 0);
         if (!$roomId) respond(['success' => false, 'message' => 'Room ID required.']);
 
+        // Step 1: find a reservation that is active RIGHT NOW (check_in <= today < check_out)
         $res = db_find_active_reservation_for_room($roomId);
 
-        // FIX: db_find_active_reservation_for_room only looks at TODAY.
-        // But the calendar checkout flow calls this right after a status change,
-        // so race conditions can cause a miss. Also fetch by reservation_id if provided.
+        // Step 2: if nothing active today, look for the nearest FUTURE reservation
+        // (check_in > today). This covers the "reserved" status cards where the
+        // guest hasn't arrived yet — editing those was failing with "No active reservation".
+        if (!$res) {
+            $stmt = bb_db()->prepare(
+                "SELECT * FROM reservations
+                 WHERE room_id = ?
+                   AND status IN ('reserved', 'checked_in')
+                   AND check_in > CURDATE()
+                 ORDER BY check_in ASC
+                 LIMIT 1"
+            );
+            $stmt->execute([$roomId]);
+            $res = $stmt->fetch() ?: null;
+        }
+
+        // Step 3: caller can also supply a specific reservation_id as a hint
+        // (used after status changes where timing might cause a miss on steps 1+2)
         if (!$res && isset($_GET['reservation_id'])) {
             $rid = (int) $_GET['reservation_id'];
             $candidate = db_find_reservation($rid);
-            // Accept it if it belongs to this room and isn't already cancelled/checked_out
-            if ($candidate && (int)$candidate['room_id'] === $roomId
+            if ($candidate
+                && (int)$candidate['room_id'] === $roomId
                 && !in_array($candidate['status'], ['cancelled', 'checked_out'], true)) {
                 $res = $candidate;
             }
@@ -203,6 +245,93 @@ try {
         ]);
     }
 
+    // --- Record Payment ---
+    if ($action === 'record_payment') {
+        $reservationId = (int)($_POST['reservation_id'] ?? 0);
+        if (!$reservationId) respond(['success' => false, 'message' => 'Reservation ID required.']);
+
+        $resv = db_find_reservation($reservationId);
+        if (!$resv) respond(['success' => false, 'message' => 'Reservation not found.']);
+
+        $amount = (float)($_POST['amount'] ?? 0);
+        $date   = trim($_POST['payment_date'] ?? '');
+        $method = trim($_POST['payment_method'] ?? '');
+        $remarks= trim($_POST['remarks'] ?? '');
+
+        if ($amount <= 0)  respond(['success' => false, 'message' => 'Amount must be greater than zero.']);
+        if (!$date)        respond(['success' => false, 'message' => 'Payment date is required.']);
+        if (!$method)      respond(['success' => false, 'message' => 'Payment method is required.']);
+        if (!in_array($method, ['cash','gcash','bank_transfer','card']))
+            respond(['success' => false, 'message' => 'Invalid payment method.']);
+
+        // Insert payment record
+        $paymentId = db_create_payment([
+            'reservation_id' => $reservationId,
+            'amount'         => $amount,
+            'payment_date'   => $date,
+            'payment_method' => $method,
+            'remarks'        => $remarks ?: null,
+            'created_by'     => $_SESSION['user_id'],
+        ]);
+
+        // Recalculate total paid from all payment records
+        $stmt = bb_db()->prepare('SELECT COALESCE(SUM(amount),0) FROM payments WHERE reservation_id = ?');
+        $stmt->execute([$reservationId]);
+        $newAmountPaid = (float)$stmt->fetchColumn();
+
+        // Update the reservation's amount_paid summary field
+        bb_db()->prepare('UPDATE reservations SET amount_paid = ?, updated_by = ? WHERE id = ?')
+            ->execute([$newAmountPaid, $_SESSION['user_id'], $reservationId]);
+
+        db_log_reservation_activity($reservationId, $_SESSION['user_id'], 'payment_recorded',
+            'Payment of ₱' . number_format($amount, 2) . ' via ' . $method .
+            ($remarks ? ' — ' . $remarks : ''));
+        db_audit_log('reservation.payment', 'reservation', $reservationId,
+            $resv['guest_full_name'], 'amount:' . $amount . ' method:' . $method);
+
+        respond([
+            'success'        => true,
+            'payment_id'     => $paymentId,
+            'new_amount_paid'=> $newAmountPaid,
+        ]);
+    }
+
+    // --- Delete Payment (admin only) ---
+    if ($action === 'delete_payment') {
+        if (!bb_is_admin()) {
+            http_response_code(403);
+            respond(['success' => false, 'message' => 'Only admins can delete payments.']);
+        }
+        $paymentId     = (int)($_POST['payment_id']     ?? 0);
+        $reservationId = (int)($_POST['reservation_id'] ?? 0);
+        if (!$paymentId)     respond(['success' => false, 'message' => 'Payment ID required.']);
+        if (!$reservationId) respond(['success' => false, 'message' => 'Reservation ID required.']);
+
+        $payment = db_find_payment($paymentId);
+        if (!$payment) respond(['success' => false, 'message' => 'Payment not found.']);
+        if ((int)$payment['reservation_id'] !== $reservationId)
+            respond(['success' => false, 'message' => 'Payment does not belong to this reservation.']);
+
+        db_delete_payment($paymentId);
+
+        // Recalculate total paid
+        $stmt = bb_db()->prepare('SELECT COALESCE(SUM(amount),0) FROM payments WHERE reservation_id = ?');
+        $stmt->execute([$reservationId]);
+        $newAmountPaid = (float)$stmt->fetchColumn();
+
+        bb_db()->prepare('UPDATE reservations SET amount_paid = ?, updated_by = ? WHERE id = ?')
+            ->execute([$newAmountPaid, $_SESSION['user_id'], $reservationId]);
+
+        db_log_reservation_activity($reservationId, $_SESSION['user_id'], 'payment_deleted',
+            'Payment #' . $paymentId . ' of ₱' . number_format((float)$payment['amount'], 2) . ' deleted');
+        db_audit_log('reservation.payment_delete', 'reservation', $reservationId, null, 'payment_id:' . $paymentId);
+
+        respond([
+            'success'         => true,
+            'new_amount_paid' => $newAmountPaid,
+        ]);
+    }
+
     // --- Create / Update ---
     if (!in_array($action, ['create', 'update'])) {
         respond(['success' => false, 'message' => 'Unknown action.']);
@@ -295,6 +424,20 @@ try {
         $newId = db_create_reservation($data);
         db_log_reservation_activity($newId, $_SESSION['user_id'], 'created', 'Created for ' . $data['guest_full_name']);
         db_audit_log('reservation.create', 'reservation', $newId, $data['guest_full_name'], 'check_in:' . $data['check_in'] . ' check_out:' . $data['check_out'] . ' status:' . $data['status']);
+
+        // If an initial payment was entered in the form, record it in the payments table
+        // so it appears in the folio — not just as a summary field.
+        if ($data['amount_paid'] > 0) {
+            db_create_payment([
+                'reservation_id' => $newId,
+                'amount'         => $data['amount_paid'],
+                'payment_date'   => $data['check_in'], // use check-in as the payment date
+                'payment_method' => $data['payment_method'] ?: 'cash',
+                'remarks'        => 'Initial payment recorded at reservation creation',
+                'created_by'     => $_SESSION['user_id'],
+            ]);
+        }
+
         syncRoomStatusFromReservation($data['room_id']);
         $created = enrichWithRoomNumber(db_find_reservation($newId));
         respond([
@@ -306,12 +449,38 @@ try {
     }
 
     // --- Update ---
-    $oldStatus = $existing['status'];
-    $oldRoomId = $existing['room_id'];
+    $oldStatus    = $existing['status'];
+    $oldRoomId    = $existing['room_id'];
+    $oldAmountPaid = (float)($existing['amount_paid'] ?? 0);
+    $newAmountPaid = (float)$data['amount_paid'];
 
     db_update_reservation($reservationId, $data);
     db_log_reservation_activity($reservationId, $_SESSION['user_id'], 'edited', 'Updated for ' . $data['guest_full_name']);
     db_audit_log('reservation.update', 'reservation', $reservationId, $data['guest_full_name'], 'status:' . $data['status'] . ' check_in:' . $data['check_in'] . ' check_out:' . $data['check_out']);
+
+    // Sync payments table: if amount_paid increased in the form, record the difference
+    // as a new payment so it shows in the folio.
+    // We compare against what is already tracked in the payments table (not just the
+    // old summary field) to avoid double-counting.
+    $stmt = bb_db()->prepare('SELECT COALESCE(SUM(amount),0) FROM payments WHERE reservation_id = ?');
+    $stmt->execute([$reservationId]);
+    $alreadyTracked = (float)$stmt->fetchColumn();
+
+    if ($newAmountPaid > $alreadyTracked + 0.005) {
+        // There is money in amount_paid not yet recorded as a payment row — add it.
+        $diff = $newAmountPaid - $alreadyTracked;
+        db_create_payment([
+            'reservation_id' => $reservationId,
+            'amount'         => round($diff, 2),
+            'payment_date'   => date('Y-m-d'),
+            'payment_method' => $data['payment_method'] ?: 'cash',
+            'remarks'        => 'Payment recorded via reservation form',
+            'created_by'     => $_SESSION['user_id'],
+        ]);
+        // Keep amount_paid in sync with actual payments sum
+        $data['amount_paid'] = $newAmountPaid;
+    }
+
     syncRoomStatusFromReservation($data['room_id'], $oldStatus, $data['status']);
     if ($oldRoomId != $data['room_id']) syncRoomStatusFromReservation($oldRoomId);
 
