@@ -166,6 +166,29 @@ $legendItems = [
   flex-direction: column;
   min-height: calc(100vh - 120px);
 }
+
+/* ── Slot hover ───────────────────────────────────────────────────── */
+.cal-day-slot {
+  transition: background 60ms ease;
+}
+.cal-day-slot--hover {
+  background: rgba(59, 125, 216, 0.22) !important;
+  outline: 2px solid rgba(59, 125, 216, 0.5);
+  outline-offset: -2px;
+  border-radius: 2px;
+  z-index: 1;
+  position: relative;
+}
+
+/* ── Slot selected (click) ────────────────────────────────────────── */
+.cal-day-slot--selected {
+  background: rgba(59, 125, 216, 0.32) !important;
+  outline: 2px solid #3b7dd8;
+  outline-offset: -2px;
+  border-radius: 2px;
+  z-index: 2;
+  position: relative;
+}
 </style>
 <script>
 /* Apply the calendar zoom factor BEFORE first paint so the grid is laid out at
@@ -186,21 +209,19 @@ document.documentElement.style.setProperty('--scale', '1.3');
 </header>
 <?php include __DIR__ . '/includes/navbar.php'; ?>
 <main class="cal-page-main">
-    <div class="cal-toolbar" style="padding: clamp(14px,2vw,28px) clamp(16px,3vw,32px) 0;">
+    <div class="cal-toolbar" style="padding: clamp(14px,2vw,28px) clamp(16px,3vw,32px) 0; display:flex; align-items:center; justify-content:center; gap:16px; flex-wrap:wrap;">
         <div class="cal-branch-tabs">
             <?php foreach ($lodgingBranches as $key => $label): ?>
                 <a href="?branch=<?= $key ?>&month=<?= $monthDate->format('Y-m') ?>" class="<?= $key === $branch ? 'is-active' : '' ?>"><?= htmlspecialchars($label) ?></a>
             <?php endforeach; ?>
         </div>
-        <div class="cal-month-nav">
+        <div class="cal-month-nav" style="justify-content:center;">
             <a href="?branch=<?= $branch ?>&month=<?= $prevMonth ?>" class="cal-nav-btn" aria-label="Previous month">&#8249;</a>
             <a href="?branch=<?= $branch ?>&month=<?= $thisMonth ?>" class="cal-today-btn">Today</a>
             <span class="cal-month-label"><?= $monthLabel ?></span>
             <a href="?branch=<?= $branch ?>&month=<?= $nextMonth ?>" class="cal-nav-btn" aria-label="Next month">&#8250;</a>
         </div>
-        <?php if ($isLodging && !empty($rooms)): ?>
-            <button type="button" class="btn btn--primary" id="newReservationBtn" style="width:auto; padding:10px 20px;">+ New Reservation</button>
-        <?php endif; ?>
+        <?php if ($isLodging && !empty($rooms)): ?><?php endif; ?>
     </div>
 
     <?php if ($isLodging && !empty($rooms)): ?>
@@ -410,6 +431,32 @@ setTimeout(function () {
   var g = document.querySelector('.cal-grid-area');
   if (g) g.classList.remove('cal-grid-area--initializing');
 }, 2500);
+</script>
+<script>
+// ── Calendar grid hover ───────────────────────────────────────────
+(function wireCalHover() {
+  var _hovered = null;
+
+  function clear() {
+    if (_hovered) {
+      _hovered.classList.remove('cal-day-slot--hover');
+      _hovered = null;
+    }
+  }
+
+  document.addEventListener('mousemove', function(e) {
+    var slot = e.target.closest('.cal-day-slot');
+    if (slot === _hovered) return;
+    clear();
+    if (slot && !slot.classList.contains('cal-day-slot--selected')) {
+      slot.classList.add('cal-day-slot--hover');
+      _hovered = slot;
+    }
+  }, { passive: true });
+
+  document.addEventListener('mouseleave', clear, { passive: true });
+  document.addEventListener('scroll',    clear, { passive: true, capture: true });
+})();
 </script>
 </body>
 </html>

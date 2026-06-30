@@ -5,7 +5,7 @@ require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../db.php';
 bb_require_permission('rooms');
 
-$branch = $_GET['branch'] ?? 'mtv';
+$branch = $_GET['branch'] ?? '';
 if ($branch !== 'mtv') { include __DIR__ . '/layout_placeholder.php'; exit; }
 
 $rooms = db_list_rooms_by_branch('mtv');
@@ -317,6 +317,17 @@ window.BB_LAYOUT_ROOMS = <?= json_encode(array_map(fn($r) => [
     'room_status'     => $r['room_status'],
     'cleaning_status' => $r['cleaning_status'],
 ], $rooms)) ?>;
+
+<?php if (empty($_SESSION['csrf_token'])) { $_SESSION['csrf_token'] = bin2hex(random_bytes(32)); } ?>
+window.BB_CALENDAR = {
+    branch: <?= json_encode($branch) ?>,
+    branchLabel: <?= json_encode(['mtv'=>'MTV3','annex'=>'BB Apartelle','dormitel'=>'ELTI Dormitel'][$branch] ?? $branch) ?>,
+    rooms: window.BB_LAYOUT_ROOMS,
+    statusLabels: {"pending":"Pending","reserved":"Reserved","checked_in":"Checked In","checked_out":"Checked Out","cancelled":"Cancelled"},
+    paymentLabels: {"cash":"Cash","gcash":"GCash","bank_transfer":"Bank Transfer","card":"Card"},
+    canDelete: <?= bb_is_admin() ? 'true' : 'false' ?>,
+    csrfToken: <?= json_encode($_SESSION['csrf_token']) ?>
+};
 </script>
 <script src="../assets/js/dashboard.js" defer></script>
 <script src="../assets/js/layout.js" defer></script>

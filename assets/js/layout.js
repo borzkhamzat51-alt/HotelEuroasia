@@ -15,21 +15,22 @@
       return y + '-' + m + '-' + day;
     }
 
-    // Helper: format duration in months and days (same as PHP)
+    // Helper: format duration accurately using calendar arithmetic (matches PHP)
     function formatDuration(checkIn, checkOut) {
       var start = new Date(checkIn + 'T00:00:00');
       var end   = new Date(checkOut + 'T00:00:00');
-      var diff  = end - start;
-      if (diff <= 0) return '0 Days';
-      var totalDays = diff / 86400000;
-      // Approximate months: 30.44 days average
-      var months = Math.floor(totalDays / 30.44);
-      var days = Math.round(totalDays - months * 30.44);
-      if (months === 0 && days === 0) return '0 Days';
-      var parts = [];
+      var ms    = end - start;
+      if (ms <= 0) return '0 Days';
+      var y = end.getFullYear() - start.getFullYear();
+      var m = end.getMonth()    - start.getMonth();
+      var d = end.getDate()     - start.getDate();
+      if (d < 0) { m--; var prev = new Date(end.getFullYear(), end.getMonth(), 0); d += prev.getDate(); }
+      if (m < 0) { y--; m += 12; }
+      var months = y * 12 + m;
+      var parts  = [];
       if (months > 0) parts.push(months + ' Month' + (months > 1 ? 's' : ''));
-      if (days > 0)   parts.push(days + ' Day' + (days > 1 ? 's' : ''));
-      return parts.join(' ');
+      if (d > 0)      parts.push(d + ' Day'   + (d > 1 ? 's' : ''));
+      return parts.join(' ') || '0 Days';
     }
 
     // ─── Modal Elements ──────────────────────────────────────────────
@@ -89,6 +90,58 @@
         if (e.key === 'Escape' && !overlay.hidden) closeModal();
       });
 
+      // ─── VALID ID OPTIONS ─────────────────────────────────────────────
+      const VALID_ID_OPTIONS = [
+        'National ID (PhilSys)',
+        'Passport',
+        "Driver's License",
+        'Barangay ID',
+        'Postal ID',
+        'UMID',
+        'SSS ID',
+        'PRC ID',
+        'Senior Citizen ID',
+        'Student ID',
+        "Voter's ID",
+        'Company ID',
+        'Other Government ID',
+        'No ID',
+      ];
+
+      function validIdDropdown(name, selected, errors) {
+        const id = name;
+        const opts = VALID_ID_OPTIONS.map(function(v) {
+          const sel = (v === selected) ? ' selected' : '';
+          return '<option value="' + v.replace(/"/g, '&quot;') + '"' + sel + '>' + v + '</option>';
+        }).join('');
+        return '<div><label for="' + id + '">Valid ID Type</label>' +
+          '<select id="' + id + '" name="' + name + '">' +
+            '<option value="">— Select —</option>' + opts +
+          '</select>' +
+          (errors && errors[name] ? '<span class="form-error">' + errors[name] + '</span>' : '') +
+          '</div>';
+      }
+
+      // ─── MANUAL STATUS OPTIONS (Pending, Reserved, Checked In only) ─────
+      const MANUAL_STATUS_OPTIONS = {
+        pending:    'Pending',
+        reserved:   'Reserved',
+        checked_in: 'Checked In',
+      };
+      const SYSTEM_ONLY_STATUS = { cancelled: 'Cancelled', checked_out: 'Checked Out' };
+
+      function manualStatusOptions(selectedStatus) {
+        let html = '';
+        Object.keys(MANUAL_STATUS_OPTIONS).forEach(function(key) {
+          const sel = key === selectedStatus ? ' selected' : '';
+          html += '<option value="' + key + '"' + sel + '>' + MANUAL_STATUS_OPTIONS[key] + '</option>';
+        });
+        if (SYSTEM_ONLY_STATUS[selectedStatus]) {
+          html += '<option value="' + selectedStatus + '" selected disabled>' + SYSTEM_ONLY_STATUS[selectedStatus] + ' (system-assigned)</option>';
+        }
+        return html;
+      }
+
       // ─── Form rendering ─────────────────────────────────────────────
       function optionList(map, selected) {
         return Object.keys(map).map(function (key) {
@@ -111,32 +164,43 @@
 
         let html = '';
         html += '<h2 style="font-family:\'Playfair Display\',serif; margin-bottom:4px;">' + (isEdit ? 'Reservation Details' : 'New Reservation') + '</h2>';
-        html += '<p style="color:var(--ink-500); font-size:0.85rem; margin-bottom:6px;">' + cfg.branchLabel + '</p>';
+        html += '<p style="color:var(--ink-500); font-size:0.85rem; margin-bottom:6px;">' + (cfg.branchLabel || '') + '</p>';
 
+        if (!isEdit) {
+          html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:18px;" id="bbSteps">' +
+            '<div style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;" id="bbStep1">' +
+              '<span style="width:22px;height:22px;border-radius:50%;background:#3b7dd8;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;">1</span>' +
+              '<span style="color:#16324f;">Reservation details</span>' +
+            '</div>' +
+            '<div style="flex:1;height:1px;background:#c5deef;"></div>' +
+            '<div style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;" id="bbStep2">' +
+              '<span id="bbStep2Dot" style="width:22px;height:22px;border-radius:50%;background:#e0eaf4;color:#8dafc8;border:1px solid #c5deef;display:flex;align-items:center;justify-content:center;font-size:11px;">2</span>' +
+              '<span id="bbStep2Lbl" style="color:#8dafc8;">Payment</span>' +
+            '</div>' +
+          '</div>';
+        }
+
+        html += '<div id="bbFormStep1">';
         html += '<form id="resvForm" class="resv-form" autocomplete="off">';
         if (isEdit) html += '<input type="hidden" name="id" value="' + resv.id + '">';
+        html += '<input type="hidden" name="room_id" value="' + roomId + '">';
 
         html += '<h3>Guest Information</h3><div class="resv-grid">';
         html += field('Full Name', 'guest_full_name', resv.guest_full_name, 'text', errors, true);
         html += field('Contact Number', 'contact_number', resv.contact_number, 'text', errors);
         html += field('Email Address', 'email', resv.email, 'email', errors);
         html += field('Address', 'address', resv.address, 'text', errors);
-        html += field('Valid ID Type', 'valid_id_type', resv.valid_id_type, 'text', errors);
+        html += validIdDropdown('valid_id_type', resv.valid_id_type, errors);
         html += field('Valid ID Number', 'valid_id_number', resv.valid_id_number, 'text', errors);
         html += '</div>';
 
         html += '<h3>Booking Information</h3><div class="resv-grid">';
-        // Room selector removed – hidden input only
-        html += '<input type="hidden" name="room_id" value="' + roomId + '">';
-        html += '<div><label for="status">Booking Status</label><select id="status" name="status">' + optionList(cfg.statusLabels, resv.status || 'reserved') + '</select></div>';
+        html += '<div><label for="status">Booking Status</label><select id="status" name="status">' + manualStatusOptions(resv.status || 'reserved') + '</select></div>';
         html += field('Check-in Date', 'check_in', checkIn, 'date', errors, true);
         html += field('Check-out Date', 'check_out', checkOut, 'date', errors, true);
         html += field('Number of Adults', 'num_adults', resv.num_adults || 1, 'number', errors);
         html += field('Number of Children', 'num_children', resv.num_children || 0, 'number', errors);
-        // ─── Quick Stay Duration (identical to Calendar) ──────────────
-        html += '<div class="bb-quick-duration">';
-        html += '<label>Quick Stay Duration</label>';
-        html += '<div class="bb-duration-buttons">';
+        html += '<div class="bb-quick-duration"><label>Quick Stay Duration</label><div class="bb-duration-buttons">';
         html += '<button type="button" data-months="1">1 Month</button>';
         html += '<button type="button" data-months="2">2 Months</button>';
         html += '<button type="button" data-months="3">3 Months</button>';
@@ -146,24 +210,18 @@
         html += '</div></div>';
         html += '</div>';
 
-        // ---- Duration and Expected Payment Date ----
-        html += '<div class="resv-duration">';
-        html += '<label>Stay Duration</label>';
-        html += '<div class="resv-duration__display" id="stayDurationDisplay">0 Days / 0 Nights</div>';
-        html += '</div>';
+        html += '<div class="resv-duration"><label>Stay Duration</label>';
+        html += '<div class="resv-duration__display" id="stayDurationDisplay">0 Days</div></div>';
+        html += '<input type="hidden" name="expected_payment_date" id="expected_payment_date" value="' + (resv.expected_payment_date || '') + '">';
 
-        html += '<div class="field">';
-        html += '<label for="expected_payment_date">Expected Payment Date</label>';
-        html += '<input type="date" id="expected_payment_date" name="expected_payment_date" value="' + (resv.expected_payment_date || '') + '">';
-        html += '</div>';
-
-        html += '<h3>Payment Information</h3><div class="resv-grid">';
-        // Change label from "Room Rate" to "Monthly Rate"
-        html += field('Monthly Rate', 'room_rate', resv.room_rate || 0, 'number', errors);
-        html += field('Security Deposit', 'security_deposit', resv.security_deposit || 0, 'number', errors);
-        html += field('Total Amount', 'total_amount', resv.total_amount || 0, 'number', errors);
-        html += field('Amount Paid', 'amount_paid', resv.amount_paid || 0, 'number', errors);
-        html += '<div><label for="payment_method">Payment Method</label><select id="payment_method" name="payment_method"><option value="">— Select —</option>' + optionList(cfg.paymentLabels, resv.payment_method || '') + '</select></div>';
+        html += '<h3>Payment Rates</h3><div class="resv-grid">';
+        html += field('Monthly Rent (₱/month)', 'room_rate', resv.room_rate || 0, 'number', errors);
+        html += field('Reservation Fee (₱)', 'reservation_fee', resv.reservation_fee || 0, 'number', errors);
+        html += field('Garbage Fee (₱)', 'garbage_fee', resv.garbage_fee || 0, 'number', errors);
+        html += field('Security Deposit (₱)', 'security_deposit', resv.security_deposit || 0, 'number', errors);
+        html += field('Utilities Deposit (₱)', 'utilities_deposit', resv.utilities_deposit || 0, 'number', errors);
+        html += field('Total Amount (₱)', 'total_amount', resv.total_amount || 0, 'number', errors);
+        html += '<input type="hidden" name="amount_paid" id="amount_paid" value="' + (resv.amount_paid || 0) + '">';
         html += '</div>';
         html += '<div class="resv-balance">Remaining Balance: <span id="resvBalance">₱0.00</span></div>';
 
@@ -177,16 +235,49 @@
         }
 
         html += '<div class="resv-actions">';
-        html += '<button type="submit" class="btn btn--primary">' + (isEdit ? 'Save Changes' : 'Create Reservation') + '</button>';
-        if (isEdit && cfg.canDelete) {
-          html += '<button type="button" class="btn btn--danger" id="resvDeleteBtn">Delete</button>';
+        if (!isEdit) {
+          html += '<button type="submit" class="btn btn--primary">Next →</button>';
+        } else {
+          html += '<button type="submit" class="btn btn--primary">Save Changes</button>';
+          if (cfg.canDelete) {
+            html += '<button type="button" class="btn btn--danger" id="resvDeleteBtn">Delete</button>';
+          }
         }
         html += '<button type="button" class="btn btn--secondary" id="resvCancelBtn">Cancel</button>';
         html += '</div>';
         html += '</form>';
-
         if (isEdit) {
           html += '<details class="resv-log"><summary>Activity Log</summary><ul id="resvLogList"><li>Loading…</li></ul></details>';
+        }
+        html += '</div>';
+
+        if (!isEdit) {
+          html += '<div id="bbFormStep2" style="display:none;">';
+          html += '<div id="bbResvSummaryBar" style="background:#eef5fc;border:1px solid #c5deef;border-radius:8px;padding:9px 14px;font-size:.84rem;color:#2c4a68;margin-bottom:14px;"></div>';
+          html += '<div style="background:#f8fbff;border:1px solid #c5deef;border-radius:8px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">' +
+            '<span style="font-size:.84rem;color:#5b7693;">Remaining balance</span>' +
+            '<span id="bbPayBalance" style="font-size:1rem;font-weight:700;color:#b91c1c;">₱0.00</span>' +
+          '</div>';
+          html += '<div style="border:1px solid #c5deef;border-radius:8px;overflow:hidden;margin-bottom:14px;">' +
+            '<div style="background:#eef5fc;padding:8px 14px;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#3b7dd8;border-bottom:1px solid #c5deef;">Payment History</div>' +
+            '<div id="bbPayList" style="padding:12px 14px;font-size:.84rem;color:#5b7693;">No payments recorded yet.</div>' +
+          '</div>';
+          html += '<div style="border:1px solid #c5deef;border-radius:8px;overflow:hidden;">' +
+            '<div style="background:#f8fbff;padding:8px 14px;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#5b7693;border-bottom:1px solid #c5deef;">Amount</div>' +
+            '<div style="padding:12px 14px;display:flex;flex-direction:column;gap:8px;">' +
+              '<div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end;">' +
+                '<input type="number" id="bbPayAmt" min="0.01" step="0.01" placeholder="e.g. 10000" style="width:100%;padding:8px 10px;border:1.5px solid #c5deef;border-radius:6px;font-family:inherit;font-size:.86rem;">' +
+                '<button type="button" id="bbPayAddBtn" style="padding:8px 16px;background:#16a34a;color:#fff;border:none;border-radius:6px;font-family:inherit;font-size:.84rem;font-weight:600;cursor:pointer;white-space:nowrap;">+ Add</button>' +
+              '</div>' +
+              '<input type="text" id="bbPayRemarks" placeholder="Remarks / ref no. (optional)" style="width:100%;padding:8px 10px;border:1.5px solid #c5deef;border-radius:6px;font-family:inherit;font-size:.84rem;box-sizing:border-box;">' +
+              '<p id="bbPayErr" style="color:#b91c1c;font-size:.78rem;margin:0;display:none;"></p>' +
+            '</div>' +
+          '</div>';
+          html += '<div class="resv-actions" style="margin-top:14px;">' +
+            '<button type="button" class="btn btn--primary" id="bbPayDoneBtn">Done</button>' +
+            '<button type="button" class="btn btn--secondary" id="bbPayBackBtn">← Back</button>' +
+          '</div>';
+          html += '</div>';
         }
 
         content.innerHTML = html;
@@ -204,108 +295,150 @@
         openModal();
       }
 
-      function field(label, name, value, type, errors, required) {
-        value = value === undefined || value === null ? '' : value;
-        const id = name;
-        return '<div><label for="' + id + '">' + label + (required ? ' *' : '') + '</label>' +
-          '<input type="' + type + '" id="' + id + '" name="' + name + '" value="' + String(value).replace(/"/g, '&quot;') + '"' + (required ? ' required' : '') + ' autocomplete="off">' +
-          fieldError(errors, name) + '</div>';
-      }
-
       function wireBalance() {
         const form = document.getElementById('resvForm');
         const balanceEl = document.getElementById('resvBalance');
+
+        function calcMonths(inVal, outVal) {
+          if (!inVal || !outVal) return 0;
+          var start = new Date(inVal + 'T00:00:00');
+          var end   = new Date(outVal + 'T00:00:00');
+          if (end <= start) return 0;
+          var months = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
+          var dayStart = start.getDate(), dayEnd = end.getDate();
+          if (dayEnd > dayStart) {
+            months += (dayEnd - dayStart) / new Date(end.getFullYear(), end.getMonth(), 0).getDate();
+          } else if (dayEnd < dayStart) {
+            months -= (dayStart - dayEnd) / new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate();
+          }
+          return Math.max(0, months);
+        }
+
+        function autoCalcTotal() {
+          var rate       = parseFloat(form.room_rate         ? form.room_rate.value         : 0) || 0;
+          var resvFee    = parseFloat(form.reservation_fee   ? form.reservation_fee.value   : 0) || 0;
+          var garbageFee = parseFloat(form.garbage_fee       ? form.garbage_fee.value       : 0) || 0;
+          var deposit    = parseFloat(form.security_deposit  ? form.security_deposit.value  : 0) || 0;
+          var utilsDep   = parseFloat(form.utilities_deposit ? form.utilities_deposit.value : 0) || 0;
+          var ciEl       = form.querySelector('[name="check_in"]');
+          var coEl       = form.querySelector('[name="check_out"]');
+          var months     = (ciEl && coEl) ? calcMonths(ciEl.value, coEl.value) : 0;
+          var total      = (rate * months) + resvFee + garbageFee + deposit + utilsDep;
+          if (form.total_amount) {
+            form.total_amount.value = total > 0 ? total.toFixed(2) : '';
+          }
+          return total;
+        }
+
         function recalc() {
-          const total = parseFloat(form.total_amount.value) || 0;
-          const paid = parseFloat(form.amount_paid.value) || 0;
-          const remaining = total - paid;
+          var total     = autoCalcTotal();
+          var paid      = parseFloat(form.amount_paid ? form.amount_paid.value : 0) || 0;
+          var remaining = total - paid;
           balanceEl.textContent = '₱' + remaining.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
           balanceEl.style.color = remaining > 0 ? '#b3433f' : 'inherit';
         }
-        form.total_amount.addEventListener('input', recalc);
-        form.amount_paid.addEventListener('input', recalc);
+
+        ['room_rate', 'reservation_fee', 'garbage_fee', 'security_deposit', 'utilities_deposit'].forEach(function(name) {
+          var el = form.querySelector('[name="' + name + '"]');
+          if (el) el.addEventListener('input', recalc);
+        });
+        ['check_in', 'check_out'].forEach(function(name) {
+          var el = form.querySelector('[name="' + name + '"]');
+          if (el) el.addEventListener('change', recalc);
+        });
+        if (form.total_amount) form.total_amount.addEventListener('input', recalc);
+        if (form.amount_paid)  form.amount_paid.addEventListener('input', recalc);
+        form._recalcBalance = recalc;
         recalc();
       }
 
       function wireDateCalculations() {
-        const form = document.getElementById('resvForm');
-        const checkIn = form.querySelector('[name="check_in"]');
-        const checkOut = form.querySelector('[name="check_out"]');
-        const expectedPayment = form.querySelector('[name="expected_payment_date"]');
-        const durationDisplay = document.getElementById('stayDurationDisplay');
-        let selectedDuration = null; // in months
+        var form            = document.getElementById('resvForm');
+        var checkIn         = form.querySelector('[name="check_in"]');
+        var checkOut        = form.querySelector('[name="check_out"]');
+        var expectedPayment = form.querySelector('[name="expected_payment_date"]');
+        var durationDisplay = document.getElementById('stayDurationDisplay');
+        var selectedDuration = null;
+
+        function calcDays(inVal, outVal) {
+          if (!inVal || !outVal) return 0;
+          var s = new Date(inVal + 'T00:00:00'), e = new Date(outVal + 'T00:00:00');
+          return Math.round((e - s) / 86400000);
+        }
+
+        function formatLocalDate(d) {
+          var y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,'0'), day = String(d.getDate()).padStart(2,'0');
+          return y + '-' + m + '-' + day;
+        }
 
         function updateDurationAndPayment() {
-          const inVal = checkIn.value;
-          const outVal = checkOut.value;
+          var inVal = checkIn.value, outVal = checkOut.value;
           if (inVal && outVal) {
-            const start = new Date(inVal + 'T00:00:00');
-            const end = new Date(outVal + 'T00:00:00');
-            const nights = Math.round((end - start) / 86400000);
-            const days = nights + 1;
-            durationDisplay.textContent = days + ' Days / ' + nights + ' Nights';
-
-            if (!expectedPayment.dataset.userEdited) {
-              expectedPayment.value = outVal;
-            }
+            var days = calcDays(inVal, outVal);
+            durationDisplay.textContent = days > 0 ? days + ' Day' + (days !== 1 ? 's' : '') : '0 Days';
+            if (!expectedPayment.dataset.userEdited) expectedPayment.value = outVal;
           } else {
-            durationDisplay.textContent = '0 Days / 0 Nights';
+            durationDisplay.textContent = '0 Days';
           }
+          if (form._recalcBalance) form._recalcBalance();
         }
 
         function applyDuration(months) {
-          if (!checkIn.value) {
-            alert('Please select a check-in date first.');
-            return;
-          }
-          const start = new Date(checkIn.value + 'T00:00:00');
-          const end = new Date(start);
+          if (!checkIn.value) { alert('Please select a check-in date first.'); return; }
+          var start = new Date(checkIn.value + 'T00:00:00');
+          var end = new Date(start);
           end.setMonth(end.getMonth() + months);
-          const outVal = formatLocalDate(end);
-          checkOut.value = outVal;
-          if (!expectedPayment.dataset.userEdited) {
-            expectedPayment.value = outVal;
-          }
-          updateDurationAndPayment();
+          checkOut.value = formatLocalDate(end);
+          if (!expectedPayment.dataset.userEdited) expectedPayment.value = checkOut.value;
           selectedDuration = months;
-          const buttons = form.querySelectorAll('.bb-duration-buttons button');
-          buttons.forEach(btn => btn.classList.remove('is-active'));
-          const activeBtn = form.querySelector('.bb-duration-buttons button[data-months="' + months + '"]');
-          if (activeBtn) activeBtn.classList.add('is-active');
+          updateDurationAndPayment();
+          form.querySelectorAll('.bb-duration-buttons button').forEach(function(b) { b.classList.remove('is-active'); });
+          var active = form.querySelector('.bb-duration-buttons button[data-months="' + months + '"]');
+          if (active) active.classList.add('is-active');
         }
 
-        // ── Wire duration buttons (identical to Calendar) ──────────────
-        const buttons = form.querySelectorAll('.bb-duration-buttons button');
-        buttons.forEach(function(btn) {
+        form.querySelectorAll('.bb-duration-buttons button').forEach(function(btn) {
           btn.addEventListener('click', function(e) {
             e.preventDefault();
-            const months = parseInt(this.dataset.months, 10);
-            applyDuration(months);
+            applyDuration(parseInt(this.dataset.months, 10));
           });
         });
 
-        // On check-in change, if a duration is selected, recalc
         checkIn.addEventListener('input', function() {
-          if (selectedDuration !== null) {
-            applyDuration(selectedDuration);
-          }
+          if (selectedDuration !== null) applyDuration(selectedDuration);
+          else updateDurationAndPayment();
         });
-
-        // On manual check-out change, clear selected duration
         checkOut.addEventListener('input', function() {
           selectedDuration = null;
-          const buttons = form.querySelectorAll('.bb-duration-buttons button');
-          buttons.forEach(btn => btn.classList.remove('is-active'));
+          form.querySelectorAll('.bb-duration-buttons button').forEach(function(b) { b.classList.remove('is-active'); });
           updateDurationAndPayment();
         });
-
-        // Initial updates
-        checkIn.addEventListener('input', updateDurationAndPayment);
-        checkOut.addEventListener('input', updateDurationAndPayment);
-        expectedPayment.addEventListener('input', function() {
-          this.dataset.userEdited = 'true';
-        });
+        expectedPayment.addEventListener('input', function() { this.dataset.userEdited = 'true'; });
         updateDurationAndPayment();
+      }
+
+      function fetchAndEditReservation(resv) {
+        var resvId = resv.id;
+        if (!resvId) { renderForm(resv, null); return; }
+        fetch('/process_reservation.php?action=get_reservation_for_payment&id=' + resvId)
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            if (data && data.success && data.reservation) {
+              renderForm(Object.assign({}, resv, data.reservation), null);
+            } else {
+              // Fallback: try by room_id
+              return fetch('/process_reservation.php?action=get_active_reservation&room_id=' + resv.room_id)
+                .then(function(r2) { return r2.json(); })
+                .then(function(data2) {
+                  if (data2 && data2.success && data2.reservation) {
+                    renderForm(Object.assign({}, resv, data2.reservation), null);
+                  } else {
+                    renderForm(resv, null);
+                  }
+                });
+            }
+          })
+          .catch(function() { renderForm(resv, null); });
       }
 
       function wireFormSubmit(isEdit, id) {
@@ -328,15 +461,116 @@
               .then(function (r) { return r.json(); })
               .then(function (res) {
                 if (res.success) {
-                  window.location.reload();
+                  if (isEdit) {
+                    window.location.reload();
+                  } else {
+                    var savedResv = res.reservation || {};
+                    var resvId = savedResv.id;
+                    var totalAmt = parseFloat(savedResv.total_amount || 0);
+
+                    var dot1 = document.querySelector('#bbStep1 span:first-child');
+                    var lbl1 = document.querySelector('#bbStep1 span:last-child');
+                    if (dot1) { dot1.style.background = '#d4f7e7'; dot1.style.color = '#1a7a46'; dot1.textContent = '✓'; }
+                    if (lbl1) lbl1.style.color = '#1a7a46';
+                    var dot2 = document.getElementById('bbStep2Dot');
+                    var lbl2 = document.getElementById('bbStep2Lbl');
+                    if (dot2) { dot2.style.background = '#3b7dd8'; dot2.style.color = '#fff'; dot2.style.border = 'none'; }
+                    if (lbl2) lbl2.style.color = '#16324f';
+
+                    var bar = document.getElementById('bbResvSummaryBar');
+                    if (bar) {
+                      bar.textContent = (savedResv.guest_full_name || '') + '  ·  RM' + (savedResv.room_number || '') +
+                        '  ·  ' + (savedResv.check_in || '') + ' → ' + (savedResv.check_out || '');
+                    }
+
+                    var balEl = document.getElementById('bbPayBalance');
+                    if (balEl) balEl.textContent = '₱' + totalAmt.toLocaleString('en-PH', {minimumFractionDigits:2});
+
+                    document.getElementById('bbFormStep1').style.display = 'none';
+                    document.getElementById('bbFormStep2').style.display = 'block';
+
+                    var bbPayments = [];
+                    var bbBalance = totalAmt;
+
+                    function fmtBB(n) { return '₱' + parseFloat(n||0).toLocaleString('en-PH', {minimumFractionDigits:2}); }
+
+                    function refreshBBPayList() {
+                      var listEl = document.getElementById('bbPayList');
+                      var balElInner = document.getElementById('bbPayBalance');
+                      if (!listEl) return;
+                      if (bbPayments.length === 0) { listEl.textContent = 'No payments recorded yet.'; }
+                      else {
+                        listEl.innerHTML = bbPayments.map(function(p) {
+                          return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #e8f0f8;font-size:.84rem;">' +
+                            '<span style="color:#5b7693;">' + (p.remarks || 'Payment') + '</span>' +
+                            '<span style="color:#1a7a46;font-weight:600;">' + fmtBB(p.amount) + '</span>' +
+                          '</div>';
+                        }).join('');
+                      }
+                      if (balElInner) {
+                        balElInner.textContent = fmtBB(bbBalance);
+                        balElInner.style.color = bbBalance > 0 ? '#b91c1c' : '#1a7a46';
+                      }
+                    }
+
+                    var addBtn = document.getElementById('bbPayAddBtn');
+                    if (addBtn) {
+                      addBtn.addEventListener('click', function() {
+                        var errEl = document.getElementById('bbPayErr');
+                        var amount = parseFloat(document.getElementById('bbPayAmt').value);
+                        var remarks = document.getElementById('bbPayRemarks').value.trim();
+                        if (errEl) errEl.style.display = 'none';
+                        if (!amount || amount <= 0) {
+                          if (errEl) { errEl.textContent = 'Enter a valid amount.'; errEl.style.display = 'block'; }
+                          return;
+                        }
+                        addBtn.disabled = true; addBtn.textContent = '…';
+                        var fd2 = new FormData();
+                        fd2.append('action', 'record_payment');
+                        fd2.append('reservation_id', resvId);
+                        fd2.append('amount', amount);
+                        fd2.append('payment_date', new Date().toISOString().split('T')[0]);
+                        fd2.append('payment_method', 'cash');
+                        fd2.append('remarks', remarks);
+                        fetch('/process_reservation.php', { method: 'POST', body: fd2 })
+                          .then(function(r) { return r.json(); })
+                          .then(function(data) {
+                            addBtn.disabled = false; addBtn.textContent = '+ Add';
+                            if (!data.success) {
+                              if (errEl) { errEl.textContent = data.message || 'Could not save.'; errEl.style.display = 'block'; }
+                              return;
+                            }
+                            bbPayments.push({ amount: amount, remarks: remarks });
+                            bbBalance = Math.max(0, bbBalance - amount);
+                            document.getElementById('bbPayAmt').value = '';
+                            document.getElementById('bbPayRemarks').value = '';
+                            refreshBBPayList();
+                          })
+                          .catch(function() {
+                            addBtn.disabled = false; addBtn.textContent = '+ Add';
+                            if (errEl) { errEl.textContent = 'Network error.'; errEl.style.display = 'block'; }
+                          });
+                      });
+                    }
+
+                    var doneBtn = document.getElementById('bbPayDoneBtn');
+                    if (doneBtn) doneBtn.addEventListener('click', function() { window.location.reload(); });
+
+                    var backBtn = document.getElementById('bbPayBackBtn');
+                    if (backBtn) {
+                      backBtn.addEventListener('click', function() {
+                        renderForm(savedResv, null, null);
+                      });
+                    }
+                  }
                 } else {
-                  const resv = isEdit ? Object.assign({ id: id }, formToObject(fd)) : formToObject(fd);
-                  renderForm(resv, null, Object.assign({ _general: res.message }, res.errors || {}));
+                  var resv2 = isEdit ? Object.assign({ id: id }, formToObject(fd)) : formToObject(fd);
+                  renderForm(resv2, null, Object.assign({ _general: res.message }, res.errors || {}));
                 }
               })
               .catch(function (err) {
-                console.error('[calendar.js] AJAX error:', err);
-                alert('Error: ' + (err.message || 'Something went wrong. Please try again.'));
+                console.error('[layout.js] AJAX error:', err);
+                alert('Error: ' + (err.message || 'Something went wrong.'));
               });
           });
         });
@@ -619,13 +853,13 @@
           dragMode = null;
 
           if (!mode) {
-            renderForm(resv, null);
+            fetchAndEditReservation(resv);
             return;
           }
 
           if (!moved) {
             revertToOriginal();
-            renderForm(resv, null);
+            fetchAndEditReservation(resv);
             return;
           }
 

@@ -218,8 +218,6 @@
   const overlay = document.getElementById('reservationModal');
   const content = document.getElementById('reservationModalContent');
   const closeBtn = document.getElementById('reservationModalClose');
-  const newBtn = document.getElementById('newReservationBtn');
-
   function openModal() { overlay.hidden = false; }
   function closeModal() { overlay.hidden = true; content.innerHTML = ''; }
 
@@ -268,6 +266,60 @@
     if (e.key === 'Escape' && !overlay.hidden) closeModal();
   });
 
+  // ─── VALID ID OPTIONS ───────────────────────────────────────────────
+  const VALID_ID_OPTIONS = [
+    'National ID (PhilSys)',
+    'Passport',
+    "Driver's License",
+    'Barangay ID',
+    'Postal ID',
+    'UMID',
+    'SSS ID',
+    'PRC ID',
+    'Senior Citizen ID',
+    'Student ID',
+    "Voter's ID",
+    'Company ID',
+    'Other Government ID',
+    'No ID',
+  ];
+
+  function validIdDropdown(name, selected, errors) {
+    const id = name;
+    const opts = VALID_ID_OPTIONS.map(function(v) {
+      const sel = (v === selected) ? ' selected' : '';
+      return '<option value="' + v.replace(/"/g, '&quot;') + '"' + sel + '>' + v + '</option>';
+    }).join('');
+    return '<div><label for="' + id + '">Valid ID Type</label>' +
+      '<select id="' + id + '" name="' + name + '">' +
+        '<option value="">— Select —</option>' + opts +
+      '</select>' +
+      (errors && errors[name] ? '<span class="form-error">' + errors[name] + '</span>' : '') +
+      '</div>';
+  }
+
+  // ─── MANUAL STATUS OPTIONS (Pending, Reserved, Checked In only) ────
+  const MANUAL_STATUS_OPTIONS = {
+    pending:    'Pending',
+    reserved:   'Reserved',
+    checked_in: 'Checked In',
+  };
+
+  function manualStatusOptions(selectedStatus) {
+    // Include currently-set system statuses as read-only display if they're not in the manual set
+    const systemOnly = { cancelled: 'Cancelled', checked_out: 'Checked Out' };
+    let html = '';
+    Object.keys(MANUAL_STATUS_OPTIONS).forEach(function(key) {
+      const sel = key === selectedStatus ? ' selected' : '';
+      html += '<option value="' + key + '"' + sel + '>' + MANUAL_STATUS_OPTIONS[key] + '</option>';
+    });
+    // If current status is a system-only value, show it as disabled so the form displays correctly
+    if (systemOnly[selectedStatus]) {
+      html += '<option value="' + selectedStatus + '" selected disabled>' + systemOnly[selectedStatus] + ' (system-assigned)</option>';
+    }
+    return html;
+  }
+
   // ─── FORM RENDER ────────────────────────────────────────────────────
   function roomOptions(selectedRoomId) {
     return cfg.rooms.map(function (r) {
@@ -305,26 +357,41 @@
       html += '<p style="color:#1a7a46;background:#eafaf0;border:1px solid #b9ecd2;border-radius:8px;padding:8px 12px;font-size:.84rem;margin-bottom:10px;">✓ ' + successMsg + '</p>';
     }
 
+    // ── STEP INDICATOR (both new and edit) ──────────────────────────
+    html += '<div class="bb-steps" id="bbSteps" style="display:flex;align-items:center;gap:8px;margin-bottom:18px;">' +
+      '<div class="bb-step bb-step--active" id="bbStep1" style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;">' +
+        '<span style="width:22px;height:22px;border-radius:50%;background:#3b7dd8;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;">1</span>' +
+        '<span style="color:#16324f;">Reservation details</span>' +
+      '</div>' +
+      '<div style="flex:1;height:1px;background:#c5deef;"></div>' +
+      '<div class="bb-step bb-step--idle" id="bbStep2" style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;">' +
+        '<span id="bbStep2Dot" style="width:22px;height:22px;border-radius:50%;background:#e0eaf4;color:#8dafc8;border:1px solid #c5deef;display:flex;align-items:center;justify-content:center;font-size:11px;">2</span>' +
+        '<span id="bbStep2Lbl" style="color:#8dafc8;">Payment</span>' +
+      '</div>' +
+    '</div>';
+
+    // ── STEP 1: DETAILS FORM ────────────────────────────────────────
+    html += '<div id="bbFormStep1">';
     html += '<form id="resvForm" class="resv-form" autocomplete="off">';
     if (isEdit) html += '<input type="hidden" name="id" value="' + resv.id + '">';
 
     html += '<h3>Guest Information</h3><div class="resv-grid">';
     html += field('Full Name', 'guest_full_name', resv.guest_full_name, 'text', errors, true);
     html += field('Contact Number', 'contact_number', resv.contact_number, 'text', errors);
+    html += field('Emergency Contact Number', 'emergency_contact', resv.emergency_contact, 'text', errors);
     html += field('Email Address', 'email', resv.email, 'email', errors);
     html += field('Address', 'address', resv.address, 'text', errors);
-    html += field('Valid ID Type', 'valid_id_type', resv.valid_id_type, 'text', errors);
+    html += validIdDropdown('valid_id_type', resv.valid_id_type, errors);
     html += field('Valid ID Number', 'valid_id_number', resv.valid_id_number, 'text', errors);
     html += '</div>';
 
     html += '<h3>Booking Information</h3><div class="resv-grid">';
     html += '<div><label for="room_id">Room Number</label><select id="room_id" name="room_id" required>' + roomOptions(roomId) + '</select>' + fieldError(errors, 'room_id') + '</div>';
-    html += '<div><label for="status">Booking Status</label><select id="status" name="status">' + optionList(cfg.statusLabels, resv.status || 'reserved') + '</select></div>';
+    html += '<div><label for="status">Booking Status</label><select id="status" name="status">' + manualStatusOptions(resv.status || 'reserved') + '</select></div>';
     html += field('Check-in Date', 'check_in', checkIn, 'date', errors, true);
     html += field('Check-out Date', 'check_out', checkOut, 'date', errors, true);
     html += field('Number of Adults', 'num_adults', resv.num_adults || 1, 'number', errors);
     html += field('Number of Children', 'num_children', resv.num_children || 0, 'number', errors);
-    // ─── Quick Stay Duration ─────────────────────────────────────
     html += '<div class="bb-quick-duration">';
     html += '<label>Quick Stay Duration</label>';
     html += '<div class="bb-duration-buttons">';
@@ -337,55 +404,22 @@
     html += '</div></div>';
     html += '</div>';
 
-    // ---- Duration and Expected Payment Date ----
     html += '<div class="resv-duration">';
     html += '<label>Stay Duration</label>';
-    html += '<div class="resv-duration__display" id="stayDurationDisplay">0 Days / 0 Nights</div>';
+    html += '<div class="resv-duration__display" id="stayDurationDisplay">0 Days</div>';
     html += '</div>';
 
-    html += '<div class="field">';
-    html += '<label for="expected_payment_date">Expected Payment Date</label>';
-    html += '<input type="date" id="expected_payment_date" name="expected_payment_date" value="' + (resv.expected_payment_date || '') + '">';
-    html += '</div>';
-
-    html += '<h3>Payment Information</h3><div class="resv-grid">';
-    html += field('Room Rate', 'room_rate', resv.room_rate || 0, 'number', errors);
-    html += field('Security Deposit', 'security_deposit', resv.security_deposit || 0, 'number', errors);
-    html += field('Total Amount', 'total_amount', resv.total_amount || 0, 'number', errors);
-    // amount_paid is kept as a hidden field so the server update path still works.
-    // The visible payment UI is the inline payment panel below.
+    html += '<h3>Payment Rates</h3><div class="resv-grid">';
+    html += field('Monthly Rent (₱/month)', 'room_rate', resv.room_rate || 0, 'number', errors);
+    html += field('Reservation Fee (₱)', 'reservation_fee', resv.reservation_fee || 0, 'number', errors);
+    html += field('Garbage Fee (₱)', 'garbage_fee', resv.garbage_fee || 0, 'number', errors);
+    html += field('Security Deposit (₱)', 'security_deposit', resv.security_deposit || 0, 'number', errors);
+    html += field('Utilities Deposit (₱)', 'utilities_deposit', resv.utilities_deposit || 0, 'number', errors);
+    html += field('Total Amount (₱)', 'total_amount', resv.total_amount || 0, 'number', errors);
     html += '<input type="hidden" name="amount_paid" id="amount_paid" value="' + (resv.amount_paid || 0) + '">';
+    html += '<input type="hidden" name="expected_payment_date" id="expected_payment_date" value="' + (resv.expected_payment_date || '') + '">';
     html += '</div>';
     html += '<div class="resv-balance">Remaining Balance: <span id="resvBalance">₱0.00</span></div>';
-    // Inline payment panel — loads real payment records and lets staff record payments
-    // directly from this form so they appear in the folio immediately.
-    if (isEdit) {
-      // The Method dropdown only appears in the panel that shows immediately
-      // after creating a brand-new reservation (justCreated). Reopening an
-      // already-existing reservation later to log a follow-up payment hides
-      // it — just Amount + Remarks — per the agreed behavior.
-      const methodColHtml = justCreated
-        ? '<div><label style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:#2c4a68;display:block;margin-bottom:4px;">Method</label>' +
-            '<select id="calPayMethod" style="width:100%;padding:8px 10px;border:1.5px solid #c5deef;border-radius:6px;font-family:inherit;font-size:.86rem;">' +
-              '<option value="">—</option><option value="cash">Cash</option><option value="gcash">GCash</option>' +
-              '<option value="bank_transfer">Bank Transfer</option><option value="card">Card</option>' +
-            '</select></div>'
-        : '';
-      html += '<div id="calPayPanel" style="margin:14px 0 4px;border:1px solid #c5deef;border-radius:10px;overflow:hidden;">' +
-        '<div style="background:#eef5fc;padding:9px 16px;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#3b7dd8;border-bottom:1px solid #c5deef;">Payment History</div>' +
-        '<div id="calPayList" style="padding:12px 16px;font-size:.84rem;color:#5b7693;">Loading…</div>' +
-        '<div style="padding:10px 16px;border-top:1px solid #c5deef;background:#f8fbff;">' +
-          '<div style="display:grid;grid-template-columns:' + (justCreated ? '1fr 1fr auto' : '1fr auto') + ';gap:8px;align-items:end;">' +
-            '<div><label style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:#2c4a68;display:block;margin-bottom:4px;">Amount</label>' +
-              '<input type="number" id="calPayAmt" min="0.01" step="0.01" placeholder="e.g. 10000" style="width:100%;padding:8px 10px;border:1.5px solid #c5deef;border-radius:6px;font-family:inherit;font-size:.86rem;"></div>' +
-            methodColHtml +
-            '<button type="button" id="calPayBtn" style="padding:8px 14px;background:#16a34a;color:#fff;border:none;border-radius:6px;font-family:inherit;font-size:.82rem;font-weight:600;cursor:pointer;white-space:nowrap;">+ Add</button>' +
-          '</div>' +
-          '<input type="text" id="calPayRemarks" placeholder="Remarks / ref no. (optional)" style="width:100%;margin-top:8px;padding:8px 10px;border:1.5px solid #c5deef;border-radius:6px;font-family:inherit;font-size:.84rem;box-sizing:border-box;">' +
-          '<p id="calPayErr" style="color:#b91c1c;font-size:.78rem;margin:6px 0 0;display:none;"></p>' +
-        '</div>' +
-      '</div>';
-    }
 
     html += '<h3>Additional Information</h3><div class="resv-grid">';
     html += '<div class="resv-grid--full"><label for="notes">Notes</label><textarea id="notes" name="notes" rows="2">' + (resv.notes || '') + '</textarea></div>';
@@ -397,7 +431,7 @@
     }
 
     html += '<div class="resv-actions">';
-    html += '<button type="submit" class="btn btn--primary">' + (isEdit ? 'Save Changes' : 'Create Reservation') + '</button>';
+    html += '<button type="submit" class="btn btn--primary">Next →</button>';
     if (isEdit && cfg.canDelete) {
       html += '<button type="button" class="btn btn--danger" id="resvDeleteBtn">Delete</button>';
     }
@@ -408,13 +442,41 @@
     if (isEdit) {
       html += '<details class="resv-log"><summary>Activity Log</summary><ul id="resvLogList"><li>Loading…</li></ul></details>';
     }
+    html += '</div>'; // end #bbFormStep1
+
+    // ── STEP 2: PAYMENT PANEL (both new and edit) ────────────────────
+    html += '<div id="bbFormStep2" style="display:none;">';
+    html += '<div id="bbResvSummaryBar" style="background:#eef5fc;border:1px solid #c5deef;border-radius:8px;padding:9px 14px;font-size:.84rem;color:#2c4a68;margin-bottom:14px;"></div>';
+    html += '<div style="background:#f8fbff;border:1px solid #c5deef;border-radius:8px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">' +
+      '<span style="font-size:.84rem;color:#5b7693;">Remaining balance</span>' +
+      '<span id="bbPayBalance" style="font-size:1rem;font-weight:700;color:#b91c1c;">₱0.00</span>' +
+    '</div>';
+    html += '<div style="border:1px solid #c5deef;border-radius:8px;overflow:hidden;margin-bottom:14px;">' +
+      '<div style="background:#eef5fc;padding:8px 14px;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#3b7dd8;border-bottom:1px solid #c5deef;">Payment History</div>' +
+      '<div id="bbPayList" style="padding:12px 14px;font-size:.84rem;color:#5b7693;">Loading…</div>' +
+    '</div>';
+    html += '<div style="border:1px solid #c5deef;border-radius:8px;overflow:hidden;">' +
+      '<div style="background:#f8fbff;padding:8px 14px;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#5b7693;border-bottom:1px solid #c5deef;">Amount</div>' +
+      '<div style="padding:12px 14px;display:flex;flex-direction:column;gap:8px;">' +
+        '<div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end;">' +
+          '<input type="number" id="bbPayAmt" min="0.01" step="0.01" placeholder="e.g. 10000" style="width:100%;padding:8px 10px;border:1.5px solid #c5deef;border-radius:6px;font-family:inherit;font-size:.86rem;">' +
+          '<button type="button" id="bbPayAddBtn" style="padding:8px 16px;background:#16a34a;color:#fff;border:none;border-radius:6px;font-family:inherit;font-size:.84rem;font-weight:600;cursor:pointer;white-space:nowrap;">+ Add</button>' +
+        '</div>' +
+        '<input type="text" id="bbPayRemarks" placeholder="Remarks / ref no. (optional)" style="width:100%;padding:8px 10px;border:1.5px solid #c5deef;border-radius:6px;font-family:inherit;font-size:.84rem;box-sizing:border-box;">' +
+        '<p id="bbPayErr" style="color:#b91c1c;font-size:.78rem;margin:0;display:none;"></p>' +
+      '</div>' +
+    '</div>';
+    html += '<div class="resv-actions" style="margin-top:14px;">' +
+      '<button type="button" class="btn btn--primary" id="bbPayDoneBtn">Done</button>' +
+      '<button type="button" class="btn btn--secondary" id="bbPayBackBtn">← Back</button>' +
+    '</div>';
+    html += '</div>'; // end #bbFormStep2
 
     content.innerHTML = html;
 
     wireBalance();
     wireDateCalculations();
     wireFormSubmit(isEdit, resv.id);
-    if (isEdit && resv.id) wireCalPayPanel(resv.id, justCreated);
 
     document.getElementById('resvCancelBtn').addEventListener('click', closeModal);
     if (isEdit && cfg.canDelete) {
@@ -436,19 +498,67 @@
   function wireBalance() {
     const form = document.getElementById('resvForm');
     const balanceEl = document.getElementById('resvBalance');
+
+    function calcMonths(inVal, outVal) {
+      if (!inVal || !outVal) return 0;
+      const start = new Date(inVal + 'T00:00:00');
+      const end   = new Date(outVal + 'T00:00:00');
+      if (end <= start) return 0;
+      let months = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
+      // Add partial month as a fraction
+      const dayStart = start.getDate();
+      const dayEnd   = end.getDate();
+      if (dayEnd > dayStart) {
+        const daysInMonth = new Date(end.getFullYear(), end.getMonth(), 0).getDate();
+        months += (dayEnd - dayStart) / daysInMonth;
+      } else if (dayEnd < dayStart) {
+        const daysInMonth = new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate();
+        months -= (dayStart - dayEnd) / daysInMonth;
+      }
+      return Math.max(0, months);
+    }
+
+    function autoCalcTotal() {
+      const rate       = parseFloat(form.room_rate          ? form.room_rate.value          : 0) || 0;
+      const resvFee    = parseFloat(form.reservation_fee    ? form.reservation_fee.value    : 0) || 0;
+      const garbageFee = parseFloat(form.garbage_fee        ? form.garbage_fee.value        : 0) || 0;
+      const deposit    = parseFloat(form.security_deposit   ? form.security_deposit.value   : 0) || 0;
+      const utilsDep   = parseFloat(form.utilities_deposit  ? form.utilities_deposit.value  : 0) || 0;
+      const ciEl       = form.querySelector('[name="check_in"]');
+      const coEl       = form.querySelector('[name="check_out"]');
+      const months     = (ciEl && coEl) ? calcMonths(ciEl.value, coEl.value) : 0;
+      const total      = (rate * months) + resvFee + garbageFee + deposit + utilsDep;
+      if (form.total_amount) {
+        form.total_amount.value = total > 0 ? total.toFixed(2) : '';
+      }
+      return total;
+    }
+
     function recalc() {
-      const total = parseFloat(form.total_amount.value) || 0;
-      const paid = parseFloat(form.amount_paid.value) || 0;
+      const total = autoCalcTotal();
+      const paid  = parseFloat(form.amount_paid ? form.amount_paid.value : 0) || 0;
       const remaining = total - paid;
       balanceEl.textContent = '₱' + remaining.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       balanceEl.style.color = remaining > 0 ? '#b3433f' : 'inherit';
     }
-    form.total_amount.addEventListener('input', recalc);
-    form.amount_paid.addEventListener('input', recalc);
+
+    // Trigger recalc when any of these change
+    ['room_rate', 'reservation_fee', 'garbage_fee', 'security_deposit', 'utilities_deposit'].forEach(function(name) {
+      const el = form.querySelector('[name="' + name + '"]');
+      if (el) el.addEventListener('input', recalc);
+    });
+    ['check_in', 'check_out'].forEach(function(name) {
+      const el = form.querySelector('[name="' + name + '"]');
+      if (el) el.addEventListener('change', recalc);
+    });
+    if (form.total_amount) form.total_amount.addEventListener('input', recalc);
+    if (form.amount_paid)  form.amount_paid.addEventListener('input', recalc);
+
+    // Expose so wireDateCalculations can trigger it after setting dates
+    form._recalcBalance = recalc;
     recalc();
   }
 
-  // ---- Duration and Payment Date update with Quick Duration ----
   function wireDateCalculations() {
     const form = document.getElementById('resvForm');
     const checkIn = form.querySelector('[name="check_in"]');
@@ -457,22 +567,32 @@
     const durationDisplay = document.getElementById('stayDurationDisplay');
     let selectedDuration = null; // in months
 
+    function calcDays(inVal, outVal) {
+      if (!inVal || !outVal) return 0;
+      const start = new Date(inVal + 'T00:00:00');
+      const end   = new Date(outVal + 'T00:00:00');
+      return Math.round((end - start) / 86400000);
+    }
+
     function updateDurationAndPayment() {
       const inVal = checkIn.value;
       const outVal = checkOut.value;
       if (inVal && outVal) {
-        const start = new Date(inVal + 'T00:00:00');
-        const end = new Date(outVal + 'T00:00:00');
-        const nights = Math.round((end - start) / 86400000);
-        const days = nights + 1;
-        durationDisplay.textContent = days + ' Days / ' + nights + ' Nights';
+        const days = calcDays(inVal, outVal);
+        if (days > 0) {
+          durationDisplay.textContent = days + ' Day' + (days !== 1 ? 's' : '');
+        } else {
+          durationDisplay.textContent = '0 Days';
+        }
 
         if (!expectedPayment.dataset.userEdited) {
           expectedPayment.value = outVal;
         }
       } else {
-        durationDisplay.textContent = '0 Days / 0 Nights';
+        durationDisplay.textContent = '0 Days';
       }
+      // Recalc total whenever dates change
+      if (form._recalcBalance) form._recalcBalance();
     }
 
     function applyDuration(months) {
@@ -569,29 +689,129 @@
           .then(function (res) {
             if (res.success) {
               handleReservationSaveSuccess(res);
-              // Re-render in place instead of closing. Once the saved
-              // reservation carries an id (true for both a brand-new create
-              // and an edit) this flips the form into edit mode and brings
-              // up the Payment History panel, so a deposit can be logged
-              // right after booking — or a follow-up payment right after an
-              // edit — without reopening. The modal now only closes when
-              // Cancel/X is clicked.
-              const wasCreate = !isEdit;
-              const reopenMsg = isEdit ? 'Changes saved.' : 'Reservation created — you can record a payment below.';
-              const targetRoomId = (res.reservation && res.reservation.room_id) || (roomSel && roomSel.value);
-              // Re-fetch the full row before reopening rather than trusting
-              // this POST's response directly — same reasoning as the
-              // right-click menu fix: don't let the form repopulate from a
-              // payload that might only carry the narrow live-sync fields.
-              fetch('/process_reservation.php?action=get_active_reservation&room_id=' + targetRoomId)
-                .then(function (r2) { return r2.json(); })
-                .then(function (data2) {
-                  const full = (data2 && data2.success && data2.reservation) ? data2.reservation : null;
-                  renderForm(Object.assign({}, res.reservation, full || {}), null, null, reopenMsg, wasCreate);
-                })
-                .catch(function () {
-                  renderForm(res.reservation, null, null, reopenMsg, wasCreate);
-                });
+              {
+                // Both new and edit: advance to payment step 2
+                const savedResv = res.reservation || {};
+                const resvId = savedResv.id;
+                const totalAmt = parseFloat(savedResv.total_amount || 0);
+
+                // Flip step indicator
+                const dot1 = document.querySelector('#bbStep1 span:first-child');
+                const lbl1 = document.querySelector('#bbStep1 span:last-child');
+                if (dot1) { dot1.style.background = '#d4f7e7'; dot1.style.color = '#1a7a46'; dot1.textContent = '✓'; }
+                if (lbl1) lbl1.style.color = '#1a7a46';
+                const dot2 = document.getElementById('bbStep2Dot');
+                const lbl2 = document.getElementById('bbStep2Lbl');
+                if (dot2) { dot2.style.background = '#3b7dd8'; dot2.style.color = '#fff'; dot2.style.border = 'none'; }
+                if (lbl2) lbl2.style.color = '#16324f';
+
+                // Show summary bar
+                const bar = document.getElementById('bbResvSummaryBar');
+                if (bar) {
+                  bar.textContent = (savedResv.guest_full_name || '') + '  ·  RM' + (savedResv.room_number || '') +
+                    '  ·  ' + (savedResv.check_in || '') + ' → ' + (savedResv.check_out || '');
+                }
+
+                // Hide step 1, show step 2
+                document.getElementById('bbFormStep1').style.display = 'none';
+                document.getElementById('bbFormStep2').style.display = 'block';
+
+                function fmtBB(n) { return '₱' + parseFloat(n||0).toLocaleString('en-PH', {minimumFractionDigits:2}); }
+
+                // Load payments from server (works for both new and edit)
+                function loadStep2Payments() {
+                  var listEl  = document.getElementById('bbPayList');
+                  var balElInner = document.getElementById('bbPayBalance');
+                  var amtEl   = document.getElementById('bbPayAmt');
+                  if (!listEl) return;
+                  listEl.textContent = 'Loading…';
+                  fetch('/process_reservation.php?action=get_reservation_for_payment&id=' + resvId)
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                      var payments   = (data.success && data.months) ? data.months : [];
+                      var totalPaid  = payments.reduce(function(s,p){ return s + parseFloat(p.amount||0); }, 0);
+                      var bbBalance  = Math.max(0, totalAmt - totalPaid);
+                      if (balElInner) { balElInner.textContent = fmtBB(bbBalance); balElInner.style.color = bbBalance > 0 ? '#b91c1c' : '#1a7a46'; }
+                      if (amtEl && !amtEl.dataset.userEdited) amtEl.value = bbBalance > 0 ? bbBalance.toFixed(2) : '';
+                      if (payments.length === 0) {
+                        listEl.innerHTML = '<div style="color:#8a9aa8;font-size:.82rem;padding:4px 0;">No payments recorded yet.</div>';
+                        return;
+                      }
+                      listEl.innerHTML = payments.map(function(p) {
+                        var dt = p.payment_date || (p.created_at ? p.created_at.split(' ')[0] : '—');
+                        var pm = {cash:'Cash',gcash:'GCash',bank_transfer:'Bank Transfer',card:'Card'}[p.payment_method] || (p.payment_method || '—');
+                        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid #e8f0f8;font-size:.84rem;">' +
+                          '<span style="color:#5b7693;">' + dt + ' · ' + pm + (p.remarks ? ' · ' + p.remarks : '') + '</span>' +
+                          '<span style="color:#1a7a46;font-weight:600;">' + fmtBB(p.amount) + '</span>' +
+                        '</div>';
+                      }).join('') +
+                      '<div style="display:flex;justify-content:space-between;padding:6px 0 2px;font-weight:700;font-size:.84rem;">' +
+                        '<span>Total Paid</span><span style="color:#1a7a46;">' + fmtBB(totalPaid) + '</span>' +
+                      '</div>';
+                    })
+                    .catch(function() { listEl.textContent = 'Could not load payments.'; });
+                }
+
+                loadStep2Payments();
+
+                var addBtn = document.getElementById('bbPayAddBtn');
+                if (addBtn) {
+                  addBtn.addEventListener('click', function() {
+                    var errEl = document.getElementById('bbPayErr');
+                    var amount = parseFloat(document.getElementById('bbPayAmt').value);
+                    var remarks = document.getElementById('bbPayRemarks').value.trim();
+                    if (errEl) errEl.style.display = 'none';
+                    if (!amount || amount <= 0) {
+                      if (errEl) { errEl.textContent = 'Enter a valid amount.'; errEl.style.display = 'block'; }
+                      return;
+                    }
+                    addBtn.disabled = true;
+                    addBtn.textContent = '…';
+                    var fd2 = new FormData();
+                    fd2.append('action', 'record_payment');
+                    fd2.append('reservation_id', resvId);
+                    fd2.append('amount', amount);
+                    fd2.append('payment_date', new Date().toISOString().split('T')[0]);
+                    fd2.append('payment_method', 'cash');
+                    fd2.append('remarks', remarks);
+                    fetch('/process_reservation.php', { method: 'POST', body: fd2 })
+                      .then(function(r) { return r.json(); })
+                      .then(function(data) {
+                        addBtn.disabled = false;
+                        addBtn.textContent = '+ Add';
+                        if (!data.success) {
+                          if (errEl) { errEl.textContent = data.message || 'Could not save payment.'; errEl.style.display = 'block'; }
+                          return;
+                        }
+                        document.getElementById('bbPayAmt').value = '';
+                        document.getElementById('bbPayRemarks').value = '';
+                        delete document.getElementById('bbPayAmt').dataset.userEdited;
+                        loadStep2Payments();
+                      })
+                      .catch(function() {
+                        addBtn.disabled = false;
+                        addBtn.textContent = '+ Add';
+                        if (errEl) { errEl.textContent = 'Network error.'; errEl.style.display = 'block'; }
+                      });
+                  });
+                }
+
+                var doneBtn = document.getElementById('bbPayDoneBtn');
+                if (doneBtn) doneBtn.addEventListener('click', closeModal);
+
+                var backBtn = document.getElementById('bbPayBackBtn');
+                if (backBtn) {
+                  backBtn.addEventListener('click', function() {
+                    fetch('/process_reservation.php?action=get_reservation_for_payment&id=' + resvId)
+                      .then(function(r) { return r.json(); })
+                      .then(function(data) {
+                        const full = (data && data.success && data.reservation) ? data.reservation : savedResv;
+                        renderForm(full, null, null, null, false);
+                      })
+                      .catch(function() { renderForm(savedResv, null, null, null, false); });
+                  });
+                }
+              }
             } else {
               const resv = isEdit ? Object.assign({ id: id }, formToObject(fd)) : formToObject(fd);
               renderForm(resv, null, Object.assign({ _general: res.message }, res.errors || {}));
@@ -1044,6 +1264,12 @@
       hideContextMenu();
     }
   });
+  // Hide context menu on any scroll — window, document, or the calendar grid wrapper
+  function _hideMenuOnScroll() {
+    if (contextMenu && contextMenu.style.display !== 'none') hideContextMenu();
+  }
+  window.addEventListener('scroll', _hideMenuOnScroll, { passive: true, capture: true });
+  document.addEventListener('scroll', _hideMenuOnScroll, { passive: true, capture: true });
 
   function showContextMenu(x, y, type, data) {
     contextMenuType = type;
@@ -1052,6 +1278,10 @@
       contextBar = data.bar;
       contextRoomId = null;
     } else if (type === 'room') {
+      contextRoomId = data.roomId;
+      contextReservation = null;
+      contextBar = null;
+    } else if (type === 'slot') {
       contextRoomId = data.roomId;
       contextReservation = null;
       contextBar = null;
@@ -1079,7 +1309,7 @@
         { divider: true },
         { label: 'Room Move', action: 'move' },
         { divider: true },
-        { label: 'Adjust Room Rate', action: 'rate' },
+        { label: 'Adjust Monthly Rent', action: 'rate' },
         { divider: true },
         { label: 'Guest Folio', action: 'guest_folio' },
         { label: 'Master Folio', action: 'master_folio' },
@@ -1089,6 +1319,10 @@
         { divider: true },
         { label: 'Print Registration Card', action: 'print_regcard' },
         { label: 'Print Folio', action: 'print_folio' },
+      ];
+    } else if (type === 'slot') {
+      items = [
+        { label: '+ New Reservation', action: 'create_from_slot' },
       ];
     } else if (type === 'room') {
       const roomRow = document.querySelector('.cal-row[data-room-id="' + data.roomId + '"]');
@@ -1132,6 +1366,12 @@
           handleContextAction(action);
         } else if (type === 'room') {
           handleRoomStatusAction(action);
+        } else if (type === 'slot') {
+          if (action === 'create_from_slot' && data.roomId && data.date) {
+            const checkOut = new Date(data.date + 'T00:00:00');
+            checkOut.setDate(checkOut.getDate() + 1);
+            renderForm(null, { room_id: data.roomId, check_in: data.date, check_out: formatLocalDate(checkOut) });
+          }
         }
         hideContextMenu();
       });
@@ -1307,31 +1547,43 @@
 
     console.log('[context] Handling action:', action, 'reservation:', r);
 
-    // Always refresh from the server before acting on this reservation.
-    // A bar that arrived here purely through the live-sync channel (the
-    // other page created/edited it, or another Calendar tab did, and it
-    // reached this page only via the WebSocket/poll broadcast) only ever
-    // carries the narrow live-sync field set: id, room_id, status, dates,
-    // guest name, totals. Acting on that cached object directly — as this
-    // used to — would submit blanks for every other field (contact info,
-    // valid ID, adults/children, deposit, notes...) on the very next save,
-    // silently wiping them server-side. This mirrors the fetch-before-act
-    // pattern the Layout page already uses for every room-card action.
-    fetch('/process_reservation.php?action=get_active_reservation&room_id=' + r.room_id)
-      .then(function (resp) { return resp.json(); })
-      .then(function (data) {
-        if (data && data.success && data.reservation) {
-          r = Object.assign({}, r, data.reservation);
-          contextReservation = r;
-        }
-        runAction();
-      })
-      .catch(function () {
-        // Couldn't reach the server — fall back to the cached copy rather
-        // than blocking the action entirely; better than nothing if it's
-        // a quick read-only action (profile/history/print).
-        runAction();
-      });
+    // Fetch full reservation data before acting — try by ID first, fall back to room_id.
+    // Always proceed to runAction regardless; r keeps its cached values if fetch fails.
+    var fetchPromise;
+    if (r.id) {
+      fetchPromise = fetch('/process_reservation.php?action=get_reservation_for_payment&id=' + r.id)
+        .then(function(resp) { return resp.json(); })
+        .then(function(data) {
+          if (data && data.reservation && data.reservation.id) {
+            r = Object.assign({}, r, data.reservation);
+            contextReservation = r;
+          } else {
+            // Fall back to room_id lookup
+            return fetch('/process_reservation.php?action=get_active_reservation&room_id=' + r.room_id)
+              .then(function(resp2) { return resp2.json(); })
+              .then(function(data2) {
+                if (data2 && data2.success && data2.reservation) {
+                  r = Object.assign({}, r, data2.reservation);
+                  contextReservation = r;
+                }
+              })
+              .catch(function() {});
+          }
+        })
+        .catch(function() {});
+    } else {
+      fetchPromise = fetch('/process_reservation.php?action=get_active_reservation&room_id=' + r.room_id)
+        .then(function(resp) { return resp.json(); })
+        .then(function(data) {
+          if (data && data.success && data.reservation) {
+            r = Object.assign({}, r, data.reservation);
+            contextReservation = r;
+          }
+        })
+        .catch(function() {});
+    }
+
+    fetchPromise.then(function() { runAction(); }).catch(function() { runAction(); });
 
     function runAction() {
     switch(action) {
@@ -1426,10 +1678,10 @@
           fd.append('room_id', newRoomId);
 
           const fields = [
-            'guest_full_name', 'contact_number', 'email', 'address',
+            'guest_full_name', 'contact_number', 'emergency_contact', 'email', 'address',
             'valid_id_type', 'valid_id_number', 'check_in', 'check_out',
             'num_adults', 'num_children', 'status',
-            'room_rate', 'security_deposit', 'total_amount', 'amount_paid',
+            'room_rate', 'reservation_fee', 'garbage_fee', 'security_deposit', 'utilities_deposit', 'total_amount', 'amount_paid',
             'payment_method', 'notes', 'special_requests', 'expected_payment_date'
           ];
           fields.forEach(function(key) {
@@ -1460,7 +1712,7 @@
       }
 
       case 'rate': {
-        const newRate = prompt('Enter new room rate:', r.room_rate);
+        const newRate = prompt('Enter new monthly rent:', r.room_rate);
         if (newRate !== null && !isNaN(newRate)) {
           const fd = new FormData();
           fd.append('action', 'update');
@@ -1538,6 +1790,7 @@
           '<div style="margin:12px 0;">' +
           '<p><strong>Name:</strong> ' + (r.guest_full_name || 'N/A') + '</p>' +
           '<p><strong>Contact:</strong> ' + (r.contact_number || 'N/A') + '</p>' +
+          '<p><strong>Emergency Contact:</strong> ' + (r.emergency_contact || 'N/A') + '</p>' +
           '<p><strong>Email:</strong> ' + (r.email || 'N/A') + '</p>' +
           '<p><strong>Address:</strong> ' + (r.address || 'N/A') + '</p>' +
           '<p><strong>Valid ID:</strong> ' + (r.valid_id_type || 'N/A') + ' #' + (r.valid_id_number || 'N/A') + '</p>' +
@@ -1604,9 +1857,14 @@
 <div class="row"><span class="label">Adults</span><span class="value">${r.num_adults || 1}</span></div>
 <div class="row"><span class="label">Children</span><span class="value">${r.num_children || 0}</span></div>
 <div class="row"><span class="label">Contact</span><span class="value">${r.contact_number || 'N/A'}</span></div>
+<div class="row"><span class="label">Emergency Contact</span><span class="value">${r.emergency_contact || 'N/A'}</span></div>
 <div class="row"><span class="label">Email</span><span class="value">${r.email || 'N/A'}</span></div>
 <div class="row"><span class="label">Valid ID</span><span class="value">${r.valid_id_type || 'N/A'} #${r.valid_id_number || 'N/A'}</span></div>
-<div class="row"><span class="label">Rate/Month</span><span class="value">₱${parseFloat(r.room_rate || 0).toFixed(2)}</span></div>
+<div class="row"><span class="label">Monthly Rent</span><span class="value">₱${parseFloat(r.room_rate || 0).toFixed(2)}/mo</span></div>
+<div class="row"><span class="label">Reservation Fee</span><span class="value">₱${parseFloat(r.reservation_fee || 0).toFixed(2)}</span></div>
+<div class="row"><span class="label">Garbage Fee</span><span class="value">₱${parseFloat(r.garbage_fee || 0).toFixed(2)}</span></div>
+<div class="row"><span class="label">Security Deposit</span><span class="value">₱${parseFloat(r.security_deposit || 0).toFixed(2)}</span></div>
+<div class="row"><span class="label">Utilities Deposit</span><span class="value">₱${parseFloat(r.utilities_deposit || 0).toFixed(2)}</span></div>
 <div class="row"><span class="label">Total Amount</span><span class="value">₱${parseFloat(r.total_amount || 0).toFixed(2)}</span></div>
 <div class="row"><span class="label">Amount Paid</span><span class="value">₱${parseFloat(r.amount_paid || 0).toFixed(2)}</span></div>
 <div class="row"><span class="label">Payment Method</span><span class="value">${r.payment_method || 'N/A'}</span></div>
@@ -1643,7 +1901,11 @@
 <div class="row"><span class="label">Check-in</span><span class="value">${r.check_in}</span></div>
 <div class="row"><span class="label">Check-out</span><span class="value">${r.check_out}</span></div>
 <div class="row"><span class="label">Nights</span><span class="value">${nights}</span></div>
-<div class="row"><span class="label">Rate/Month</span><span class="value">₱${parseFloat(r.room_rate || 0).toFixed(2)}</span></div>
+<div class="row"><span class="label">Monthly Rent</span><span class="value">₱${parseFloat(r.room_rate || 0).toFixed(2)}/mo</span></div>
+<div class="row"><span class="label">Reservation Fee</span><span class="value">₱${parseFloat(r.reservation_fee || 0).toFixed(2)}</span></div>
+<div class="row"><span class="label">Garbage Fee</span><span class="value">₱${parseFloat(r.garbage_fee || 0).toFixed(2)}</span></div>
+<div class="row"><span class="label">Security Deposit</span><span class="value">₱${parseFloat(r.security_deposit || 0).toFixed(2)}</span></div>
+<div class="row"><span class="label">Utilities Deposit</span><span class="value">₱${parseFloat(r.utilities_deposit || 0).toFixed(2)}</span></div>
 <div class="row total"><span class="label">Total Amount</span><span class="value">₱${parseFloat(r.total_amount || 0).toFixed(2)}</span></div>
 <div class="row"><span class="label">Amount Paid</span><span class="value">₱${parseFloat(r.amount_paid || 0).toFixed(2)}</span></div>
 <div class="row"><span class="label">Balance Due</span><span class="value" style="${balance > 0 ? 'color:#b3433f;' : ''}">₱${balance.toFixed(2)}</span></div>
@@ -1746,10 +2008,6 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
   }
 
   // ─── ENTRY POINTS ──────────────────────────────────────────────────
-  newBtn.addEventListener('click', function () {
-    renderForm(null, {});
-  });
-
   document.querySelectorAll('.cal-day-slot').forEach(function (slot) {
     slot.addEventListener('click', function () {
       const row = this.closest('.cal-row');
@@ -1767,25 +2025,7 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
 
   document.querySelectorAll('.cal-label-col[data-room-id]').forEach(function (label) {
     label.addEventListener('click', function (e) {
-      const roomId = this.dataset.roomId;
-      if (!roomId) return;
-
-      const row = this.closest('.cal-row');
-      if (row && row.dataset.statusKey === 'needs_cleaning') {
-        alert('This room is Vacant Dirty. Please mark it as clean before creating a new reservation.');
-        return;
-      }
-
-      let checkIn = selectedDate;
-      if (!checkIn) {
-        const today = new Date();
-        checkIn = formatLocalDate(today);
-      }
-      const checkOutDate = new Date(checkIn + 'T00:00:00');
-      checkOutDate.setDate(checkOutDate.getDate() + 1);
-      const checkOut = formatLocalDate(checkOutDate);
-
-      renderForm(null, { room_id: roomId, check_in: checkIn, check_out: checkOut });
+      // Left-click on room label no longer opens form — use right-click on a grid slot instead
     });
   });
 
@@ -2097,8 +2337,11 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
         fd.append('num_adults', resv.num_adults || 1);
         fd.append('num_children', resv.num_children || 0);
         fd.append('status', resv.status);
-        fd.append('room_rate', resv.room_rate || 0);
+        fd.append('room_rate',         resv.room_rate         || 0);
+        fd.append('reservation_fee',  resv.reservation_fee  || 0);
+        fd.append('garbage_fee',      resv.garbage_fee      || 0);
         fd.append('security_deposit', resv.security_deposit || 0);
+        fd.append('utilities_deposit',resv.utilities_deposit|| 0);
         fd.append('total_amount', resv.total_amount || 0);
         fd.append('amount_paid', resv.amount_paid || 0);
         fd.append('payment_method', resv.payment_method || '');
@@ -2166,6 +2409,7 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
     });
 
     calGridEl.addEventListener('contextmenu', function (e) {
+      // Right-click on an existing reservation bar → show bar context menu
       const bar = e.target.closest('.cal-bar');
       if (bar) {
         e.preventDefault();
@@ -2180,6 +2424,28 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
         return;
       }
 
+      // Right-click on an empty day slot → show context menu with New Reservation option
+      const slot = e.target.closest('.cal-day-slot');
+      if (slot) {
+        e.preventDefault();
+        e.stopPropagation();
+        const row = slot.closest('.cal-row');
+        if (row && row.classList.contains('maintenance')) {
+          alert('This room is currently Out of Order. Please clear the maintenance flag on the Layout page before booking.');
+          return;
+        }
+        if (row && row.dataset.statusKey === 'needs_cleaning') {
+          alert('This room is Vacant Dirty. Please mark it as clean before creating a new reservation.');
+          return;
+        }
+        const roomId = slot.dataset.roomId;
+        const date   = slot.dataset.date;
+        if (!roomId || !date) return;
+        showContextMenu(e.clientX, e.clientY, 'slot', { roomId: roomId, date: date });
+        return;
+      }
+
+      // Right-click on a room label → show room context menu
       const label = e.target.closest('.cal-label-col[data-room-id]');
       if (label && !label.classList.contains('cal-label-col--header') && label.dataset.roomId) {
         e.preventDefault();
@@ -2326,12 +2592,14 @@ ${r.special_requests ? `<div class="row"><span class="label">Special Requests</s
       syncing = true;
       wrap.scrollLeft = topScroll.scrollLeft;
       syncing = false;
+      _hideMenuOnScroll();
     });
     wrap.addEventListener('scroll', function () {
       if (syncing) return;
       syncing = true;
       topScroll.scrollLeft = wrap.scrollLeft;
       syncing = false;
+      _hideMenuOnScroll();
     });
 
     syncWidth();

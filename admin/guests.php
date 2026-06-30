@@ -15,6 +15,7 @@ $allBranches = [
 ];
 $branchKey  = $_GET['branch'] ?? '';
 $branchName = $allBranches[$branchKey] ?? '';
+$branch     = $branchKey; // alias for property_navbar.php
 
 $search = trim($_GET['search'] ?? '');
 $status = $_GET['status']        ?? '';
@@ -36,7 +37,7 @@ function formatDuration($checkIn, $checkOut) {
 
 $pdo = bb_db();
 
-$validStatuses = ['reserved','checked_in','checked_out','cancelled'];
+$validStatuses = ['pending','reserved','checked_in','checked_out','cancelled'];
 $validSorts    = [
     'check_in_desc' => 'r.check_in DESC',
     'check_in_asc'  => 'r.check_in ASC',
@@ -79,14 +80,14 @@ unset($g);
 
 $statsStmt = $pdo->query("SELECT status, COUNT(*) as cnt FROM reservations GROUP BY status");
 $rawStats  = $statsStmt->fetchAll();
-$stats     = ['reserved'=>0,'checked_in'=>0,'checked_out'=>0,'cancelled'=>0,'total'=>0];
+$stats     = ['pending'=>0,'reserved'=>0,'checked_in'=>0,'checked_out'=>0,'cancelled'=>0,'total'=>0];
 foreach ($rawStats as $s) {
     if (isset($stats[$s['status']])) $stats[$s['status']] = (int)$s['cnt'];
     $stats['total'] += (int)$s['cnt'];
 }
 
 $lodgingBranches = ['annex'=>'BB Apartelle','mtv'=>'MTV3','dormitel'=>'ELTI Dormitel'];
-$statusLabels    = ['reserved'=>'Reserved','checked_in'=>'Checked In','checked_out'=>'Checked Out','cancelled'=>'Cancelled'];
+$statusLabels    = ['pending'=>'Pending','reserved'=>'Reserved','checked_in'=>'Checked In','checked_out'=>'Checked Out','cancelled'=>'Cancelled'];
 $paymentLabels   = ['cash'=>'Cash','gcash'=>'GCash','bank_transfer'=>'Bank Transfer','card'=>'Card'];
 
 $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
@@ -125,7 +126,10 @@ $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
 .guest-meta{font-size:.78rem;color:var(--blue-500);margin-top:2px;}
 .status-badge{display:inline-block;padding:3px 10px;border-radius:999px;font-size:.74rem;font-weight:700;letter-spacing:.03em;white-space:nowrap;}
 .status-badge--reserved{background:#dceaf8;color:#2861b3;}
+.status-badge--pending{background:#ede9fe;color:#6d28d9;}
+.status-badge--confirmed{background:#e0f2fe;color:#0369a1;}
 .status-badge--checked_in{background:#d4f7e7;color:#1a7a46;}
+.status-badge--no_show{background:#fef3c7;color:#92400e;}
 .status-badge--checked_out{background:#eef0f2;color:#5b7693;}
 .status-badge--cancelled{background:#fde8e8;color:#b91c1c;}
 .empty-state{text-align:center;padding:60px 20px;color:var(--blue-500);}
@@ -193,9 +197,14 @@ $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
 .ps--overdue{background:#fde8e8;color:#b91c1c;}
 .ps--unpaid{background:#f1f5f9;color:#64748b;}
 
-/* Delete btn in payment table */
 .pay-del{background:none;border:none;cursor:pointer;color:#b91c1c;font-size:.78rem;opacity:.6;padding:2px 6px;border-radius:4px;}
 .pay-del:hover{opacity:1;background:#fff1f1;}
+
+/* Utility status badges */
+.util-status{display:inline-block;padding:3px 10px;border-radius:999px;font-size:.75rem;font-weight:700;}
+.us--paid{background:#d4f7e7;color:#15803d;}
+.us--unpaid{background:#f1f5f9;color:#64748b;}
+.us--partial{background:#fef9c3;color:#854d0e;}
 
 /* ── Record Payment modal ─────────────────────────────────── */
 .pay-modal{background:var(--white);border-radius:var(--radius-lg);width:100%;max-width:460px;box-shadow:0 24px 60px -12px rgba(22,50,79,.35);overflow:hidden;}
@@ -248,6 +257,7 @@ $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
 
     <div class="stats-bar">
         <div class="stat-chip"><span class="stat-chip__dot" style="background:#8a9aa8"></span>All: <?=$stats['total']?></div>
+        <div class="stat-chip"><span class="stat-chip__dot" style="background:#a78bfa"></span>Pending: <?=$stats['pending']?></div>
         <div class="stat-chip"><span class="stat-chip__dot" style="background:#3b7dd8"></span>Reserved: <?=$stats['reserved']?></div>
         <div class="stat-chip"><span class="stat-chip__dot" style="background:#2ecc71"></span>Checked In: <?=$stats['checked_in']?></div>
         <div class="stat-chip"><span class="stat-chip__dot" style="background:#8a9aa8"></span>Checked Out: <?=$stats['checked_out']?></div>
@@ -295,7 +305,7 @@ $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
                 <tr>
                     <th>#</th><th>Guest</th><th>Property</th><th>Room</th>
                     <th>Check-In</th><th>Check-Out</th><th>Duration</th><th>Status</th>
-                    <th>Amount Due</th><th>Paid</th><th>Balance</th>
+                    <th>Amount Due</th><th>Balance</th>
                 </tr>
             </thead>
             <tbody>
@@ -317,9 +327,8 @@ $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
                 <td><?=htmlspecialchars($g['check_in'])?></td>
                 <td><?=htmlspecialchars($g['check_out'])?></td>
                 <td><?=htmlspecialchars($g['duration'])?></td>
-                <td><span class="status-badge status-badge--<?=$g['status']?>"><?=$statusLabels[$g['status']]?></span></td>
+                <td><span class="status-badge status-badge--<?=$g['status']?>"><?=$statusLabels[$g['status']] ?? ucwords(str_replace('_',' ',$g['status']))?></span></td>
                 <td>₱<?=number_format((float)$g['total_amount'],2)?></td>
-                <td style="color:#1a7a46;font-weight:600;">₱<?=number_format((float)$g['amount_paid'],2)?></td>
                 <td style="color:<?=$bal>0?'#b91c1c':'#1a7a46'?>;font-weight:700;">₱<?=number_format($bal,2)?></td>
             </tr>
             <?php endforeach; ?>
@@ -466,10 +475,12 @@ function openFolio(r) {
             if (!data.success) throw new Error(data.message || 'Load failed.');
             _payments = data.months || [];
             renderFolio(r, _payments, data.outstanding_balance, data.payment_status);
+            loadUtilities(r.id);
         })
         .catch(err => {
             console.error('[folio] load error:', err);
             renderFolio(r, [], null, null, true);
+            loadUtilities(r.id);
         });
 }
 
@@ -564,7 +575,7 @@ function renderFolio(r, payments, outstanding, paymentStatus, fallback) {
         <div class="fc"><div class="fc__lbl">Arrival</div><div class="fc__val" style="font-size:.9rem;">${esc(fmtDate(r.check_in))}</div></div>
         <div class="fc"><div class="fc__lbl">Departure</div><div class="fc__val" style="font-size:.9rem;">${esc(fmtDate(r.check_out))}</div></div>
         <div class="fc"><div class="fc__lbl">Duration</div><div class="fc__val" style="font-size:.9rem;">${esc(dur)}</div></div>
-        <div class="fc"><div class="fc__lbl">Monthly Rate</div><div class="fc__val" style="font-size:.9rem;">${fmt(r.room_rate)}/mo</div></div>
+        <div class="fc"><div class="fc__lbl">Monthly Rent</div><div class="fc__val" style="font-size:.9rem;">${fmt(r.room_rate)}/mo</div></div>
         ${secDeposit > 0 ? `<div class="fc"><div class="fc__lbl">Security Deposit</div><div class="fc__val" style="font-size:.9rem;">${fmt(secDeposit)}</div></div>` : ''}
       </div>
 
@@ -577,7 +588,10 @@ function renderFolio(r, payments, outstanding, paymentStatus, fallback) {
         <div class="folio-row"><span class="lbl">Address</span><span class="val">${esc(r.address||'—')}</span></div>
         <div class="folio-row"><span class="lbl">Valid ID</span><span class="val">${esc(r.valid_id_type||'—')} ${r.valid_id_number?'#'+esc(r.valid_id_number):''}</span></div>
         <div class="folio-row"><span class="lbl">Adults / Children</span><span class="val">${esc(r.num_adults)} / ${esc(r.num_children)}</span></div>
+        <div class="folio-row"><span class="lbl">Reservation Fee</span><span class="val">${fmt(r.reservation_fee||0)}</span></div>
+        <div class="folio-row"><span class="lbl">Garbage Fee</span><span class="val">${fmt(r.garbage_fee||0)}</span></div>
         <div class="folio-row"><span class="lbl">Security Deposit</span><span class="val">${fmt(r.security_deposit)}</span></div>
+        <div class="folio-row"><span class="lbl">Utilities Deposit</span><span class="val">${fmt(r.utilities_deposit||0)}</span></div>
         <div class="folio-row"><span class="lbl">Property</span><span class="val">${esc(brLabel)}</span></div>
         ${r.special_requests?`<div class="folio-row" style="grid-column:1/-1"><span class="lbl">Special Requests</span><span class="val">${esc(r.special_requests)}</span></div>`:''}
         ${r.notes?`<div class="folio-row" style="grid-column:1/-1"><span class="lbl">Notes</span><span class="val">${esc(r.notes)}</span></div>`:''}
@@ -587,7 +601,7 @@ function renderFolio(r, payments, outstanding, paymentStatus, fallback) {
       <div class="folio-sec">Monthly Charges Schedule</div>
       <div class="folio-tbl-wrap">
         <table class="folio-tbl">
-          <thead><tr><th>Period</th><th>Description</th><th style="text-align:right">Monthly Rate</th><th style="text-align:right">Amount Due</th></tr></thead>
+          <thead><tr><th>Period</th><th>Description</th><th style="text-align:right">Monthly Rent</th><th style="text-align:right">Amount Due</th></tr></thead>
           <tbody>${chargeRows}</tbody>
           <tfoot><tr><td colspan="3">Total Charges</td><td class="r">${fmt(grandTotal || totalDue)}</td></tr></tfoot>
         </table>
@@ -601,6 +615,36 @@ function renderFolio(r, payments, outstanding, paymentStatus, fallback) {
           <tbody id="payHistoryBody">${payRows}</tbody>
           <tfoot><tr><td colspan="${payColspan}">Total Paid</td><td class="g">${fmt(totalPaid)}</td>${CAN_DELETE?'<td></td>':''}</tr></tfoot>
         </table>
+      </div>
+
+      <!-- Utilities Payments -->
+      <div class="folio-sec" style="margin-top:24px;">Utilities Payments</div>
+      <div class="folio-tbl-wrap" id="utilHistoryWrap">
+        <table class="folio-tbl" id="utilTable">
+          <thead><tr><th>Utility Type</th><th>Billing Period</th><th style="text-align:right">Amount</th><th>Status</th>${CAN_DELETE?'<th></th>':''}</tr></thead>
+          <tbody id="utilHistoryBody"><tr><td colspan="${CAN_DELETE?5:4}" class="no-data" id="utilLoadingMsg">Loading utilities…</td></tr></tbody>
+          <tfoot><tr><td colspan="${CAN_DELETE?3:2}">Total Utilities</td><td class="r" id="utilTotal">₱0.00</td><td></td>${CAN_DELETE?'<td></td>':''}</tr></tfoot>
+        </table>
+      </div>
+      <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;" id="utilAddRow">
+        <select id="utilType" style="padding:7px 10px;border:1.5px solid var(--blue-100);border-radius:var(--radius-md);font-family:inherit;font-size:.84rem;">
+          <option value="">— Utility Type —</option>
+          <option value="Electricity">Electricity</option>
+          <option value="Water">Water</option>
+          <option value="Internet">Internet</option>
+          <option value="Cable TV">Cable TV</option>
+          <option value="Parking">Parking</option>
+          <option value="Other">Other Utility Charges</option>
+        </select>
+        <input type="month" id="utilPeriod" style="padding:7px 10px;border:1.5px solid var(--blue-100);border-radius:var(--radius-md);font-family:inherit;font-size:.84rem;" placeholder="Billing Period">
+        <input type="number" id="utilAmount" min="0" step="0.01" placeholder="Amount (₱)" style="width:120px;padding:7px 10px;border:1.5px solid var(--blue-100);border-radius:var(--radius-md);font-family:inherit;font-size:.84rem;">
+        <select id="utilStatus" style="padding:7px 10px;border:1.5px solid var(--blue-100);border-radius:var(--radius-md);font-family:inherit;font-size:.84rem;">
+          <option value="Unpaid">Unpaid</option>
+          <option value="Paid">Paid</option>
+          <option value="Partial">Partial</option>
+        </select>
+        <button class="fhbtn fhbtn--primary" id="utilAddBtn" style="padding:7px 14px;">+ Add Utility</button>
+        <p id="utilErr" style="color:#b91c1c;font-size:.8rem;margin:0;display:none;"></p>
       </div>
     `;
 }
@@ -781,16 +825,117 @@ function refreshTableRow(resvId, newPaid) {
             const totalDue = parseFloat(r.total_amount) || 0;
             const paid     = parseFloat(newPaid) || 0;
             const bal      = totalDue - paid;
-            // col 9 = paid, col 10 = balance (0-indexed)
-            if (cells[9])  cells[9].textContent  = '₱' + paid.toLocaleString('en-PH', {minimumFractionDigits:2});
-            if (cells[10]) {
-                cells[10].textContent = '₱' + Math.abs(bal).toLocaleString('en-PH', {minimumFractionDigits:2});
-                cells[10].style.color = bal > 0 ? '#b91c1c' : '#1a7a46';
+            // col 8 = Amount Due, col 9 = Balance (0-indexed, after removing Paid column)
+            if (cells[9]) {
+                cells[9].textContent = '₱' + Math.abs(bal).toLocaleString('en-PH', {minimumFractionDigits:2});
+                cells[9].style.color = bal > 0 ? '#b91c1c' : '#1a7a46';
             }
             // Update stored data
             row.dataset.reservation = JSON.stringify(Object.assign({}, r, { amount_paid: newPaid }));
         } catch(e) {}
     });
+}
+
+// ── Utility Charges ─────────────────────────────────────────────────
+function loadUtilities(resvId) {
+    const tbody = document.getElementById('utilHistoryBody');
+    const totalEl = document.getElementById('utilTotal');
+    if (!tbody) return;
+
+    fetch('/process_reservation.php?action=get_utilities&reservation_id=' + resvId)
+        .then(r => r.json())
+        .then(data => {
+            if (!data.success) {
+                tbody.innerHTML = '<tr><td colspan="' + (CAN_DELETE ? 5 : 4) + '" class="no-data">Could not load utilities.</td></tr>';
+                return;
+            }
+            const items = data.utilities || [];
+            if (items.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="' + (CAN_DELETE ? 5 : 4) + '" class="no-data">No utility charges recorded yet.</td></tr>';
+                if (totalEl) totalEl.textContent = '₱0.00';
+                return;
+            }
+            let total = 0;
+            tbody.innerHTML = items.map(u => {
+                const amt = parseFloat(u.amount || 0);
+                total += amt;
+                const statusCls = u.status === 'Paid' ? 'us--paid' : u.status === 'Partial' ? 'us--partial' : 'us--unpaid';
+                const delCell = CAN_DELETE
+                    ? '<td><button class="pay-del" onclick="deleteUtility(' + u.id + ',' + resvId + ')" title="Delete">✕</button></td>'
+                    : '';
+                return '<tr>' +
+                    '<td>' + esc(u.utility_type) + '</td>' +
+                    '<td>' + esc(u.billing_period || '—') + '</td>' +
+                    '<td class="r">' + fmt(amt) + '</td>' +
+                    '<td><span class="util-status ' + statusCls + '">' + esc(u.status) + '</span></td>' +
+                    delCell +
+                '</tr>';
+            }).join('');
+            if (totalEl) totalEl.textContent = fmt(total);
+        })
+        .catch(() => {
+            if (tbody) tbody.innerHTML = '<tr><td colspan="' + (CAN_DELETE ? 5 : 4) + '" class="no-data">Could not load utilities.</td></tr>';
+        });
+
+    // Wire add button
+    const addBtn = document.getElementById('utilAddBtn');
+    if (addBtn && !addBtn._wired) {
+        addBtn._wired = true;
+        addBtn.addEventListener('click', function() {
+            const errEl = document.getElementById('utilErr');
+            errEl.style.display = 'none';
+            const typeVal   = document.getElementById('utilType').value;
+            const periodVal = document.getElementById('utilPeriod').value;
+            const amtVal    = parseFloat(document.getElementById('utilAmount').value);
+            const statusVal = document.getElementById('utilStatus').value;
+            if (!typeVal)          { errEl.textContent = 'Select a utility type.'; errEl.style.display = 'block'; return; }
+            if (!periodVal)        { errEl.textContent = 'Enter a billing period.'; errEl.style.display = 'block'; return; }
+            if (!amtVal || amtVal <= 0) { errEl.textContent = 'Enter a valid amount.'; errEl.style.display = 'block'; return; }
+
+            addBtn.disabled = true;
+            addBtn.textContent = 'Saving…';
+            const fd = new FormData();
+            fd.append('action',         'add_utility');
+            fd.append('reservation_id', resvId);
+            fd.append('utility_type',   typeVal);
+            fd.append('billing_period', periodVal);
+            fd.append('amount',         amtVal);
+            fd.append('status',         statusVal);
+            fetch('/process_reservation.php', { method: 'POST', body: fd })
+                .then(r => r.json())
+                .then(data => {
+                    addBtn.disabled    = false;
+                    addBtn.textContent = '+ Add Utility';
+                    if (!data.success) { errEl.textContent = data.message || 'Error.'; errEl.style.display = 'block'; return; }
+                    document.getElementById('utilType').value   = '';
+                    document.getElementById('utilPeriod').value = '';
+                    document.getElementById('utilAmount').value = '';
+                    document.getElementById('utilStatus').value = 'Unpaid';
+                    loadUtilities(resvId);
+                })
+                .catch(err => {
+                    addBtn.disabled    = false;
+                    addBtn.textContent = '+ Add Utility';
+                    errEl.textContent  = 'Network error.';
+                    errEl.style.display = 'block';
+                });
+        });
+    }
+}
+
+function deleteUtility(utilId, resvId) {
+    if (!confirm('Delete this utility charge? This cannot be undone.')) return;
+    const fd = new FormData();
+    fd.append('action',         'delete_utility');
+    fd.append('utility_id',     utilId);
+    fd.append('reservation_id', resvId);
+    fetch('/process_reservation.php', { method: 'POST', body: fd })
+        .then(r => r.json())
+        .then(data => {
+            if (!data.success) { alert(data.message || 'Could not delete utility.'); return; }
+            loadUtilities(resvId);
+        })
+        .catch(err => alert('Network error: ' + err.message));
 }
 
 // ── Print ────────────────────────────────────────────────────────
@@ -806,9 +951,12 @@ function printFolio() {
     const stLabel   = STATUS_LABELS[r.status] ?? r.status;
     const dur       = formatDuration(r.check_in, r.check_out);
 
-    const printSecDeposit = parseFloat(r.security_deposit) || 0;
-    const printRentTotal  = charges.reduce((s,c) => s + parseFloat(c.amount), 0);
-    const printGrandTotal = printRentTotal + printSecDeposit;
+    const printSecDeposit  = parseFloat(r.security_deposit)    || 0;
+    const printResvFee     = parseFloat(r.reservation_fee)     || 0;
+    const printGarbageFee  = parseFloat(r.garbage_fee)         || 0;
+    const printUtilsDep    = parseFloat(r.utilities_deposit)   || 0;
+    const printRentTotal   = charges.reduce((s,c) => s + parseFloat(c.amount), 0);
+    const printGrandTotal  = printRentTotal + printSecDeposit + printResvFee + printGarbageFee + printUtilsDep;
 
     let chargeRowsHtml = charges.map(c => `
         <tr><td>${c.period}</td><td>${c.description}</td>
@@ -816,10 +964,18 @@ function printFolio() {
         <td style="text-align:right">₱${parseFloat(c.amount).toLocaleString('en-PH',{minimumFractionDigits:2})}</td></tr>`
     ).join('') || '<tr><td colspan="4" style="text-align:center;color:#888;">No rate set.</td></tr>';
 
-    if (printSecDeposit > 0) {
-        chargeRowsHtml += `<tr style="background:#f8fbff;"><td>—</td><td><em>Security Deposit</em></td><td style="text-align:right">—</td>
-        <td style="text-align:right">₱${printSecDeposit.toLocaleString('en-PH',{minimumFractionDigits:2})}</td></tr>`;
-    }
+    const oneTimeCharges = [
+        {label:'Reservation Fee', amount:printResvFee},
+        {label:'Garbage Fee',     amount:printGarbageFee},
+        {label:'Security Deposit',amount:printSecDeposit},
+        {label:'Utilities Deposit',amount:printUtilsDep},
+    ];
+    oneTimeCharges.forEach(function(c){
+        if (c.amount > 0) {
+            chargeRowsHtml += '<tr style="background:#f8fbff;"><td>—</td><td><em>'+c.label+'</em></td><td style="text-align:right">—</td>' +
+            '<td style="text-align:right">₱'+c.amount.toLocaleString('en-PH',{minimumFractionDigits:2})+'</td></tr>';
+        }
+    });
 
     const payRowsHtml = _payments.map(p => {
         const pmLbl = PAYMENT_LABELS[p.payment_method] ?? (p.payment_method||'—');
@@ -827,6 +983,25 @@ function printFolio() {
             <td>${pmLbl}</td><td>${p.remarks||'—'}</td>
             <td style="text-align:right;color:#15803d;font-weight:700;">₱${parseFloat(p.amount||0).toLocaleString('en-PH',{minimumFractionDigits:2})}</td></tr>`;
     }).join('') || '<tr><td colspan="4" style="text-align:center;color:#888;">No payments recorded.</td></tr>';
+
+    // Collect utility rows from DOM for print
+    let utilRowsHtml = '';
+    let utilTotal = 0;
+    const utilBody = document.getElementById('utilHistoryBody');
+    if (utilBody) {
+        const utilRows = utilBody.querySelectorAll('tr');
+        utilRows.forEach(function(row) {
+            const cells = row.querySelectorAll('td');
+            if (cells.length >= 4 && !cells[0].classList.contains('no-data')) {
+                const amt = parseFloat(cells[2].textContent.replace(/[^\d.]/g, '')) || 0;
+                utilTotal += amt;
+                utilRowsHtml += '<tr><td>' + cells[0].textContent + '</td><td>' + cells[1].textContent + '</td>' +
+                    '<td style="text-align:right">₱' + amt.toLocaleString('en-PH',{minimumFractionDigits:2}) + '</td>' +
+                    '<td>' + (cells[3] ? cells[3].textContent : '') + '</td></tr>';
+            }
+        });
+    }
+    if (!utilRowsHtml) utilRowsHtml = '<tr><td colspan="4" style="text-align:center;color:#888;">No utility charges.</td></tr>';
 
     const w = window.open('', '_blank', 'width=860,height=720');
     if (!w) { alert('Allow pop-ups to print.'); return; }
@@ -877,8 +1052,11 @@ tfoot td{font-weight:700;background:#f0f5fb;border-top:2px solid #dceaf8;}
   <div class="irow"><div class="l">Address</div><div class="v">${r.address||'—'}</div></div>
   <div class="irow"><div class="l">Valid ID</div><div class="v">${r.valid_id_type||'—'}${r.valid_id_number?' #'+r.valid_id_number:''}</div></div>
   <div class="irow"><div class="l">Adults / Children</div><div class="v">${r.num_adults||1} / ${r.num_children||0}</div></div>
-  <div class="irow"><div class="l">Monthly Rate</div><div class="v">₱${parseFloat(r.room_rate||0).toLocaleString('en-PH',{minimumFractionDigits:2})}/mo</div></div>
+  <div class="irow"><div class="l">Monthly Rent</div><div class="v">₱${parseFloat(r.room_rate||0).toLocaleString('en-PH',{minimumFractionDigits:2})}/mo</div></div>
+  <div class="irow"><div class="l">Reservation Fee</div><div class="v">₱${parseFloat(r.reservation_fee||0).toLocaleString('en-PH',{minimumFractionDigits:2})}</div></div>
+  <div class="irow"><div class="l">Garbage Fee</div><div class="v">₱${parseFloat(r.garbage_fee||0).toLocaleString('en-PH',{minimumFractionDigits:2})}</div></div>
   <div class="irow"><div class="l">Security Deposit</div><div class="v">₱${parseFloat(r.security_deposit||0).toLocaleString('en-PH',{minimumFractionDigits:2})}</div></div>
+  <div class="irow"><div class="l">Utilities Deposit</div><div class="v">₱${parseFloat(r.utilities_deposit||0).toLocaleString('en-PH',{minimumFractionDigits:2})}</div></div>
   ${r.notes?`<div class="irow" style="grid-column:1/-1"><div class="l">Notes</div><div class="v">${r.notes}</div></div>`:''}
 </div>
 <h2>Monthly Charges Schedule</h2>
@@ -886,6 +1064,12 @@ tfoot td{font-weight:700;background:#f0f5fb;border-top:2px solid #dceaf8;}
   <thead><tr><th>Period</th><th>Description</th><th style="text-align:right">Rate/Month</th><th style="text-align:right">Amount Due</th></tr></thead>
   <tbody>${chargeRowsHtml}</tbody>
   <tfoot><tr><td colspan="3">Total Charges</td><td style="text-align:right">₱${printGrandTotal.toLocaleString('en-PH',{minimumFractionDigits:2})}</td></tr></tfoot>
+</table>
+<h2>Utilities Payments</h2>
+<table>
+  <thead><tr><th>Utility Type</th><th>Billing Period</th><th style="text-align:right">Amount</th><th>Status</th></tr></thead>
+  <tbody>${utilRowsHtml}</tbody>
+  <tfoot><tr><td colspan="2">Total Utilities</td><td style="text-align:right">₱${utilTotal.toLocaleString('en-PH',{minimumFractionDigits:2})}</td><td></td></tr></tfoot>
 </table>
 <h2>Payment History</h2>
 <table>

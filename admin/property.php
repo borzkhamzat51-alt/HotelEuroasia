@@ -59,6 +59,16 @@ if ($isLodging) {
         'badge' => '',
         'color' => '#0891b2',
     ];
+    if (bb_has_permission('billing')) {
+        $cards[] = [
+            'href'  => 'billing.php?branch=' . urlencode($branchKey),
+            'icon'  => '<svg viewBox="0 0 24 24" fill="none"><rect x="2" y="6" width="20" height="14" rx="2.5" stroke="currentColor" stroke-width="1.7"/><path d="M2 11h20" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M6 16h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="17" cy="16" r="1.1" fill="currentColor"/></svg>',
+            'name'  => 'Billing',
+            'desc'  => 'Payments, utilities & outstanding balances',
+            'badge' => '',
+            'color' => '#0f766e',
+        ];
+    }
 }
 
 if (bb_has_permission('reports')) {

@@ -16,8 +16,9 @@ $branches = [
 ];
 $branchKey  = $_GET['branch'] ?? '';
 $branchName = $branches[$branchKey] ?? '';
+$branch     = $branchKey; // alias for property_navbar.php
 // Invalid branch key — ignore it so the page still shows all entries
-if ($branchKey && !$branchName) $branchKey = '';
+if ($branchKey && !$branchName) { $branchKey = ''; $branch = ''; }
 
 // ── Filters ──────────────────────────────────────────────────────────────────
 $search      = trim($_GET['search']      ?? '');
@@ -351,13 +352,6 @@ function qs($overrides = []) {
 .page-btn:hover           { background: var(--blue-50); border-color: var(--blue-200); }
 .page-btn.active          { background: var(--blue-500); color: var(--white); border-color: var(--blue-500); }
 .page-btn[disabled]       { opacity: 0.4; pointer-events: none; }
-
-/* ── Navbar active ─────────────────────────────────────────────── */
-.navbar__item--active {
-    color: var(--blue-900) !important;
-    font-weight: 700;
-    border-bottom: 2px solid var(--blue-500);
-}
 
 @media (max-width: 700px) {
     .audit-table .col-ip,

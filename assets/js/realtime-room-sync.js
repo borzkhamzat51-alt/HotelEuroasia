@@ -58,7 +58,8 @@
   const WS_PORT = 8081;
   const WS_URL = (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.hostname + ':' + WS_PORT;
 
-  const STATUS_LABELS = { reserved: 'Reserved', checked_in: 'Checked In', checked_out: 'Checked Out', cancelled: 'Cancelled' };
+  const STATUS_LABELS = { pending: 'Pending', reserved: 'Reserved', checked_in: 'Checked In' };
+  const SYSTEM_STATUS_LABELS = { checked_out: 'Checked Out', cancelled: 'Cancelled' };
   const PAYMENT_LABELS = { cash: 'Cash', gcash: 'GCash', bank_transfer: 'Bank Transfer', card: 'Credit/Debit Card' };
   const LAYOUT_ROOMS = window.BB_LAYOUT_ROOMS || [];
 
@@ -351,13 +352,29 @@
     });
   }
 
-  function fetchActiveReservation(roomId) {
-    return fetch('/process_reservation.php?action=get_active_reservation&room_id=' + roomId)
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        if (!data.success) throw new Error(data.message || 'Could not load reservation.');
-        return data.reservation;
+  function fetchActiveReservation(roomId, reservationId) {
+    // Try by reservation ID first (works for any status), then fall back to room_id.
+    // Never throw — always resolve with whatever we find (or null).
+    function byId(id) {
+      return fetch('/process_reservation.php?action=get_reservation_for_payment&id=' + id)
+        .then(function(r) { return r.json(); })
+        .then(function(d) { return (d && d.reservation && d.reservation.id) ? d.reservation : null; })
+        .catch(function() { return null; });
+    }
+    function byRoom(rId) {
+      return fetch('/process_reservation.php?action=get_active_reservation&room_id=' + rId)
+        .then(function(r) { return r.json(); })
+        .then(function(d) { return (d && d.success && d.reservation) ? d.reservation : null; })
+        .catch(function() { return null; });
+    }
+
+    if (reservationId) {
+      return byId(reservationId).then(function(r) {
+        // If fetch-by-id returned something, use it; otherwise try room lookup
+        return r || byRoom(roomId);
       });
+    }
+    return byRoom(roomId);
   }
 
   function field(label, name, value, type, errors, required) {
@@ -395,6 +412,35 @@
   }
 
   // ─── Reservation form modal ────────────────────────────────────────
+  const VALID_ID_OPTIONS = [
+    'National ID (PhilSys)', 'Passport', "Driver's License", 'Barangay ID',
+    'Postal ID', 'UMID', 'SSS ID', 'PRC ID', 'Senior Citizen ID',
+    'Student ID', "Voter's ID", 'Company ID', 'Other Government ID', 'No ID'
+  ];
+
+  function validIdDropdown(name, selected, errors) {
+    var opts = VALID_ID_OPTIONS.map(function(v) {
+      return '<option value="' + v.replace(/"/g,'&quot;') + '"' + (v === selected ? ' selected' : '') + '>' + v + '</option>';
+    }).join('');
+    return '<div class="bb-field"><label for="' + name + '">Valid ID Type</label>' +
+      '<select id="' + name + '" name="' + name + '" style="width:100%;padding:9px 11px;border:1.5px solid var(--sky-200,#c5deef);border-radius:6px;font-family:inherit;font-size:.86rem;">' +
+        '<option value="">— Select —</option>' + opts +
+      '</select>' +
+      (errors && errors[name] ? '<span class="bb-form-error">' + errors[name] + '</span>' : '') +
+    '</div>';
+  }
+
+  function manualStatusOptions(selected) {
+    var html = '';
+    Object.keys(STATUS_LABELS).forEach(function(k) {
+      html += '<option value="' + k + '"' + (k === selected ? ' selected' : '') + '>' + STATUS_LABELS[k] + '</option>';
+    });
+    if (SYSTEM_STATUS_LABELS[selected]) {
+      html += '<option value="' + selected + '" selected disabled>' + SYSTEM_STATUS_LABELS[selected] + ' (system-assigned)</option>';
+    }
+    return html;
+  }
+
   function renderReservationForm(resv, prefillRoomId, errors, successMsg, justCreated) {
     resv = resv || {};
     const isEdit = !!resv.id;
@@ -410,6 +456,19 @@
     inner.className = 'bb-modal-card';
 
     let html = '<h2>' + (isEdit ? 'Reservation Details' : 'New Reservation') + '</h2>';
+
+    // ── Step indicator (both new and edit) ───────────────────────────
+    html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:18px;" id="bbSteps">' +
+      '<div style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;" id="bbStep1">' +
+        '<span style="width:22px;height:22px;border-radius:50%;background:#3b7dd8;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;">1</span>' +
+        '<span style="color:#16324f;">Reservation details</span>' +
+      '</div>' +
+      '<div style="flex:1;height:1px;background:#c5deef;"></div>' +
+      '<div style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;">' +
+        '<span id="bbStep2Dot" style="width:22px;height:22px;border-radius:50%;background:#e0eaf4;color:#8dafc8;border:1px solid #c5deef;display:flex;align-items:center;justify-content:center;font-size:11px;">2</span>' +
+        '<span id="bbStep2Lbl" style="color:#8dafc8;">Payment</span>' +
+      '</div>' +
+    '</div>';
     // Confirms the save that just happened (create or edit) and explains
     // why the form re-opened instead of closing — the panel below it lets
     // staff log a payment immediately against the just-saved reservation.
@@ -422,15 +481,16 @@
     html += '<h3>Guest Information</h3><div class="bb-grid">';
     html += field('Full Name', 'guest_full_name', resv.guest_full_name, 'text', errors, true);
     html += field('Contact Number', 'contact_number', resv.contact_number, 'text', errors);
+    html += field('Emergency Contact Number', 'emergency_contact', resv.emergency_contact, 'text', errors);
     html += field('Email Address', 'email', resv.email, 'email', errors);
     html += field('Address', 'address', resv.address, 'text', errors);
-    html += field('Valid ID Type', 'valid_id_type', resv.valid_id_type, 'text', errors);
+    html += validIdDropdown('valid_id_type', resv.valid_id_type, errors);
     html += field('Valid ID Number', 'valid_id_number', resv.valid_id_number, 'text', errors);
     html += '</div>';
 
     html += '<h3>Booking Information</h3><div class="bb-grid">';
     html += '<input type="hidden" name="room_id" value="' + roomId + '">';
-    html += '<div class="bb-field"><label for="status">Booking Status</label><select id="status" name="status">' + optionList(STATUS_LABELS, resv.status || 'reserved') + '</select></div>';
+    html += '<div class="bb-field"><label for="status">Booking Status</label><select id="status" name="status">' + manualStatusOptions(resv.status || 'reserved') + '</select></div>';
     html += field('Check-in Date', 'check_in', resv.check_in, 'date', errors, true);
     html += field('Check-out Date', 'check_out', resv.check_out, 'date', errors, true);
     html += field('Number of Adults', 'num_adults', resv.num_adults || 1, 'number', errors);
@@ -446,53 +506,23 @@
     });
     html += '</div></div>';
 
-    // Duration display and Expected Payment Date
+    // Duration display
     html += '<div class="bb-duration">';
     html += '<label>Stay Duration</label>';
-    html += '<div class="bb-duration__display" id="bbStayDurationDisplay">0 Days / 0 Nights</div>';
+    html += '<div class="bb-duration__display" id="bbStayDurationDisplay">0 Days</div>';
     html += '</div>';
 
-    html += '<div class="bb-field">';
-    html += '<label for="bb_expected_payment_date">Expected Payment Date</label>';
-    html += '<input type="date" id="bb_expected_payment_date" name="expected_payment_date" value="' + (resv.expected_payment_date || '') + '">';
-    html += '</div>';
-
-    html += '<h3>Payment Information</h3><div class="bb-grid">';
-    html += field('Monthly Rate', 'room_rate', resv.room_rate || 0, 'number', errors);
-    html += field('Security Deposit', 'security_deposit', resv.security_deposit || 0, 'number', errors);
-    html += field('Total Amount', 'total_amount', resv.total_amount || 0, 'number', errors);
-    // Hidden field keeps server-side update in sync; real payment entry is the panel below
+    html += '<h3>Payment Rates</h3><div class="bb-grid">';
+    html += field('Monthly Rent (₱/month)', 'room_rate', resv.room_rate || 0, 'number', errors);
+    html += field('Reservation Fee (₱)', 'reservation_fee', resv.reservation_fee || 0, 'number', errors);
+    html += field('Garbage Fee (₱)', 'garbage_fee', resv.garbage_fee || 0, 'number', errors);
+    html += field('Security Deposit (₱)', 'security_deposit', resv.security_deposit || 0, 'number', errors);
+    html += field('Utilities Deposit (₱)', 'utilities_deposit', resv.utilities_deposit || 0, 'number', errors);
+    html += field('Total Amount (₱)', 'total_amount', resv.total_amount || 0, 'number', errors);
     html += '<input type="hidden" name="amount_paid" id="bb_amount_paid" value="' + (resv.amount_paid || 0) + '">';
+    html += '<input type="hidden" name="expected_payment_date" value="' + (resv.expected_payment_date || '') + '">';
     html += '</div>';
     html += '<div class="bb-balance"><span>Remaining Balance</span><strong id="bbResvBalance">₱0.00</strong></div>';
-    // Inline payment panel for edit mode
-    if (isEdit) {
-      // The Method dropdown only appears in the panel that shows immediately
-      // after creating a brand-new reservation (justCreated). Reopening an
-      // already-existing reservation later to log a follow-up payment hides
-      // it — just Amount + Remarks — per the agreed behavior.
-      var methodColHtml = justCreated
-        ? '<div><label style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:var(--blue-900,#16324f);display:block;margin-bottom:4px;">Method</label>' +
-            '<select id="bbPayMethod" style="width:100%;padding:9px 11px;border:1.5px solid var(--sky-200,#c5deef);border-radius:6px;font-family:inherit;font-size:.86rem;">' +
-              '<option value="">—</option><option value="cash">Cash</option><option value="gcash">GCash</option>' +
-              '<option value="bank_transfer">Bank Transfer</option><option value="card">Card</option>' +
-            '</select></div>'
-        : '';
-      html += '<div id="bbPayPanel" style="margin:14px 0 4px;border:1px solid var(--sky-200,#c5deef);border-radius:10px;overflow:hidden;">' +
-        '<div style="background:var(--sky-50,#eef5fc);padding:9px 16px;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--blue-500,#3b7dd8);border-bottom:1px solid var(--sky-200,#c5deef);">Payment History</div>' +
-        '<div id="bbPayList" style="padding:12px 16px;font-size:.84rem;color:var(--ink-500,#5b7693);">Loading…</div>' +
-        '<div style="padding:10px 16px;border-top:1px solid var(--sky-200,#c5deef);background:#f8fbff;">' +
-          '<div style="display:grid;grid-template-columns:' + (justCreated ? '1fr 1fr auto' : '1fr auto') + ';gap:8px;align-items:end;">' +
-            '<div><label style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:var(--blue-900,#16324f);display:block;margin-bottom:4px;">Amount</label>' +
-              '<input type="number" id="bbPayAmt" min="0.01" step="0.01" placeholder="e.g. 10000" style="width:100%;padding:9px 11px;border:1.5px solid var(--sky-200,#c5deef);border-radius:6px;font-family:inherit;font-size:.86rem;box-sizing:border-box;"></div>' +
-            methodColHtml +
-            '<button type="button" id="bbPayBtn" class="bb-btn bb-btn--primary" style="padding:9px 14px;background:#16a34a;white-space:nowrap;">+ Add</button>' +
-          '</div>' +
-          '<input type="text" id="bbPayRemarks" placeholder="Remarks / ref no. (optional)" style="width:100%;margin-top:8px;padding:9px 11px;border:1.5px solid var(--sky-200,#c5deef);border-radius:6px;font-family:inherit;font-size:.84rem;box-sizing:border-box;">' +
-          '<p id="bbPayErr" style="color:#b3433f;font-size:.78rem;margin:6px 0 0;display:none;"></p>' +
-        '</div>' +
-      '</div>';
-    }
 
     html += '<h3>Additional Information</h3><div class="bb-grid">';
     html += '<div class="bb-field bb-grid--full"><label for="notes">Notes</label><textarea id="notes" name="notes" rows="2">' + (resv.notes || '') + '</textarea></div>';
@@ -505,7 +535,7 @@
 
     html += '<div class="bb-actions">';
     html += '<button type="button" id="bbResvCancelBtn" class="bb-btn bb-btn--secondary">Cancel</button>';
-    html += '<button type="submit" class="bb-btn bb-btn--primary">' + (isEdit ? 'Save Changes' : 'Create Reservation') + '</button>';
+    html += '<button type="submit" class="bb-btn bb-btn--primary">Next →</button>';
     html += '</div></form>';
 
     inner.innerHTML = html;
@@ -514,15 +544,51 @@
 
     const form = document.getElementById('bbResvForm');
     const balanceEl = document.getElementById('bbResvBalance');
+
+    function calcMonths(inVal, outVal) {
+      if (!inVal || !outVal) return 0;
+      var s = new Date(inVal + 'T00:00:00'), e = new Date(outVal + 'T00:00:00');
+      if (e <= s) return 0;
+      var months = (e.getFullYear() - s.getFullYear()) * 12 + (e.getMonth() - s.getMonth());
+      var ds = s.getDate(), de = e.getDate();
+      if (de > ds) months += (de - ds) / new Date(e.getFullYear(), e.getMonth(), 0).getDate();
+      else if (de < ds) months -= (ds - de) / new Date(s.getFullYear(), s.getMonth() + 1, 0).getDate();
+      return Math.max(0, months);
+    }
+
+    function autoCalcTotal() {
+      var rate       = parseFloat(form.room_rate         ? form.room_rate.value         : 0) || 0;
+      var resvFee    = parseFloat(form.reservation_fee   ? form.reservation_fee.value   : 0) || 0;
+      var garbageFee = parseFloat(form.garbage_fee       ? form.garbage_fee.value       : 0) || 0;
+      var deposit    = parseFloat(form.security_deposit  ? form.security_deposit.value  : 0) || 0;
+      var utilsDep   = parseFloat(form.utilities_deposit ? form.utilities_deposit.value : 0) || 0;
+      var ciEl       = form.querySelector('[name="check_in"]');
+      var coEl       = form.querySelector('[name="check_out"]');
+      var months     = (ciEl && coEl) ? calcMonths(ciEl.value, coEl.value) : 0;
+      var total      = (rate * months) + resvFee + garbageFee + deposit + utilsDep;
+      if (form.total_amount) form.total_amount.value = total > 0 ? total.toFixed(2) : '';
+      return total;
+    }
+
     function recalcBalance() {
-      const total = parseFloat(form.total_amount.value) || 0;
-      const paid = parseFloat(form.amount_paid.value) || 0;
-      const remaining = total - paid;
+      var total     = autoCalcTotal();
+      var paid      = parseFloat(form.amount_paid ? form.amount_paid.value : 0) || 0;
+      var remaining = total - paid;
       balanceEl.textContent = '₱' + remaining.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       balanceEl.style.color = remaining > 0 ? '#b3433f' : 'inherit';
     }
-    form.total_amount.addEventListener('input', recalcBalance);
-    form.amount_paid.addEventListener('input', recalcBalance);
+
+    ['room_rate', 'reservation_fee', 'garbage_fee', 'security_deposit', 'utilities_deposit'].forEach(function(n) {
+      var el = form.querySelector('[name="' + n + '"]');
+      if (el) el.addEventListener('input', recalcBalance);
+    });
+    ['check_in', 'check_out'].forEach(function(n) {
+      var el = form.querySelector('[name="' + n + '"]');
+      if (el) el.addEventListener('change', recalcBalance);
+    });
+    if (form.total_amount) form.total_amount.addEventListener('input', recalcBalance);
+    if (form.amount_paid)  form.amount_paid.addEventListener('input', recalcBalance);
+    form._recalcBalance = recalcBalance;
     recalcBalance();
 
     // ── Wire Quick Stay Duration buttons ──────────────────────────────────
@@ -542,16 +608,16 @@
         const outVal = checkOut.value;
         if (inVal && outVal) {
           const start = new Date(inVal + 'T00:00:00');
-          const end = new Date(outVal + 'T00:00:00');
-          const nights = Math.round((end - start) / 86400000);
-          const days = nights + 1;
-          durationDisplay.textContent = days + ' Days / ' + nights + ' Nights';
+          const end   = new Date(outVal + 'T00:00:00');
+          const days  = Math.round((end - start) / 86400000);
+          durationDisplay.textContent = days > 0 ? days + ' Day' + (days !== 1 ? 's' : '') : '0 Days';
           if (!expectedPayment.dataset.userEdited) {
             expectedPayment.value = outVal;
           }
         } else {
-          durationDisplay.textContent = '0 Days / 0 Nights';
+          durationDisplay.textContent = '0 Days';
         }
+        if (form._recalcBalance) form._recalcBalance();
       }
 
       function applyDuration(months) {
@@ -589,7 +655,7 @@
       updateDurationAndPayment();
     }
     wireBbDateCalculations();
-    if (isEdit && resv.id) wireBbPayPanel(resv.id, justCreated);
+    // Payment is handled in step 2 after save
 
     // ── Financial Summary for edit mode ─────────────────────────────────
     if (isEdit && resv.id) {
@@ -655,9 +721,6 @@
           .then(function (res) {
             if (res.success) {
               if (Array.isArray(res.rooms)) res.rooms.forEach(window.updateRoomCard);
-              // Prefer the server's saved reservation (has the real id on a
-              // fresh create, plus any server-computed fields) over the raw
-              // form values; fall back to the form only if it's ever absent.
               const saved = res.reservation || Object.assign({}, formToObject(new FormData(form)), { room_id: roomId });
               const resvStatus = saved.status || (isEdit ? (resv.status || 'reserved') : 'reserved');
               window.updateRoomCardReservation(Object.assign({}, saved, {
@@ -666,27 +729,132 @@
                 expected_payment_date: saved.expected_payment_date || saved.check_out || null,
               }));
               if (window.triggerLayoutPoll) window.triggerLayoutPoll();
-              // Re-render in place instead of closing. Once `saved` carries an
-              // id (true for both a brand-new create and an edit) this flips
-              // the form into edit mode and brings up the Payment History
-              // panel, so a deposit can be logged right after booking — or a
-              // follow-up payment right after an edit — without reopening.
-              // The modal now only closes when Cancel/X is clicked.
-              const wasCreate = !isEdit;
-              const reopenMsg = isEdit ? 'Changes saved.' : 'Reservation created — you can record a payment below.';
-              const targetRoomId = saved.room_id || roomId;
-              // Re-fetch the full row before reopening rather than trusting
-              // this POST's response directly — same reasoning as the
-              // Calendar right-click menu fix: don't let the form repopulate
-              // from a payload that might only carry the narrow live-sync
-              // field set instead of every column the form needs.
-              fetchActiveReservation(targetRoomId)
-                .then(function (full) {
-                  renderReservationForm(Object.assign({}, saved, full, { status: resvStatus }), targetRoomId, null, reopenMsg, wasCreate);
-                })
-                .catch(function () {
-                  renderReservationForm(Object.assign({}, saved, { status: resvStatus }), targetRoomId, null, reopenMsg, wasCreate);
+
+              {
+                // Both new and edit: advance to payment step 2
+                var resvId   = saved.id;
+                var totalAmt = parseFloat(saved.total_amount || 0);
+
+                // Build step-2 payment UI inside the modal
+                inner.innerHTML =
+                  '<h2>Payment</h2>' +
+                  // Step indicator — step 1 done, step 2 active
+                  '<div style="display:flex;align-items:center;gap:8px;margin-bottom:18px;">' +
+                    '<div style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;">' +
+                      '<span style="width:22px;height:22px;border-radius:50%;background:#d4f7e7;color:#1a7a46;display:flex;align-items:center;justify-content:center;font-size:11px;">✓</span>' +
+                      '<span style="color:#1a7a46;">Reservation details</span>' +
+                    '</div>' +
+                    '<div style="flex:1;height:1px;background:#c5deef;"></div>' +
+                    '<div style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;">' +
+                      '<span style="width:22px;height:22px;border-radius:50%;background:#3b7dd8;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;">2</span>' +
+                      '<span style="color:#16324f;">Payment</span>' +
+                    '</div>' +
+                  '</div>' +
+                  '<div style="background:#eef5fc;border:1px solid #c5deef;border-radius:8px;padding:9px 14px;font-size:.84rem;color:#2c4a68;margin-bottom:14px;">' +
+                    (saved.guest_full_name || '') + ' &nbsp;·&nbsp; RM' + (saved.room_number || '') +
+                    ' &nbsp;·&nbsp; ' + (saved.check_in || '') + ' → ' + (saved.check_out || '') +
+                  '</div>' +
+                  '<div style="background:#f8fbff;border:1px solid #c5deef;border-radius:8px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">' +
+                    '<span style="font-size:.84rem;color:#5b7693;">Remaining balance</span>' +
+                    '<span id="bbStep2Balance" style="font-size:1rem;font-weight:700;color:#b91c1c;">₱' + totalAmt.toLocaleString('en-PH',{minimumFractionDigits:2}) + '</span>' +
+                  '</div>' +
+                  '<div style="border:1px solid #c5deef;border-radius:8px;overflow:hidden;margin-bottom:14px;">' +
+                    '<div style="background:#eef5fc;padding:8px 14px;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#3b7dd8;border-bottom:1px solid #c5deef;">Payment History</div>' +
+                    '<div id="bbStep2PayList" style="padding:12px 14px;font-size:.84rem;color:#5b7693;">No payments recorded yet.</div>' +
+                  '</div>' +
+                  '<div style="border:1px solid #c5deef;border-radius:8px;overflow:hidden;">' +
+                    '<div style="background:#f8fbff;padding:8px 14px;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#5b7693;border-bottom:1px solid #c5deef;">Amount</div>' +
+                    '<div style="padding:12px 14px;display:flex;flex-direction:column;gap:8px;">' +
+                      '<div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end;">' +
+                        '<input type="number" id="bbStep2Amt" min="0.01" step="0.01" placeholder="e.g. 10000" style="width:100%;padding:9px 11px;border:1.5px solid #c5deef;border-radius:6px;font-family:inherit;font-size:.86rem;">' +
+                        '<button type="button" id="bbStep2AddBtn" style="padding:9px 16px;background:#16a34a;color:#fff;border:none;border-radius:6px;font-family:inherit;font-size:.84rem;font-weight:600;cursor:pointer;white-space:nowrap;">+ Add</button>' +
+                      '</div>' +
+                      '<input type="text" id="bbStep2Remarks" placeholder="Remarks / ref no. (optional)" style="width:100%;padding:9px 11px;border:1.5px solid #c5deef;border-radius:6px;font-family:inherit;font-size:.84rem;box-sizing:border-box;">' +
+                      '<p id="bbStep2Err" style="color:#b91c1c;font-size:.78rem;margin:0;display:none;"></p>' +
+                    '</div>' +
+                  '</div>' +
+                  '<div class="bb-actions" style="margin-top:14px;">' +
+                    '<button type="button" id="bbStep2DoneBtn" class="bb-btn bb-btn--primary">Done</button>' +
+                    '<button type="button" id="bbStep2BackBtn" class="bb-btn bb-btn--secondary">← Back</button>' +
+                  '</div>';
+
+                function fmtBB(n) { return '₱' + parseFloat(n||0).toLocaleString('en-PH',{minimumFractionDigits:2}); }
+
+                function loadStep2Payments() {
+                  var listEl = document.getElementById('bbStep2PayList');
+                  var balEl  = document.getElementById('bbStep2Balance');
+                  var amtEl  = document.getElementById('bbStep2Amt');
+                  if (!listEl) return;
+                  listEl.textContent = 'Loading…';
+                  fetch('/process_reservation.php?action=get_reservation_for_payment&id=' + resvId)
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                      var payments  = (data.success && data.months) ? data.months : [];
+                      var totalPaid = payments.reduce(function(s,p){ return s + parseFloat(p.amount||0); }, 0);
+                      var balance   = Math.max(0, totalAmt - totalPaid);
+                      if (balEl) { balEl.textContent = fmtBB(balance); balEl.style.color = balance > 0 ? '#b91c1c' : '#1a7a46'; }
+                      if (amtEl && !amtEl.dataset.userEdited) amtEl.value = balance > 0 ? balance.toFixed(2) : '';
+                      if (payments.length === 0) {
+                        listEl.innerHTML = '<div style="color:#8a9aa8;font-size:.82rem;padding:4px 0;">No payments recorded yet.</div>';
+                        return;
+                      }
+                      listEl.innerHTML = payments.map(function(p) {
+                        var dt = p.payment_date || (p.created_at ? p.created_at.split(' ')[0] : '—');
+                        var pm = {cash:'Cash',gcash:'GCash',bank_transfer:'Bank Transfer',card:'Card'}[p.payment_method] || (p.payment_method || '—');
+                        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid #e8f0f8;font-size:.84rem;">' +
+                          '<span style="color:#5b7693;">' + dt + ' · ' + pm + (p.remarks ? ' · ' + p.remarks : '') + '</span>' +
+                          '<span style="color:#1a7a46;font-weight:600;">' + fmtBB(p.amount) + '</span></div>';
+                      }).join('') +
+                      '<div style="display:flex;justify-content:space-between;padding:6px 0 2px;font-weight:700;font-size:.84rem;">' +
+                        '<span>Total Paid</span><span style="color:#1a7a46;">' + fmtBB(totalPaid) + '</span>' +
+                      '</div>';
+                    })
+                    .catch(function() { if (listEl) listEl.textContent = 'Could not load payments.'; });
+                }
+
+                loadStep2Payments();
+
+                document.getElementById('bbStep2AddBtn').addEventListener('click', function() {
+                  var errEl  = document.getElementById('bbStep2Err');
+                  var amount = parseFloat(document.getElementById('bbStep2Amt').value);
+                  var remarks = document.getElementById('bbStep2Remarks').value.trim();
+                  if (errEl) errEl.style.display = 'none';
+                  if (!amount || amount <= 0) { if (errEl) { errEl.textContent = 'Enter a valid amount.'; errEl.style.display = 'block'; } return; }
+                  var btn = document.getElementById('bbStep2AddBtn');
+                  btn.disabled = true; btn.textContent = '…';
+                  var fd2 = new FormData();
+                  fd2.append('action', 'record_payment');
+                  fd2.append('reservation_id', resvId);
+                  fd2.append('amount', amount);
+                  fd2.append('payment_date', new Date().toISOString().split('T')[0]);
+                  fd2.append('payment_method', 'cash');
+                  fd2.append('remarks', remarks);
+                  fetch('/process_reservation.php', { method: 'POST', body: fd2 })
+                    .then(function(r2) { return r2.json(); })
+                    .then(function(d) {
+                      btn.disabled = false; btn.textContent = '+ Add';
+                      if (!d.success) { if (errEl) { errEl.textContent = d.message || 'Could not save.'; errEl.style.display = 'block'; } return; }
+                      document.getElementById('bbStep2Amt').value = '';
+                      document.getElementById('bbStep2Remarks').value = '';
+                      delete document.getElementById('bbStep2Amt').dataset.userEdited;
+                      loadStep2Payments();
+                    })
+                    .catch(function() { btn.disabled = false; btn.textContent = '+ Add'; if (errEl) { errEl.textContent = 'Network error.'; errEl.style.display = 'block'; } });
                 });
+
+                document.getElementById('bbStep2DoneBtn').addEventListener('click', closeFormModal);
+
+                var backBtn2 = document.getElementById('bbStep2BackBtn');
+                if (backBtn2) {
+                  backBtn2.addEventListener('click', function() {
+                    fetchActiveReservation(roomId, resvId)
+                      .then(function(full) {
+                        renderReservationForm(Object.assign({}, saved, full || {}), roomId, null, null, false);
+                      })
+                      .catch(function() { renderReservationForm(saved, roomId, null, null, false); });
+                  });
+                }
+              }
             } else {
               const resvData = isEdit ? Object.assign({ id: resv.id }, formToObject(fd)) : formToObject(fd);
               renderReservationForm(resvData, roomId, Object.assign({ _general: res.message }, res.errors || {}));
@@ -873,6 +1041,7 @@
       '<div style="margin:16px 0 4px;">' +
       '<div class="bb-info-row"><span class="bb-label">Name</span><span class="bb-value">' + (r.guest_full_name || 'N/A') + '</span></div>' +
       '<div class="bb-info-row"><span class="bb-label">Contact</span><span class="bb-value">' + (r.contact_number || 'N/A') + '</span></div>' +
+      '<div class="bb-info-row"><span class="bb-label">Emergency Contact</span><span class="bb-value">' + (r.emergency_contact || 'N/A') + '</span></div>' +
       '<div class="bb-info-row"><span class="bb-label">Email</span><span class="bb-value">' + (r.email || 'N/A') + '</span></div>' +
       '<div class="bb-info-row"><span class="bb-label">Address</span><span class="bb-value">' + (r.address || 'N/A') + '</span></div>' +
       '<div class="bb-info-row"><span class="bb-label">Valid ID</span><span class="bb-value">' + (r.valid_id_type || 'N/A') + ' #' + (r.valid_id_number || 'N/A') + '</span></div>' +
@@ -941,7 +1110,11 @@
       '<div class="row"><span class="label">Contact</span><span class="value">' + (r.contact_number || 'N/A') + '</span></div>' +
       '<div class="row"><span class="label">Email</span><span class="value">' + (r.email || 'N/A') + '</span></div>' +
       '<div class="row"><span class="label">Valid ID</span><span class="value">' + (r.valid_id_type || 'N/A') + ' #' + (r.valid_id_number || 'N/A') + '</span></div>' +
-      '<div class="row"><span class="label">Rate/Month</span><span class="value">₱' + parseFloat(r.room_rate || 0).toFixed(2) + '</span></div>' +
+      '<div class="row"><span class="label">Monthly Rent</span><span class="value">₱' + parseFloat(r.room_rate || 0).toFixed(2) + '/mo</span></div>' +
+      '<div class="row"><span class="label">Reservation Fee</span><span class="value">₱' + parseFloat(r.reservation_fee || 0).toFixed(2) + '</span></div>' +
+      '<div class="row"><span class="label">Garbage Fee</span><span class="value">₱' + parseFloat(r.garbage_fee || 0).toFixed(2) + '</span></div>' +
+      '<div class="row"><span class="label">Security Deposit</span><span class="value">₱' + parseFloat(r.security_deposit || 0).toFixed(2) + '</span></div>' +
+      '<div class="row"><span class="label">Utilities Deposit</span><span class="value">₱' + parseFloat(r.utilities_deposit || 0).toFixed(2) + '</span></div>' +
       '<div class="row"><span class="label">Total Amount</span><span class="value">₱' + parseFloat(r.total_amount || 0).toFixed(2) + '</span></div>' +
       '<div class="row"><span class="label">Amount Paid</span><span class="value">₱' + parseFloat(r.amount_paid || 0).toFixed(2) + '</span></div>' +
       '<div class="row"><span class="label">Payment Method</span><span class="value">' + (r.payment_method || 'N/A') + '</span></div>' +
@@ -971,7 +1144,11 @@
       '<div class="row"><span class="label">Check-in</span><span class="value">' + r.check_in + '</span></div>' +
       '<div class="row"><span class="label">Check-out</span><span class="value">' + r.check_out + '</span></div>' +
       '<div class="row"><span class="label">Nights</span><span class="value">' + nights + '</span></div>' +
-      '<div class="row"><span class="label">Rate/Month</span><span class="value">₱' + parseFloat(r.room_rate || 0).toFixed(2) + '</span></div>' +
+      '<div class="row"><span class="label">Monthly Rent</span><span class="value">₱' + parseFloat(r.room_rate || 0).toFixed(2) + '/mo</span></div>' +
+      '<div class="row"><span class="label">Reservation Fee</span><span class="value">₱' + parseFloat(r.reservation_fee || 0).toFixed(2) + '</span></div>' +
+      '<div class="row"><span class="label">Garbage Fee</span><span class="value">₱' + parseFloat(r.garbage_fee || 0).toFixed(2) + '</span></div>' +
+      '<div class="row"><span class="label">Security Deposit</span><span class="value">₱' + parseFloat(r.security_deposit || 0).toFixed(2) + '</span></div>' +
+      '<div class="row"><span class="label">Utilities Deposit</span><span class="value">₱' + parseFloat(r.utilities_deposit || 0).toFixed(2) + '</span></div>' +
       '<div class="row total"><span class="label">Total Amount</span><span class="value">₱' + parseFloat(r.total_amount || 0).toFixed(2) + '</span></div>' +
       '<div class="row"><span class="label">Amount Paid</span><span class="value">₱' + parseFloat(r.amount_paid || 0).toFixed(2) + '</span></div>' +
       '<div class="row"><span class="label">Balance Due</span><span class="value" style="' + (balance > 0 ? 'color:#b3433f;' : '') + '">₱' + balance.toFixed(2) + '</span></div>' +
@@ -1026,10 +1203,10 @@
       fd.append('id', r.id);
       fd.append('room_id', newRoomId);
       const fields = [
-        'guest_full_name', 'contact_number', 'email', 'address',
+        'guest_full_name', 'contact_number', 'emergency_contact', 'email', 'address',
         'valid_id_type', 'valid_id_number', 'check_in', 'check_out',
         'num_adults', 'num_children', 'status',
-        'room_rate', 'security_deposit', 'total_amount', 'amount_paid',
+        'room_rate', 'reservation_fee', 'garbage_fee', 'security_deposit', 'utilities_deposit', 'total_amount', 'amount_paid',
         'payment_method', 'notes', 'special_requests', 'expected_payment_date'
       ];
       fields.forEach(function (key) {
@@ -1052,10 +1229,11 @@
     });
   }
 
-  function handleReservationAction(action, roomId) {
-    fetchActiveReservation(roomId).then(function (r) {
-      if (!r && action !== 'history') {
-        alert('No active reservation found for this room — it may have just changed elsewhere. Try right-clicking again.');
+  function handleReservationAction(action, roomId, reservationId) {
+    fetchActiveReservation(roomId, reservationId).then(function (r) {
+      if (!r) {
+        // Could not fetch fresh data — nothing to act on
+        console.warn('[layout] No reservation found for room', roomId, 'id', reservationId);
         return;
       }
       switch (action) {
@@ -1113,7 +1291,8 @@
       }
     }).catch(function (err) {
       console.error('[layout] Reservation fetch error:', err);
-      alert('Could not load reservation data: ' + err.message);
+      // Don't block the action — proceed with whatever data we have cached on the card
+      alert('Could not refresh reservation data from server. Please try right-clicking again.');
     });
   }
 
@@ -1233,6 +1412,8 @@
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') hideActiveMenu();
   });
+  window.addEventListener('scroll', function () { hideActiveMenu(); }, { passive: true, capture: true });
+  document.addEventListener('scroll', function () { hideActiveMenu(); }, { passive: true, capture: true });
 
   function showRoomMenu(x, y, card) {
     hideActiveMenu();
@@ -1327,7 +1508,7 @@
               alert('Network error — could not reach the server.');
             });
         } else {
-          handleReservationAction(item.action, roomId);
+          handleReservationAction(item.action, roomId, card.dataset.reservationId || '');
         }
       });
       ul.appendChild(li);
