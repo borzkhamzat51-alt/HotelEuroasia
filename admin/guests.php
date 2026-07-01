@@ -345,7 +345,7 @@ $displayName = $_SESSION['full_name'] ?: $_SESSION['username'];
   <div class="folio-modal">
     <div class="folio-header">
       <div>
-        <h2 id="folioTitle">Master Folio</h2>
+        <h2 id="folioTitle">Guest Folio</h2>
         <div class="folio-header__sub" id="folioSubtitle"></div>
       </div>
       <div class="folio-header__actions">
@@ -463,7 +463,7 @@ function openFolio(r) {
     _payments = [];
 
     const folioNo = '#' + String(r.id).padStart(10, '0');
-    document.getElementById('folioTitle').textContent    = 'Master Folio [' + folioNo + ']';
+    document.getElementById('folioTitle').textContent    = 'Guest Folio [' + folioNo + ']';
     document.getElementById('folioSubtitle').textContent = (r.guest_full_name ?? '') + ' · ' + (ALL_BRANCHES[r.branch] ?? r.branch);
     document.getElementById('folioBody').innerHTML =
         '<div class="folio-loading"><div class="folio-spinner"></div>Loading folio…</div>';
@@ -1031,7 +1031,7 @@ tfoot td{font-weight:700;background:#f0f5fb;border-top:2px solid #dceaf8;}
 </style></head><body>
 <div class="hdr">
   <div><div class="brand">Bluebookers</div><div style="font-size:.8rem;color:#5b7693;margin-top:3px;">${brLabel}</div></div>
-  <div class="fno">Master Folio<strong>#${String(r.id).padStart(10,'0')}</strong><div>${new Date().toLocaleDateString('en-PH',{year:'numeric',month:'long',day:'numeric'})}</div></div>
+  <div class="fno">Guest Folio<strong>#${String(r.id).padStart(10,'0')}</strong><div>${new Date().toLocaleDateString('en-PH',{year:'numeric',month:'long',day:'numeric'})}</div></div>
 </div>
 <div class="sumgrid">
   <div class="scard blue"><div class="l">Total Due</div><div class="v">₱${parseFloat(r.total_amount||0).toLocaleString('en-PH',{minimumFractionDigits:2})}</div></div>

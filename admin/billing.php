@@ -727,87 +727,202 @@ function printStatement(resvId) {
             var readings = d.readings || [];
             var payments = d.payments || [];
             var totalPaid = d.total_paid || 0;
-            var totalDue  = bills.reduce(function(s,b){ return s + parseFloat(b.grand_total||0); }, 0) || parseFloat(r.total_amount||0);
-            var balance   = totalDue - totalPaid;
-            // Group readings by type
+
+            // Calculate totals
+            var monthlyRent = parseFloat(r.room_rate || 0);
+            var secDeposit  = parseFloat(r.security_deposit || 0);
+            var resvFee     = parseFloat(r.reservation_fee || 0);
+            var garbageFee  = parseFloat(r.garbage_fee || 0);
+            var utilsDep    = parseFloat(r.utilities_deposit || 0);
+
+            // Group readings by type — get first/last for summary
             var elecReadings = readings.filter(function(rd){ return rd.utility_type === 'Electricity'; });
             var waterReadings = readings.filter(function(rd){ return rd.utility_type === 'Water'; });
+
+            var elecPresent = 0, elecPrevious = 0, elecKwh = 0, elecRate = 0, elecCharge = 0;
+            if (elecReadings.length) {
+                elecPrevious = parseFloat(elecReadings[0].previous_reading);
+                elecPresent  = parseFloat(elecReadings[elecReadings.length-1].present_reading);
+                elecKwh      = elecReadings.reduce(function(s,x){ return s + parseFloat(x.consumption||0); }, 0);
+                elecRate     = parseFloat(elecReadings[0].rate || 0);
+                elecCharge   = elecReadings.reduce(function(s,x){ return s + parseFloat(x.charge||0); }, 0);
+            }
+
+            var waterPresent = 0, waterPrevious = 0, waterCum = 0, waterRate = 0, waterCharge = 0;
+            if (waterReadings.length) {
+                waterPrevious = parseFloat(waterReadings[0].previous_reading);
+                waterPresent  = parseFloat(waterReadings[waterReadings.length-1].present_reading);
+                waterCum      = waterReadings.reduce(function(s,x){ return s + parseFloat(x.consumption||0); }, 0);
+                waterRate     = parseFloat(waterReadings[0].rate || 0);
+                waterCharge   = waterReadings.reduce(function(s,x){ return s + parseFloat(x.charge||0); }, 0);
+            }
+
+            var rentalSubtotal = monthlyRent + secDeposit + resvFee + garbageFee + utilsDep;
+            var totalAmountDue = rentalSubtotal + elecCharge + waterCharge;
+            var elecDateRange  = elecReadings.length ? fdate(elecReadings[0].reading_date) + ' – ' + fdate(elecReadings[elecReadings.length-1].reading_date) : '—';
+            var waterDateRange = waterReadings.length ? fdate(waterReadings[0].reading_date) + ' – ' + fdate(waterReadings[waterReadings.length-1].reading_date) : '—';
+
             var w = window.open('', '_blank', 'width=860,height=900');
             if (!w) { alert('Allow pop-ups to print.'); return; }
+
             w.document.write('<!DOCTYPE html><html><head><title>Statement of Account — '+esc(r.guest_full_name)+'</title>' +
 '<style>' +
-'*{box-sizing:border-box} body{font-family:Arial,sans-serif;font-size:12px;color:#1a2332;padding:32px 40px;max-width:820px;margin:0 auto}' +
-'.hdr{display:flex;justify-content:space-between;border-bottom:2px solid #16324f;padding-bottom:12px;margin-bottom:16px}' +
-'.brand{font-size:1.5rem;font-weight:800;color:#16324f} .brand-sub{font-size:.78rem;color:#5b7693;margin-top:2px}' +
-'.soa-title{text-align:right;font-size:.78rem;color:#5b7693} .soa-title strong{display:block;font-size:1.1rem;color:#16324f}' +
-'.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px 24px;margin-bottom:14px;font-size:.82rem}' +
-'.info-grid .l{font-size:.65rem;font-weight:700;text-transform:uppercase;color:#5b7693;letter-spacing:.04em}' +
-'.info-grid .v{font-weight:600;color:#16324f}' +
-'h2{font-size:.74rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#5b7693;border-bottom:1px solid #dceaf8;padding-bottom:4px;margin:16px 0 8px}' +
-'table{width:100%;border-collapse:collapse;font-size:.8rem;margin-bottom:12px}' +
-'th{background:#f0f5fb;padding:6px 10px;text-align:left;font-size:.66rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#5b7693;border-bottom:2px solid #dceaf8}' +
-'td{padding:6px 10px;border-bottom:1px solid #f0f5fb} .r{text-align:right}' +
-'tfoot td{font-weight:700;background:#f0f5fb;border-top:2px solid #dceaf8}' +
-'.total-box{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:14px 0;font-size:.82rem}' +
-'.total-box .box{background:#f0f5fb;border-radius:4px;padding:8px 12px} .total-box .box .l{font-size:.6rem;font-weight:700;text-transform:uppercase;color:#5b7693;letter-spacing:.04em} .total-box .box .v{font-size:1rem;font-weight:700;margin-top:2px}' +
-'.sig-grid{display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-top:40px;font-size:.78rem}' +
-'.sig-line{border-top:1px solid #333;padding-top:6px;margin-top:40px;text-align:center;color:#5b7693}' +
-'.footer{margin-top:24px;text-align:center;font-size:.7rem;color:#8a9aa8;border-top:1px solid #dceaf8;padding-top:10px}' +
-'@media print{body{padding:20px}}' +
+'* { box-sizing:border-box; margin:0; padding:0; }' +
+'body { font-family: Arial, sans-serif; font-size: 12px; color: #000; padding: 30px 40px; max-width: 800px; margin: 0 auto; }' +
+
+/* Header */
+'.soa-header { text-align: center; margin-bottom: 20px; }' +
+'.soa-header .company { font-size: 16px; font-weight: 700; text-decoration: underline; color: #1a237e; }' +
+'.soa-header .address { font-size: 11px; color: #1a237e; margin-top: 2px; }' +
+'.soa-header .contact { font-size: 10px; color: #1a237e; margin-top: 1px; }' +
+
+/* Guest line */
+'.soa-guest { font-size: 13px; font-weight: 700; margin: 12px 0 4px; }' +
+'.soa-title-line { font-size: 12px; font-weight: 700; text-align: center; text-decoration: underline; margin: 10px 0 14px; }' +
+
+/* Tables */
+'table { width: 100%; border-collapse: collapse; margin-bottom: 2px; font-size: 11px; }' +
+'th, td { border: 1px solid #333; padding: 5px 8px; vertical-align: middle; }' +
+'th { background: #f5f5f5; font-weight: 700; text-align: center; font-size: 10px; text-transform: uppercase; }' +
+'.r { text-align: right; }' +
+'.c { text-align: center; }' +
+'.b { font-weight: 700; }' +
+'.no-border { border: none; }' +
+'.subtotal-row td { font-weight: 700; }' +
+'.section-header { background: #f9f9f9; font-weight: 700; }' +
+
+/* Total */
+'.total-due { background: #ffff00; font-size: 13px; font-weight: 700; }' +
+
+/* Footer */
+'.soa-footer { font-size: 10px; margin-top: 16px; line-height: 1.6; }' +
+'.soa-footer .note { color: #1a237e; font-weight: 700; margin-top: 10px; }' +
+'.sig-area { display: flex; justify-content: space-between; margin-top: 30px; font-size: 11px; }' +
+'.sig-area .sig-block { width: 45%; }' +
+'.sig-line { border-top: 1px solid #000; margin-top: 30px; padding-top: 4px; }' +
+
+'@media print { body { padding: 15px 25px; } }' +
 '</style></head><body>' +
-'<div class="hdr"><div><div class="brand">Bluebookers</div><div class="brand-sub">'+esc(BR_LABEL)+'</div></div>' +
-'<div class="soa-title">Statement of Account<strong>#'+String(r.id).padStart(10,'0')+'</strong><div>'+new Date().toLocaleDateString('en-PH',{year:'numeric',month:'long',day:'numeric'})+'</div></div></div>' +
-'<div class="info-grid">' +
-'<div><div class="l">Guest</div><div class="v">'+esc(r.guest_full_name)+'</div></div>' +
-'<div><div class="l">Room</div><div class="v">RM '+esc(r.room_number)+' — '+esc(r.room_type)+'</div></div>' +
-'<div><div class="l">Check-in</div><div class="v">'+esc(r.check_in)+'</div></div>' +
-'<div><div class="l">Check-out</div><div class="v">'+esc(r.check_out)+'</div></div>' +
-'<div><div class="l">Contact</div><div class="v">'+esc(r.contact_number||'—')+'</div></div>' +
-'<div><div class="l">Emergency Contact</div><div class="v">'+esc(r.emergency_contact||'—')+'</div></div>' +
+
+/* ── HEADER ── */
+'<div class="soa-header">' +
+  '<div class="company">BLUEBOOKERS CORP.</div>' +
+  '<div class="address">Don Juico Ave., Malabanias Road, Angeles City</div>' +
+  '<div class="contact">Tel Nos.: +63-917-117-1192</div>' +
+  '<div class="contact">bluebookers@gmail.com</div>' +
 '</div>' +
-'<div class="total-box">' +
-'<div class="box"><div class="l">Total Due</div><div class="v" style="color:#2861b3">'+fmt(totalDue)+'</div></div>' +
-'<div class="box"><div class="l">Total Paid</div><div class="v" style="color:#15803d">'+fmt(totalPaid)+'</div></div>' +
-'<div class="box"><div class="l">Balance</div><div class="v" style="color:'+(balance>0?'#b91c1c':'#15803d')+'">'+fmt(balance)+'</div></div></div>');
-            // Monthly bills summary
-            if (bills.length) {
-                w.document.write('<h2>Monthly Bills</h2><table><thead><tr><th>Period</th><th class="r">Rental</th><th class="r">Electricity</th><th class="r">Water</th><th class="r">Other</th><th class="r">Total</th><th class="r">Paid</th><th class="r">Balance</th></tr></thead><tbody>');
-                bills.forEach(function(b){
-                    w.document.write('<tr><td>'+esc(b.billing_period)+'</td><td class="r">'+fmt(b.room_rental)+'</td><td class="r">'+fmt(b.electricity_charge)+'</td><td class="r">'+fmt(b.water_charge)+'</td><td class="r">'+fmt(parseFloat(b.internet_charge||0)+parseFloat(b.other_charges||0))+'</td><td class="r"><strong>'+fmt(b.grand_total)+'</strong></td><td class="r" style="color:#15803d">'+fmt(b.amount_paid)+'</td><td class="r" style="color:'+(parseFloat(b.balance)>0?'#b91c1c':'#15803d')+'">'+fmt(b.balance)+'</td></tr>');
-                });
-                w.document.write('</tbody></table>');
+
+/* ── GUEST NAME ── */
+'<div class="soa-guest">GUEST NAME: ' + esc(r.guest_full_name).toUpperCase() + '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ROOM: ' + esc(r.room_number) + '</div>' +
+'<div class="soa-title-line">STATEMENT OF ACCOUNT AS OF ' + new Date().toLocaleDateString('en-PH', {month:'long', day:'numeric', year:'numeric'}).toUpperCase() + '</div>' +
+
+/* ── ROOM RENTAL TABLE ── */
+'<table>' +
+  '<thead>' +
+    '<tr><th>DATE</th><th>PARTICULARS</th><th>RENTAL</th><th>RENTAL AMOUNT DUE</th><th>TOTAL AMOUNT DUE</th></tr>' +
+  '</thead>' +
+  '<tbody>' +
+    '<tr class="section-header"><td colspan="5">ROOM RENTAL FOR THE MONTH OF:</td></tr>' +
+    '<tr>' +
+      '<td>' + esc(r.check_in) + ' – ' + esc(r.check_out) + '</td>' +
+      '<td></td>' +
+      '<td class="r">' + monthlyRent.toLocaleString('en-PH') + '</td>' +
+      '<td class="r">₱ ' + monthlyRent.toLocaleString('en-PH', {minimumFractionDigits:2}) + '</td>' +
+      '<td class="r">₱ ' + monthlyRent.toLocaleString('en-PH', {minimumFractionDigits:2}) + '</td>' +
+    '</tr>');
+
+            // One-time charges rows
+            if (secDeposit > 0) {
+                w.document.write('<tr><td></td><td>Security Deposit</td><td></td><td class="r">₱ '+secDeposit.toLocaleString('en-PH',{minimumFractionDigits:2})+'</td><td class="r">₱ '+secDeposit.toLocaleString('en-PH',{minimumFractionDigits:2})+'</td></tr>');
             }
-            // Electricity readings
-            if (elecReadings.length) {
-                var elecFirst = elecReadings[0], elecLast = elecReadings[elecReadings.length-1];
-                var elecTotal = elecReadings.reduce(function(s,r){ return s+parseFloat(r.charge||0); },0);
-                w.document.write('<h2>Electricity</h2><table><thead><tr><th>Date</th><th class="r">Previous</th><th class="r">Present</th><th class="r">Consumption</th><th class="r">Rate</th><th class="r">Charge</th></tr></thead><tbody>');
-                elecReadings.forEach(function(r){
-                    w.document.write('<tr><td>'+fdate(r.reading_date)+'</td><td class="r">'+parseFloat(r.previous_reading).toFixed(2)+'</td><td class="r">'+parseFloat(r.present_reading).toFixed(2)+'</td><td class="r">'+parseFloat(r.consumption).toFixed(2)+'</td><td class="r">'+parseFloat(r.rate).toFixed(4)+'</td><td class="r">'+fmt(r.charge)+'</td></tr>');
-                });
-                w.document.write('<tfoot><tr><td colspan="5">Total Electricity</td><td class="r">'+fmt(elecTotal)+'</td></tr></tfoot></tbody></table>');
+            if (resvFee > 0) {
+                w.document.write('<tr><td></td><td>Reservation Fee</td><td></td><td class="r">₱ '+resvFee.toLocaleString('en-PH',{minimumFractionDigits:2})+'</td><td class="r">₱ '+resvFee.toLocaleString('en-PH',{minimumFractionDigits:2})+'</td></tr>');
             }
-            // Water readings
-            if (waterReadings.length) {
-                var waterTotal = waterReadings.reduce(function(s,r){ return s+parseFloat(r.charge||0); },0);
-                w.document.write('<h2>Water</h2><table><thead><tr><th>Date</th><th class="r">Previous</th><th class="r">Present</th><th class="r">Consumption</th><th class="r">Rate</th><th class="r">Charge</th></tr></thead><tbody>');
-                waterReadings.forEach(function(r){
-                    w.document.write('<tr><td>'+fdate(r.reading_date)+'</td><td class="r">'+parseFloat(r.previous_reading).toFixed(2)+'</td><td class="r">'+parseFloat(r.present_reading).toFixed(2)+'</td><td class="r">'+parseFloat(r.consumption).toFixed(2)+'</td><td class="r">'+parseFloat(r.rate).toFixed(4)+'</td><td class="r">'+fmt(r.charge)+'</td></tr>');
-                });
-                w.document.write('<tfoot><tr><td colspan="5">Total Water</td><td class="r">'+fmt(waterTotal)+'</td></tr></tfoot></tbody></table>');
+            if (garbageFee > 0) {
+                w.document.write('<tr><td></td><td>Garbage Fee</td><td></td><td class="r">₱ '+garbageFee.toLocaleString('en-PH',{minimumFractionDigits:2})+'</td><td class="r">₱ '+garbageFee.toLocaleString('en-PH',{minimumFractionDigits:2})+'</td></tr>');
             }
-            // Payments
-            if (payments.length) {
-                w.document.write('<h2>Payment History</h2><table><thead><tr><th>Date</th><th>Method</th><th>Remarks</th><th class="r">Amount</th></tr></thead><tbody>');
-                payments.forEach(function(p){
-                    w.document.write('<tr><td>'+fdate(p.payment_date)+'</td><td>'+esc(p.payment_method)+'</td><td>'+esc(p.remarks||'—')+'</td><td class="r" style="color:#15803d;font-weight:700">'+fmt(p.amount)+'</td></tr>');
-                });
-                w.document.write('<tfoot><tr><td colspan="3">Total Paid</td><td class="r" style="color:#15803d">'+fmt(totalPaid)+'</td></tr></tfoot></tbody></table>');
+            if (utilsDep > 0) {
+                w.document.write('<tr><td></td><td>Utilities Deposit</td><td></td><td class="r">₱ '+utilsDep.toLocaleString('en-PH',{minimumFractionDigits:2})+'</td><td class="r">₱ '+utilsDep.toLocaleString('en-PH',{minimumFractionDigits:2})+'</td></tr>');
             }
-            // Signature area
-            w.document.write('<div class="sig-grid"><div><div class="sig-line">Prepared By</div></div><div><div class="sig-line">Received By / Guest Signature</div></div></div>');
-            w.document.write('<div class="footer">Generated by Bluebookers PMS · '+new Date().toLocaleString('en-PH')+'</div>');
-            w.document.write('<script>setTimeout(function(){window.print()},500);<\/script></body></html>');
+
+            w.document.write(
+    '<tr class="subtotal-row"><td colspan="3"></td><td class="r">Sub total:</td><td class="r">₱ ' + rentalSubtotal.toLocaleString('en-PH', {minimumFractionDigits:2}) + '</td></tr>' +
+  '</tbody></table>' +
+
+/* ── ELECTRICITY TABLE ── */
+'<table>' +
+  '<thead>' +
+    '<tr><th colspan="2">PARTICULARS</th><th colspan="4">READING</th><th></th></tr>' +
+    '<tr><th>ELECTRICITY</th><th>PRESENT</th><th>PREVIOUS</th><th>KWH</th><th>RATE</th><th colspan="2"></th></tr>' +
+  '</thead>' +
+  '<tbody>' +
+    '<tr>' +
+      '<td>' + elecDateRange + '</td>' +
+      '<td class="r">' + elecPresent.toFixed(2) + '</td>' +
+      '<td class="r">' + elecPrevious.toFixed(2) + '</td>' +
+      '<td class="r">' + elecKwh.toFixed(2) + '</td>' +
+      '<td class="r">' + elecRate.toFixed(2) + '</td>' +
+      '<td class="r">₱ ' + elecCharge.toLocaleString('en-PH', {minimumFractionDigits:2}) + '</td>' +
+    '</tr>' +
+    '<tr class="subtotal-row"><td colspan="4"></td><td class="r">SUBTOTAL</td><td class="r">₱ ' + elecCharge.toLocaleString('en-PH', {minimumFractionDigits:2}) + '</td></tr>' +
+  '</tbody></table>' +
+
+/* ── WATER TABLE ── */
+'<table>' +
+  '<thead>' +
+    '<tr><th>WATER</th><th>PRESENT</th><th>PREVIOUS</th><th>CU.M.</th><th>RATE</th><th></th></tr>' +
+  '</thead>' +
+  '<tbody>' +
+    '<tr>' +
+      '<td>' + waterDateRange + '</td>' +
+      '<td class="r">' + waterPresent.toFixed(2) + '</td>' +
+      '<td class="r">' + waterPrevious.toFixed(2) + '</td>' +
+      '<td class="r">' + waterCum.toFixed(3) + '</td>' +
+      '<td class="r">' + waterRate.toFixed(2) + '</td>' +
+      '<td class="r">₱ ' + waterCharge.toLocaleString('en-PH', {minimumFractionDigits:2}) + '</td>' +
+    '</tr>' +
+    '<tr class="subtotal-row"><td colspan="4"></td><td class="r">SUBTOTAL</td><td class="r">₱ ' + waterCharge.toLocaleString('en-PH', {minimumFractionDigits:2}) + '</td></tr>' +
+  '</tbody></table>' +
+
+/* ── OTHERS TABLE ── */
+'<table>' +
+  '<thead>' +
+    '<tr><th>OTHERS</th><th>2% PER DAY</th><th>TOTAL</th></tr>' +
+  '</thead>' +
+  '<tbody>' +
+    '<tr><td>LATE PAYMENT PENALTY</td><td></td><td></td></tr>' +
+    '<tr class="subtotal-row"><td></td><td class="r">Sub total:</td><td class="r">₱ -</td></tr>' +
+  '</tbody></table>' +
+
+/* ── TOTAL AMOUNT DUE ── */
+'<table>' +
+  '<tbody>' +
+    '<tr class="total-due"><td colspan="2" class="r" style="border:2px solid #000;">TOTAL AMOUNT DUE</td><td class="r" style="border:2px solid #000;font-size:14px;">₱ ' + totalAmountDue.toLocaleString('en-PH', {minimumFractionDigits:2}) + '</td></tr>' +
+  '</tbody></table>' +
+
+/* ── FOOTER ── */
+'<div class="soa-footer">' +
+  '<p>Please inform us of any discrepancy in the contents of your Statement of Account within 5 days from receipt. Otherwise, Bluebookers Corp. will deem the statement true and correct.</p>' +
+  '<p>For inquiries, don\'t hesitate to contact us.</p>' +
+  '<p><strong>DUE DATE:</strong> _____________________</p>' +
+  '<br>' +
+  '<p>Please Make Check Payable to</p>' +
+  '<p><em>This is a computer generated statement no need for signature.</em></p>' +
+  '<div class="note">' +
+    '<p><u>NOTE:</u></p>' +
+    '<p>BANK ACCT. #: 010218004738</p>' +
+    '<p>BANK NAME: # BANCO DE ORO ( BDO )</p>' +
+  '</div>' +
+'</div>' +
+
+/* ── SIGNATURE AREA ── */
+'<div class="sig-area">' +
+  '<div class="sig-block"><div class="sig-line">PREPARED BY: ___________________</div></div>' +
+  '<div class="sig-block"><div class="sig-line">RECEIVED BY: ___________________<br>DATE: ___________________</div></div>' +
+'</div>' +
+
+'<script>setTimeout(function(){window.print()},500);<\/script>' +
+'</body></html>');
             w.document.close();
         }).catch(function(){ alert('Error loading statement.'); });
 }
